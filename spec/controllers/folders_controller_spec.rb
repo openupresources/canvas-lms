@@ -47,13 +47,13 @@ describe FoldersController do
 
       get "show", params: { course_id: @course.id, id: @folder.id }, format: "json"
       json = json_parse
-      expect(json["files"].count).to eql(1)
+      expect(json["files"].count).to be(1)
 
       file.hidden = true
       file.save!
       get "show", params: { course_id: @course.id, id: @folder.id }, format: "json"
       json = json_parse
-      expect(json["files"].count).to eql(0)
+      expect(json["files"].count).to be(0)
     end
   end
 
@@ -123,8 +123,8 @@ describe FoldersController do
       expect(assigns[:folder]).not_to be_frozen
       expect(assigns[:folder]).to be_deleted
       @course.reload
-      expect(@course.folders).to be_include(@folder)
-      expect(@course.folders.active).not_to be_include(@folder)
+      expect(@course.folders).to include(@folder)
+      expect(@course.folders.active).not_to include(@folder)
     end
 
     it "deletes folder" do

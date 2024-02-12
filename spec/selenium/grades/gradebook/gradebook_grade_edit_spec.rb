@@ -85,27 +85,15 @@ describe "Gradebook editing grades" do
     assignment_model(course: @course, grading_type: "letter_grade", points_possible: nil, title: "no-points")
     Gradebook.visit(@course)
 
-    edit_grade("#gradebook_grid .container_1 .slick-row:nth-child(1) .b4", "A-")
+    edit_grade("#gradebook_grid .container_1 .slick-row:nth-child(1) .b4", "A−")
 
-    expect(f("#gradebook_grid .container_1 .slick-row:nth-child(1) .b4")).to include_text("A-")
+    expect(f("#gradebook_grid .container_1 .slick-row:nth-child(1) .b4")).to include_text("A−")
     expect(@assignment.submissions.where.not(grade: nil).count).to eq 1
 
     sub = @assignment.submissions.where.not(grade: nil).first
 
     expect(sub.grade).to eq "A-"
     expect(sub.score).to eq 0.0
-  end
-
-  it "does not update default grades for users not in this section", priority: "1" do
-    # create new user and section
-
-    Gradebook.visit(@course)
-    switch_to_section(@other_section)
-
-    Gradebook.click_assignment_header_menu(@third_assignment.id)
-    set_default_grade(13)
-    @other_section.users.each { |u| expect(u.submissions.map(&:grade)).to include "13" }
-    @course.default_section.users.each { |u| expect(u.submissions.map(&:grade)).not_to include "13" }
   end
 
   it "tab sets focus on the options menu trigger when editing a grade", priority: "1" do

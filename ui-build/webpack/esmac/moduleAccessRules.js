@@ -19,7 +19,7 @@
 module.exports = [
   {
     rule: 'Let the initializer do what it needs to',
-    source: 'ui/index.js',
+    source: 'ui/index.ts',
     target: '**',
     specifier: 'any',
   },
@@ -27,6 +27,13 @@ module.exports = [
   {
     rule: 'Let boot code do what it needs to',
     source: 'ui/boot/**',
+    target: '**',
+    specifier: 'any',
+  },
+
+  {
+    rule: 'Allow extensions to dynamically import from gems/plugins',
+    source: 'ui/shared/bundles/**',
     target: '**',
     specifier: 'any',
   },
@@ -48,20 +55,6 @@ module.exports = [
   {
     source: 'ui/features/*/index.js',
     target: 'ui/engine/**',
-    specifier: 'bare',
-  },
-
-  {
-    rule: 'Let shims do whatever they need to',
-    source: 'ui/shims/*',
-    target: '**',
-    specifier: 'any',
-  },
-
-  {
-    rule: 'Let everyone consume shims',
-    source: '**',
-    target: 'ui/shims/*',
     specifier: 'bare',
   },
 

@@ -19,7 +19,7 @@ import $ from 'jquery'
 import GroupUsersView from './GroupUsersView'
 import AssignToGroupMenu from './AssignToGroupMenu'
 import Scrollable from './Scrollable'
-import GroupCategoryCloneView from './GroupCategoryCloneView.coffee'
+import GroupCategoryCloneView from './GroupCategoryCloneView'
 import groupHasSubmissions from '../../groupHasSubmissions'
 
 export default class UnassignedUsersView extends GroupUsersView {
@@ -57,7 +57,6 @@ export default class UnassignedUsersView extends GroupUsersView {
 
     this.prototype.events = {
       'click .assign-to-group': 'focusAssignToGroup',
-      'focus .assign-to-group': 'showAssignToGroup',
       'blur .assign-to-group': 'hideAssignToGroup',
       scroll: 'hideAssignToGroup',
     }

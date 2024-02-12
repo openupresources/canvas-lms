@@ -26,7 +26,7 @@
 
 require_relative "../common"
 
-RE_SHORT_MD5 = /\A[a-f0-9]{10}\z/.freeze # 10 chars of an MD5
+RE_SHORT_MD5 = /\A[a-f0-9]{10}\z/ # 10 chars of an MD5
 
 describe "Stuff related to how we load stuff from CDN and use brandable_css" do
   include_context "in-process server selenium tests"
@@ -94,6 +94,5 @@ describe "Stuff related to how we load stuff from CDN and use brandable_css" do
     check_asset("script", "/timezone/Etc/UTC.js")
     check_asset("script", "/timezone/en_US.js")
     Canvas::Cdn.registry.scripts_for("main").each { |c| check_asset("script", c, true) }
-    Canvas::Cdn.registry.scripts_for("login").each { |c| check_asset("link", c, true) }
   end
 end

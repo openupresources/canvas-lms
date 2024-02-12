@@ -43,7 +43,7 @@ describe "conversations new" do
     student_in_course(user: @s2, active_all: true, course: @course2)
 
     def assignment_with_submission_comments(title, student, course)
-      assignment = course.assignments.create!(title: title, description: "hai", points_possible: "14.2", submission_types: "online_text_entry")
+      assignment = course.assignments.create!(title:, description: "hai", points_possible: "14.2", submission_types: "online_text_entry")
       sub = assignment.grade_student(student, { grade: "12", grader: @teacher }).first
       sub.workflow_state = "submitted"
       sub.submission_comments.create!(comment: "c1", author: @teacher)
@@ -57,7 +57,7 @@ describe "conversations new" do
   end
 
   # the js errors caught in here are captured by VICE-2507
-  context "when react_inbox feature flag is on", ignore_js_errors: true do
+  context "when react_inbox feature flag is on", :ignore_js_errors do
     before do
       Account.default.set_feature_flag! :react_inbox, "on"
     end

@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import Progress from '@canvas/progress/backbone/models/Progress.coffee'
+import {throttle} from 'lodash'
+import Progress from '@canvas/progress/backbone/models/Progress'
 import Folder from '@canvas/files/backbone/models/Folder'
 
 const I18n = useI18nScope('react_files')
@@ -45,7 +45,7 @@ export default function downloadStuffAsAZip(filesAndFolders, {contextType, conte
   // SR users set it much higher speed (300 wpm according to http://webaim.org/techniques/screenreader/)
   // This works well for the default read speed which is around 180 wpm.
   const screenreaderMessageWaitTimeMS = 2500
-  const throttledSRMessage = _.throttle(
+  const throttledSRMessage = throttle(
     $.screenReaderFlashMessageExclusive,
     screenreaderMessageWaitTimeMS,
     {leading: false}

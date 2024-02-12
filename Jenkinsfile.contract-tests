@@ -43,7 +43,7 @@ pipeline {
     stage('Environment') {
       steps {
         script {
-          extendedStage('Runner').nodeRequirements(label: configuration.nodeLabel(), podTemplate: contractTestsStage.nodeRequirementsTemplate()).obeysAllowStages(false).execute {
+          extendedStage('Runner').nodeRequirements(label: nodeLabel(), podTemplate: contractTestsStage.nodeRequirementsTemplate()).obeysAllowStages(false).execute {
             def stages = [:]
 
             def consumerEnvVars = [
@@ -70,20 +70,6 @@ pipeline {
               consumerName: 'Sistemic',
               envVars: consumerEnvVars,
               command: 'cd /usr/src/app && bundle exec rake pact:verify'
-            )
-
-            callableWithDelegate(contractTestsStage.queueTestStage('Live Events'))(stages,
-              databaseName: 'pact_test5',
-              command: 'cd /usr/src/app && bin/rspec spec/contracts/service_consumers/live_events --tag pact_live_events --format doc'
-            )
-
-            callableWithDelegate(contractTestsStage.queueTestStage('Outcomes'))(stages,
-              databaseName: 'pact_test6',
-              envVars: [
-                "PUBLISH_API=${configuration.isChangeMerged() ? '1' : '0'}",
-                "SHA=${env.GERRIT_PATCHSET_REVISION}"
-              ],
-              command: 'cd /usr/src/app && build/new-jenkins/pact/contracts-generate-api.sh'
             )
 
             parallel(stages)

@@ -91,6 +91,15 @@ module.exports = {
     'no-return-assign': 'off',
     'no-underscore-dangle': 'off',
     'no-use-before-define': 'off',
+    'object-shorthand': 'warn',
+    '@typescript-eslint/no-use-before-define': [
+      'error',
+      {
+        functions: false,
+        classes: false,
+        variables: false,
+      },
+    ],
     'no-useless-escape': 'off',
     'one-var': 'off',
     'prefer-destructuring': 'off',
@@ -104,6 +113,8 @@ module.exports = {
     'promise/catch-or-return': ['warn', {allowFinally: true}], // The recommendation is to error on this, but we downgrade it to a warning
     'promise/avoid-new': 'off',
     'promise/no-nesting': 'off',
+    'react/jsx-no-target-blank': 'warn',
+    'react/jsx-curly-brace-presence': 'warn',
     'react/destructuring-assignment': 'off',
     'react/forbid-prop-types': 'off', // AirBnB doesn't want you to use PropTypes.object, and we agree normally. But there are times where you just want to pass on an opaque object to something else and forcing people to make a PropTypes.shape for it doesn't add any value. People should still encourage each other to use PropTypes.shape normally, when it makes sense, in code-review but we're not going to -2 because of it.
     'react/no-typos': 'off',
@@ -119,6 +130,7 @@ module.exports = {
     'react/no-render-return-value': 'warn', // In future versions of react this will fail
     'react/state-in-constructor': 'off',
     'react/static-property-placement': 'off',
+    'react/no-unknown-property': 'warn',
 
     // don't restrict Math.pow for ** operator
     // ref: https://github.com/airbnb/javascript/blob/1f786e154f6c32385607e1688370d7f2d053f88f/packages/eslint-config-airbnb-base/rules/best-practices.js#L225
@@ -189,12 +201,16 @@ module.exports = {
     'jest/no-large-snapshots': 'warn',
 
     // These are things we care about
-    'react/jsx-filename-extension': ['error', {extensions: ['.js', 'ts', 'tsx']}],
+    'react/jsx-filename-extension': ['error', {extensions: ['jsx', 'tsx']}],
     'eslint-comments/no-unused-disable': 'error',
     'jest/no-disabled-tests': 'off',
-    'import/extensions': ['error', 'ignorePackages', {js: 'never', ts: 'never', tsx: 'never'}],
+    'import/extensions': [
+      'error',
+      'ignorePackages',
+      {js: 'never', ts: 'never', jsx: 'never', tsx: 'never', coffee: 'never'},
+    ],
     'import/no-commonjs': 'off', // This is overridden where it counts
-    'import/no-extraneous-dependencies': ['error', {devDependencies: true}],
+    'import/no-extraneous-dependencies': 'off',
     'lodash/callback-binding': 'error',
     'lodash/collection-method-value': 'error',
     'lodash/collection-return': 'error',
@@ -220,7 +236,7 @@ module.exports = {
     '@typescript-eslint/no-shadow': 'warn', // AirBnB says 'error', we downgrade to just 'warn'
     'no-unused-vars': 'off',
     '@typescript-eslint/no-unused-vars': [
-      'error',
+      'warn',
       {
         argsIgnorePattern: '^_',
 
@@ -229,12 +245,12 @@ module.exports = {
       },
     ],
     semi: 'off',
-    '@typescript-eslint/semi': ['error', 'never'],
+    '@typescript-eslint/semi': ['warn', 'never'],
   },
   settings: {
     'import/resolver': {
       node: {
-        extensions: ['.js', '.jsx', '.json', '.ts', '.tsx', '.d.ts'], // add Typescript extensions
+        extensions: ['.js', '.jsx', '.json', '.ts', '.tsx', '.d.ts'], // add Typescript and CoffeeScript extensions
       },
     },
     react: {
@@ -257,7 +273,7 @@ module.exports = {
       },
     },
     {
-      files: ['ui/**/*', 'spec/**/*', 'public/**/*'],
+      files: ['ui/**/*', 'spec/**/*', 'public/**/*', 'packages/**/*'],
       rules: {
         // Turn off the "absolute-first" rule. Until we get rid of the `compiled/` and `jsx/`
         // stuff and use real realitive paths it will tell you to do the wrong thing
@@ -270,11 +286,13 @@ module.exports = {
         'import/order': 'off', // because it thinks 'jsx/whatever' and 'compiled/baz' should go in their groups. we don't want to encourage people to do that just so they move them back together once  those everything is in same dir
         'import/no-unresolved': 'off',
         'import/no-webpack-loader-syntax': 'off',
+        'import/newline-after-import': 'warn',
 
         'jest/no-jasmine-globals': 'error',
         'no-constant-condition': 'error',
         'react-hooks/exhaustive-deps': 'error',
         'react/prefer-stateless-function': 'error',
+        'prefer-const': 'warn',
 
         // TODO: resolve and remove these overrides
         'react/no-string-refs': 'warn',
@@ -303,7 +321,6 @@ module.exports = {
       ],
       rules: {
         'react/prop-types': 'off',
-        'prefer-const': 'warn',
         'react/no-string-refs': 'warn',
       },
     },

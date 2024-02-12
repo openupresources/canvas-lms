@@ -22,24 +22,26 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import tz from '@canvas/timezone'
+import {map, defaults, filter, omit, each, has, last, includes} from 'lodash'
+import * as tz from '@canvas/datetime'
+import {encodeQueryString} from '@canvas/query-string-encoding'
 import moment from 'moment'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
+import decodeFromHex from '@canvas/util/decodeFromHex'
 import withinMomentDates from '../momentDateHelper'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import userSettings from '@canvas/user-settings'
 import colorSlicer from 'color-slicer'
 import calendarAppTemplate from '../jst/calendarApp.handlebars'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 import ShowEventDetailsDialog from './ShowEventDetailsDialog'
 import EditEventDetailsDialog from './EditEventDetailsDialog'
-import CalendarNavigator from '../backbone/views/CalendarNavigator.coffee'
-import AgendaView from '../backbone/views/AgendaView.coffee'
+import CalendarNavigator from '../backbone/views/CalendarNavigator'
+import AgendaView from '../backbone/views/AgendaView'
 import calendarDefaults from '../CalendarDefaults'
 import ContextColorer from '@canvas/util/contextColorer'
 import deparam from 'deparam'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import calendarEventFilter from '../CalendarEventFilter'
 import schedulerActions from '../react/scheduler/actions'
 import 'fullcalendar'
@@ -47,7 +49,7 @@ import '../ext/patches-to-fullcalendar'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import 'jquery-tinypubsub'
-import 'jqueryui/button'
+import 'jqueryui-unpatched/button'
 import 'jqueryui/tooltip'
 
 const I18n = useI18nScope('calendar')
@@ -132,9 +134,9 @@ export default class Calendar {
     this.hasAppointmentGroups = $.Deferred()
     if (this.options.showScheduler) {
       // Pre-load the appointment group list, for the badge
-      this.dataSource.getAppointmentGroups(false, data => {
+      this.dataSource.getAppointmentGroups(false, appointmentGroupsData => {
         let required = 0
-        data.forEach(group => {
+        appointmentGroupsData.forEach(group => {
           if (group.requiring_action) {
             required += 1
           }
@@ -184,9 +186,13 @@ export default class Calendar {
       'CommonEvent/eventsDeletingFromSeries': this.eventsDeletingFromSeries,
       'CommonEvent/eventDeleted': this.eventDeleted,
       'CommonEvent/eventsDeletedFromSeries': this.eventsDeletedFromSeries,
+      'CommonEvent/eventsUpdatedFromSeries': this.eventsUpdatedFromSeries,
       'CommonEvent/eventSaving': this.eventSaving,
+      'CommonEvent/eventsSavingFromSeries': this.eventsSavingFromSeries,
       'CommonEvent/eventSaved': this.eventSaved,
+      'CommonEvent/eventsSavedFromSeries': this.eventsSavedFromSeries,
       'CommonEvent/eventSaveFailed': this.eventSaveFailed,
+      'CommonEvent/eventsSavedFromSeriesFailed': this.eventsSavedFromSeriesFailed,
       'Calendar/visibleContextListChanged': this.visibleContextListChanged,
       'EventDataSource/ajaxStarted': this.ajaxStarted,
       'EventDataSource/ajaxEnded': this.ajaxEnded,
@@ -221,7 +227,7 @@ export default class Calendar {
   }
 
   initializeFullCalendarParams() {
-    return _.defaults(
+    return defaults(
       {
         header: false,
         editable: true,
@@ -563,8 +569,8 @@ export default class Calendar {
 
   activeContexts() {
     const allowedContexts =
-      userSettings.get('checked_calendar_codes') || _.pluck(this.contexts, 'asset_string')
-    return _.filter(this.contexts, c => _.includes(allowedContexts, c.asset_string))
+      userSettings.get('checked_calendar_codes') || map(this.contexts, 'asset_string')
+    return filter(this.contexts, c => includes(allowedContexts, c.asset_string))
   }
 
   addEventClick = (event, _jsEvent, _view) => {
@@ -631,7 +637,7 @@ export default class Calendar {
 
   updateFragment(opts) {
     const replaceState = !!opts.replaceState
-    opts = _.omit(opts, 'replaceState')
+    opts = omit(opts, 'replaceState')
     const data = this.dataFromDocumentHash()
     let changed = false
     for (const k in opts) {
@@ -644,7 +650,7 @@ export default class Calendar {
       }
     }
     if (changed) {
-      const fragment = '#' + $.param(data, this)
+      const fragment = '#' + encodeQueryString(data, this)
       if (replaceState || window.location.hash === '') {
         return window.history.replaceState(null, '', fragment)
       } else {
@@ -715,7 +721,7 @@ export default class Calendar {
     }
     event.start = date
     event.addClass('event_pending')
-    const revertFunc = () => console.log('could not save date on undated event')
+    const revertFunc = () => console.log('could not save date on undated event') // eslint-disable-line no-console
 
     if (!this._eventDrop(event, 0, false, revertFunc)) {
       return
@@ -798,15 +804,7 @@ export default class Calendar {
     return this.calendar.fullCalendar('updateEvent', event)
   }
 
-  eventDeleting = event => {
-    event.addClass('event_pending')
-    return this.updateEvent(event)
-  }
-
-  // given the event selected by the user, and which
-  // events in the series are being deleted (one, following, all)
-  // find them all and handle it
-  eventsDeletingFromSeries = ({selectedEvent, which}) => {
+  filterEventsWithSeriesIdAndWhich = (selectedEvent, which) => {
     const seriesId = selectedEvent.calendarEvent.series_uuid
     const eventSeries = this.calendar
       .fullCalendar('getEventCache')
@@ -826,6 +824,19 @@ export default class Calendar {
         candidateEvents = eventSeries
         break
     }
+    return candidateEvents
+  }
+
+  eventDeleting = event => {
+    event.addClass('event_pending')
+    return this.updateEvent(event)
+  }
+
+  // given the event selected by the user, and which
+  // events in the series are being deleted (one, following, all)
+  // find them all and handle it
+  eventsDeletingFromSeries = ({selectedEvent, which}) => {
+    const candidateEvents = this.filterEventsWithSeriesIdAndWhich(selectedEvent, which)
     candidateEvents.forEach(e => {
       $.publish('CommonEvent/eventDeleting', e)
     })
@@ -888,6 +899,22 @@ export default class Calendar {
     }
   }
 
+  eventsSavingFromSeries = ({selectedEvent, which}) => {
+    const candidateEvents = this.filterEventsWithSeriesIdAndWhich(selectedEvent, which)
+    candidateEvents.forEach(e => {
+      // when changing one event in the calendar, its contextInfo gets changed
+      // in CalendarEventDetailsForm when the user submits. When updating
+      // events in a series we need to update the rest of the matching events
+      // from the series
+      if (which !== 'one' && e.id !== selectedEvent.id && e.can_change_context) {
+        e.old_context_code = e.calendarEvent.context_code
+        e.contextInfo = selectedEvent.contextInfo
+      }
+
+      $.publish('CommonEvent/eventSaving', e)
+    })
+  }
+
   eventSaved = event => {
     event.removeClass('event_pending')
 
@@ -896,6 +923,11 @@ export default class Calendar {
     // fullcalendar stores for itself because the id has changed.
     // This is another reason to do a refetchEvents instead of just an update.
     delete event._id
+    // If is array means that it returned an array of event series, so we apply
+    // the same approach when update/delete series
+    if (Array.isArray(event.calendarEvent)) {
+      this.dataSource.clearCache()
+    }
     this.calendar.fullCalendar('refetchEvents')
     if (event && event.object && event.object.duplicates && event.object.duplicates.length > 0)
       this.reloadClick()
@@ -903,6 +935,15 @@ export default class Calendar {
     // but the save may be as a result of moving an event from being undated
     // to dated, and in that case we don't know whether to just update it or
     // add it. Some new state would need to be kept to track that.
+    this.closeEventPopups()
+  }
+
+  eventsSavedFromSeries = ({seriesEvents}) => {
+    // do what eventSaved does
+    seriesEvents.forEach(event => {
+      event.removeClass('event_pending')
+      delete event._id
+    })
     this.closeEventPopups()
   }
 
@@ -915,9 +956,61 @@ export default class Calendar {
     }
   }
 
+  eventsSavedFromSeriesFailed = ({selectedEvent, which}) => {
+    const candidateEvents = this.filterEventsWithSeriesIdAndWhich(selectedEvent, which)
+    candidateEvents.forEach(e => {
+      $.publish('CommonEvent/eventSaveFailed', e)
+    })
+  }
+
+  // When we delete an event + all following from a series
+  // the remaining events get updated with a new rrule
+  eventsUpdatedFromSeries = ({updatedEvents}) => {
+    const candidateEventsInCalendar = this.calendar.fullCalendar('getEventCache').filter(c => {
+      if (c.eventType === 'calendar_event') {
+        const updatedEventIndex = updatedEvents.findIndex(e => c.calendarEvent.id === e.id)
+        if (updatedEventIndex >= 0) {
+          c.copyDataFromObject(updatedEvents[updatedEventIndex])
+          return true
+        }
+      }
+      return false
+    })
+
+    // events got created
+    if (candidateEventsInCalendar.length < updatedEvents.length) {
+      this.dataSource.clearCache()
+    }
+
+    // if you change the start time of an event+following, it will create a new
+    // series for those events plus update those to the left with a new rrule
+    const updatedEventIds = candidateEventsInCalendar.map(e => e.calendarEvent.id)
+    const otherEventsInSeries = this.calendar.fullCalendar('getEventCache').filter(c => {
+      return (
+        c.calendarEvent?.series_uuid === updatedEvents[0].series_uuid &&
+        !updatedEventIds.includes(c.calendarEvent.id)
+      )
+    })
+
+    if (otherEventsInSeries.length !== 0) {
+      this.dataSource.clearCache()
+    }
+
+    candidateEventsInCalendar.forEach(e => {
+      this.updateEvent(e)
+    })
+    $.publish('CommonEvent/eventsSavedFromSeries', {seriesEvents: candidateEventsInCalendar})
+
+    // I don't understand why, but it we don't take a beat the
+    // events' coloring doesn't get updated.
+    window.setTimeout(() => {
+      this.calendar.fullCalendar('refetchEvents')
+    }, 0)
+  }
+
   // When an assignment event is updated, update its related overrides.
   updateOverrides = event => {
-    _.each(this.dataSource.cache.contexts[event.contextCode()].events, (override, key) => {
+    each(this.dataSource.cache.contexts[event.contextCode()].events, (override, key) => {
       if (key.match(/override/) && event.assignment.id === override.assignment.id) {
         override.updateAssignmentTitle(event.title)
       }
@@ -1010,7 +1103,7 @@ export default class Calendar {
   setCurrentView(view) {
     this.updateFragment({
       view_name: view,
-      replaceState: !_.has(this.dataFromDocumentHash(), 'view_name'),
+      replaceState: !has(this.dataFromDocumentHash(), 'view_name'),
     }) // use replaceState if view_name wasn't set before
 
     this.currentView = view
@@ -1185,7 +1278,7 @@ export default class Calendar {
         data = deparam(window.location.hash.substring(1)) || {}
       } else {
         // legacy
-        data = $.parseJSON($.decodeFromHex(window.location.hash.substring(1))) || {}
+        data = JSON.parse(decodeFromHex(window.location.hash.substring(1))) || {}
       }
     } catch (e) {
       data = {}
@@ -1248,13 +1341,15 @@ export default class Calendar {
     //    !event.calendarEvent.reserved && event.calendarEvent.available_slots > 0
 
     // find the next reservable appointment and report its date
-    const group_ids = _.map(this.findAppointmentModeGroups(), asset_string =>
-      _.last(asset_string.split('_'))
+    const group_ids = map(this.findAppointmentModeGroups(), asset_string =>
+      last(asset_string.split('_'))
     )
     if (!(group_ids.length > 0)) return
 
     return $.getJSON(
-      `/api/v1/appointment_groups/next_appointment?${$.param({appointment_group_ids: group_ids})}`,
+      `/api/v1/appointment_groups/next_appointment?${encodeQueryString({
+        appointment_group_ids: group_ids,
+      })}`,
       data => {
         if (data.length > 0) {
           const nextDate = Date.parse(data[0].start_at)

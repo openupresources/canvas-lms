@@ -226,7 +226,18 @@ class SubmissionsController < SubmissionsBaseController
 
     submit_at = params.dig(:submission, :submitted_at)
     user_sub = @assignment.submissions.find_by(user: user_id)
-    return if (user_id || submit_at) && (!user_sub || !authorized_action(user_sub, @current_user, :grade))
+
+    if user_id || submit_at
+      unless user_sub
+        if @assignment.students_with_visibility.where(id: user_id).exists?
+          user_sub = @assignment.submissions.create!(user_id:)
+        else
+          return render_unauthorized_action
+        end
+      end
+
+      return unless authorized_action(user_sub, @current_user, :grade)
+    end
 
     if @assignment.locked_for?(@submission_user) && !@assignment.grants_right?(@current_user, :update)
       flash[:notice] = t("errors.can_not_submit_locked_assignment", "You can't submit an assignment when it is locked")
@@ -248,15 +259,6 @@ class SubmissionsController < SubmissionsBaseController
       if online_upload?
         return unless extensions_allowed?
         return unless has_file_attached?
-      elsif is_google_doc?
-        params[:submission][:submission_type] = "online_upload"
-        attachment, err_message = submit_google_doc(params[:google_doc][:document_id])
-        if attachment.nil? || err_message
-          flash[:error] = err_message || t("errors.no_attachment_found", "Could not find an attachment to send to google drive")
-          return redirect_to(course_assignment_url(@context, @assignment))
-        else
-          params[:submission][:attachments] << attachment
-        end
       elsif is_media_recording? && !has_media_recording?
         flash[:error] = t("errors.media_file_attached", "There was no media recording in the submission")
         return redirect_to named_context_url(@context, :context_assignment_url, @assignment)
@@ -281,9 +283,18 @@ class SubmissionsController < SubmissionsBaseController
     return unless valid_resource_link_lookup_uuid?
 
     submission_params = params[:submission].permit(
-      :body, :url, :submission_type, :submitted_at, :comment, :group_comment,
-      :media_comment_type, :media_comment_id, :eula_agreement_timestamp,
-      :resource_link_lookup_uuid, :annotatable_attachment_id, attachment_ids: []
+      :body,
+      :url,
+      :submission_type,
+      :submitted_at,
+      :comment,
+      :group_comment,
+      :media_comment_type,
+      :media_comment_id,
+      :eula_agreement_timestamp,
+      :resource_link_lookup_uuid,
+      :annotatable_attachment_id,
+      attachment_ids: []
     )
     submission_params[:group_comment] = value_to_boolean(submission_params[:group_comment])
     submission_params[:attachments] = Attachment.copy_attachments_to_submissions_folder(@context, params[:submission][:attachments].compact.uniq)
@@ -328,11 +339,12 @@ class SubmissionsController < SubmissionsBaseController
           if api_request?
             includes = %(submission_comments attachments)
             json = submission_json(@submission, @assignment, @current_user, session, @context, includes, params)
-            render json: json,
+            render json:,
                    status: :created,
                    location: api_v1_course_assignment_submission_url(@context, @assignment, @current_user)
           else
-            render json: @submission.as_json(include: :submission_comments, methods: :late), status: :created,
+            render json: @submission.as_json(include: :submission_comments, methods: :late),
+                   status: :created,
                    location: course_gradebook_url(@submission.assignment.context)
           end
         end
@@ -363,7 +375,7 @@ class SubmissionsController < SubmissionsBaseController
   end
 
   def audit_events
-    return render_unauthorized_action unless @context.grants_right?(@current_user, :view_audit_trail)
+    return unless authorized_action(@context, @current_user, :view_audit_trail)
 
     submission = Submission.find(params[:submission_id])
 
@@ -379,11 +391,12 @@ class SubmissionsController < SubmissionsBaseController
     respond_to do |format|
       format.json do
         render json: {
-          audit_events: audit_events.as_json(include_root: false),
-          users: audit_event_data(data: user_data, submission: submission),
-          tools: audit_event_data(data: tool_data, role: "grader"),
-          quizzes: audit_event_data(data: quiz_data, role: "grader", name_field: :title),
-        }, status: :ok
+                 audit_events: audit_events.as_json(include_root: false),
+                 users: audit_event_data(data: user_data, submission:),
+                 tools: audit_event_data(data: tool_data, role: "grader"),
+                 quizzes: audit_event_data(data: quiz_data, role: "grader", name_field: :title),
+               },
+               status: :ok
       end
     end
   end
@@ -393,7 +406,7 @@ class SubmissionsController < SubmissionsBaseController
       {
         id: datum.id,
         name: datum.public_send(name_field),
-        role: role.presence || auditing_user_role(user: datum, submission: submission)
+        role: role.presence || auditing_user_role(user: datum, submission:)
       }
     end
   end
@@ -425,8 +438,8 @@ class SubmissionsController < SubmissionsBaseController
     params[:submission][:attachments] = []
 
     attachment_ids.each do |id|
-      params[:submission][:attachments] << @submission_user.attachments.active.where(id: id).first if @submission_user
-      params[:submission][:attachments] << @group.attachments.active.where(id: id).first if @group
+      params[:submission][:attachments] << @submission_user.attachments.active.where(id:).first if @submission_user
+      params[:submission][:attachments] << @group.attachments.active.where(id:).first if @group
       params[:submission][:attachments].compact!
     end
   end
@@ -475,7 +488,8 @@ class SubmissionsController < SubmissionsBaseController
       render(json: {
                message: "Invalid parameters for submission_type #{submission_type}. " \
                         "Required: #{API_SUBMISSION_TYPES[submission_type].map { |p| "submission[#{p}]" }.join(", ")}"
-             }, status: :bad_request)
+             },
+             status: :bad_request)
       return false
     end
     params[:submission][:comment] = params[:comment].try(:delete, :text_comment)
@@ -534,63 +548,6 @@ class SubmissionsController < SubmissionsBaseController
   end
   private :valid_text_entry?
 
-  def is_google_doc?
-    params[:google_doc] && params[:google_doc][:document_id] && params[:submission][:submission_type] == "google_doc"
-  end
-  private :is_google_doc?
-
-  # to avoid rendering/redirecting in a helper,
-  # this method returns both the attachment and an error message.
-  # A non-nil error message tells the consuming code that it should not proceed
-  # and should just render the error.
-  def submit_google_doc(document_id)
-    # fetch document from google
-    # since google drive can have many different export types, we need to send along our preferred extensions
-    document_response, display_name, file_extension, content_type = google_drive_connection.download(document_id,
-                                                                                                     @assignment.allowed_extensions)
-
-    unless document_response.try(:is_a?, Net::HTTPOK) || document_response.status == 200
-      return nil, t("errors.assignment_submit_fail", "Assignment failed to submit")
-    end
-
-    restriction_enabled           = @domain_root_account.feature_enabled?(:google_docs_domain_restriction)
-    restricted_google_docs_domain = @domain_root_account.settings[:google_docs_domain]
-    if restriction_enabled && restricted_google_docs_domain.present? && !@current_user.gmail.match(/@#{restricted_google_docs_domain}$/)
-      return nil, t("errors.invalid_google_docs_domain", "You cannot submit assignments from this google_docs domain")
-    end
-
-    # process the file and create an attachment
-    filename = "google_doc_#{Time.zone.now.strftime("%Y%m%d%H%M%S")}#{@current_user.id}.#{file_extension}"
-
-    attachment = @assignment.attachments.new
-    attachment.user = @current_user
-    attachment.display_name = display_name
-
-    Dir.mktmpdir do |dirname|
-      path = File.join(dirname, filename)
-      File.open(path, "wb") do |f|
-        f.write(document_response.body)
-      end
-      store_google_doc_attachment(attachment, Rack::Test::UploadedFile.new(path, content_type, true))
-      attachment.save!
-    end
-    [attachment, nil] # error message doesn't exist if we got this far
-  rescue GoogleDrive::WorkflowError => e
-    Canvas::Errors.capture_exception(:google_drive, e, :warn)
-    [nil, t("errors.google_drive_workflow", "Google Drive entry was unable to be downloaded")]
-  rescue GoogleDrive::ConnectionException => e
-    Canvas::Errors.capture_exception(:google_drive, e, :warn)
-    [nil, t("errors.googld_drive_timeout", "Timed out while talking to google drive")]
-  end
-  protected :submit_google_doc
-
-  def store_google_doc_attachment(attachment, uploaded_data)
-    # This seemingly-redundant method was extracted to facilitate testing
-    # as storing of the document was previously deeply tied to fetching
-    # the document from Google
-    Attachments::Storage.store_for_attachment(attachment, uploaded_data)
-  end
-
   def always_permitted_create_params
     always_permitted_params = %i[eula_agreement_timestamp submitted_at resource_link_lookup_uuid].freeze
     params.require(:submission).permit(always_permitted_params)
@@ -612,7 +569,7 @@ class SubmissionsController < SubmissionsBaseController
     # Homework submission is done by API request, but I saw other parts of code
     # that are handling HTML and JSON format. So, I kept the same logic here...
     if api_request?
-      render(json: { message: message }, status: :bad_request)
+      render(json: { message: }, status: :bad_request)
     else
       flash[:error] = message
       redirect_to named_context_url(@context, :context_assignment_url, @assignment)

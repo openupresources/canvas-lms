@@ -212,6 +212,17 @@ describe ContentMigrationsController, type: :request do
       expect(json["settings"]["source_course_name"]).to eq @course.name
     end
 
+    it "does not return source course on unmatching root account ids" do
+      unmatched_course = Course.create!(root_account_id: Account.create!)
+      @migration.migration_type = "course_copy_importer"
+      @migration.source_course_id = unmatched_course.id
+      @migration.source_course = unmatched_course
+      @migration.save!
+
+      json = api_call(:get, @migration_url, @params)
+      expect(json["settings"]).to be_nil
+    end
+
     it "marks as failed if stuck in pre_processing" do
       @migration.workflow_state = "pre_processing"
       @migration.save!
@@ -400,7 +411,9 @@ describe ContentMigrationsController, type: :request do
       source_course.workflow_state = "completed"
       source_course.save!
       # tests that the response was a 200
-      api_call(:post, @migration_url, @params,
+      api_call(:post,
+               @migration_url,
+               @params,
                { migration_type: "course_copy_importer",
                  settings: { source_course_id: source_course.id.to_param } })
     end
@@ -409,7 +422,8 @@ describe ContentMigrationsController, type: :request do
       course_with_teacher(active_all: true, user: @user)
       @course.sis_source_id = "booga"
       @course.save!
-      json = api_call(:post, @migration_url + "?settings[source_course_id]=sis_course_id:booga&migration_type=course_copy_importer",
+      json = api_call(:post,
+                      @migration_url + "?settings[source_course_id]=sis_course_id:booga&migration_type=course_copy_importer",
                       @params.merge(migration_type: "course_copy_importer", settings: { "source_course_id" => "sis_course_id:booga" }))
       migration = ContentMigration.find json["id"]
       expect(migration.migration_settings[:source_course_id]).to eql @course.id
@@ -424,7 +438,8 @@ describe ContentMigrationsController, type: :request do
           @copy_from = @other_account.courses.create!
           @copy_from.enroll_user(@user, "TeacherEnrollment", enrollment_state: "active")
         end
-        json = api_call(:post, @migration_url + "?settings[source_course_id]=#{@copy_from.global_id}&migration_type=course_copy_importer",
+        json = api_call(:post,
+                        @migration_url + "?settings[source_course_id]=#{@copy_from.global_id}&migration_type=course_copy_importer",
                         @params.merge(migration_type: "course_copy_importer", settings: { "source_course_id" => @copy_from.global_id.to_s }))
 
         migration = ContentMigration.find json["id"]
@@ -439,7 +454,8 @@ describe ContentMigrationsController, type: :request do
         end
 
         @copy_from = @course
-        json = api_call(:post, "/api/v1/courses/#{@copy_to.global_id}/content_migrations?settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer",
+        json = api_call(:post,
+                        "/api/v1/courses/#{@copy_to.global_id}/content_migrations?settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer",
                         @params.merge(course_id: @copy_to.global_id.to_s,
                                       migration_type: "course_copy_importer",
                                       settings: { "source_course_id" => @copy_from.local_id.to_s }))
@@ -458,8 +474,9 @@ describe ContentMigrationsController, type: :request do
         @copy_from = @course
         @copy_from.content_exports.create!(global_identifiers: false) # turns out this is important to repro-ing a certain terrible bug
         @page = @copy_from.wiki_pages.create!(title: "aaaa")
-        json = api_call(:post, "/api/v1/courses/#{@copy_to.global_id}/content_migrations?" \
-                               "settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer&select[pages][]=#{@page.id}",
+        json = api_call(:post,
+                        "/api/v1/courses/#{@copy_to.global_id}/content_migrations?" \
+                        "settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer&select[pages][]=#{@page.id}",
                         @params.merge(course_id: @copy_to.global_id.to_s,
                                       migration_type: "course_copy_importer",
                                       settings: { "source_course_id" => @copy_from.local_id.to_s },
@@ -482,8 +499,9 @@ describe ContentMigrationsController, type: :request do
         @copy_from = @course
         @copy_from.content_exports.create!(global_identifiers: false) # turns out this is important to repro-ing a certain terrible bug
         @page = @copy_from.wiki_pages.create!(title: "aaaa")
-        json = api_call(:post, "/api/v1/courses/#{@copy_to.global_id}/content_migrations?" \
-                               "settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer&settings[insert_into_module_id]=#{@mod.global_id}&select[pages][]=#{@page.id}",
+        json = api_call(:post,
+                        "/api/v1/courses/#{@copy_to.global_id}/content_migrations?" \
+                        "settings[source_course_id]=#{@copy_from.local_id}&migration_type=course_copy_importer&settings[insert_into_module_id]=#{@mod.global_id}&select[pages][]=#{@page.id}",
                         @params.merge(course_id: @copy_to.global_id.to_s,
                                       migration_type: "course_copy_importer",
                                       settings: { "source_course_id" => @copy_from.local_id.to_s, "insert_into_module_id" => @mod.global_id.to_s },
@@ -501,7 +519,7 @@ describe ContentMigrationsController, type: :request do
       it "sets attachment pre-flight data" do
         json = api_call(:post, @migration_url, @params, @post_params)
         expect(json["pre_attachment"]).not_to be_nil
-        expect(json["pre_attachment"]["upload_params"]["key"].end_with?("test.zip")).to eq true
+        expect(json["pre_attachment"]["upload_params"]["key"].end_with?("test.zip")).to be true
       end
 
       it "does not queue migration with pre_attachent on create" do
@@ -535,7 +553,8 @@ describe ContentMigrationsController, type: :request do
         @content.rewind
         @attachment.uploaded_data = @content
         @attachment.save!
-        api_call(:post, "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
+        api_call(:post,
+                 "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
                  { controller: "files", action: "api_create_success", format: "json", id: @attachment.to_param, uuid: @attachment.uuid })
 
         @migration.reload
@@ -587,7 +606,7 @@ describe ContentMigrationsController, type: :request do
       it "verifies the content export exists" do
         post_params = { migration_type: "common_cartridge_importer", settings: { content_export_id: 0 } }
         json = api_call(:post, @migration_url, @params, post_params)
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
         expect(json["message"]).to eq "invalid content export"
         expect(ContentMigration.last).to be_pre_process_error
       end
@@ -599,7 +618,7 @@ describe ContentMigrationsController, type: :request do
         @user = me
         post_params = { migration_type: "common_cartridge_importer", settings: { content_export_id: export.id } }
         json = api_call(:post, @migration_url, @params, post_params)
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
         expect(json["message"]).to eq "invalid content export"
         expect(ContentMigration.last).to be_pre_process_error
       end
@@ -608,7 +627,7 @@ describe ContentMigrationsController, type: :request do
         export = stub_export(@course, @user, "exporting", false)
         post_params = { migration_type: "common_cartridge_importer", settings: { content_export_id: export.id } }
         json = api_call(:post, @migration_url, @params, post_params)
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
         expect(json["message"]).to eq "content export is incomplete"
         expect(ContentMigration.last).to be_pre_process_error
       end
@@ -641,13 +660,19 @@ describe ContentMigrationsController, type: :request do
       end
 
       it "errors for an unsupported type" do
-        json = api_call(:post, @migration_url, @params, { migration_type: "common_cartridge_importer" },
-                        {}, expected_status: 400)
+        json = api_call(:post,
+                        @migration_url,
+                        @params,
+                        { migration_type: "common_cartridge_importer" },
+                        {},
+                        expected_status: 400)
         expect(json).to eq({ "message" => "Unsupported migration_type for context" })
       end
 
       it "queues a migration" do
-        json = api_call(:post, @migration_url, @params,
+        json = api_call(:post,
+                        @migration_url,
+                        @params,
                         { migration_type: "zip_file_importer",
                           settings: { file_url: "http://example.com/oi.zip",
                                       folder_id: @folder.id } })
@@ -665,7 +690,9 @@ describe ContentMigrationsController, type: :request do
       end
 
       it "queues a migration" do
-        json = api_call(:post, @migration_url, @params,
+        json = api_call(:post,
+                        @migration_url,
+                        @params,
                         { migration_type: "zip_file_importer",
                           settings: { file_url: "http://example.com/oi.zip",
                                       folder_id: @folder.id } })
@@ -683,7 +710,9 @@ describe ContentMigrationsController, type: :request do
       end
 
       it "queues a migration" do
-        json = api_call(:post, @migration_url, @params,
+        json = api_call(:post,
+                        @migration_url,
+                        @params,
                         { migration_type: "qti_converter",
                           settings: { file_url: "http://example.com/oi.zip" } })
         migration = ContentMigration.find json["id"]
@@ -770,7 +799,8 @@ describe ContentMigrationsController, type: :request do
     it "returns the migrators" do
       p = Canvas::Plugin.find("common_cartridge_importer")
       allow(Canvas::Plugin).to receive(:all_for_tag).and_return([p])
-      json = api_call(:get, "/api/v1/courses/#{@course.id}/content_migrations/migrators",
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/content_migrations/migrators",
                       { controller: "content_migrations", action: "available_migrators", format: "json", course_id: @course.id.to_param })
       expect(json).to eq [{
         "type" => "common_cartridge_importer",
@@ -783,7 +813,8 @@ describe ContentMigrationsController, type: :request do
     it "filters by context type" do
       allow(Canvas::Plugin).to receive(:all_for_tag).and_return([Canvas::Plugin.find("common_cartridge_importer"),
                                                                  Canvas::Plugin.find("zip_file_importer")])
-      json = api_call(:get, "/api/v1/users/#{@user.id}/content_migrations/migrators",
+      json = api_call(:get,
+                      "/api/v1/users/#{@user.id}/content_migrations/migrators",
                       { controller: "content_migrations", action: "available_migrators", format: "json", user_id: @user.to_param })
       expect(json).to eq [{
         "type" => "zip_file_importer",
@@ -854,7 +885,7 @@ describe ContentMigrationsController, type: :request do
 
       @shard1.activate do
         account = Account.create!
-        @cs_course = Course.create!(account: account)
+        @cs_course = Course.create!(account:)
         @dt1 = @cs_course.discussion_topics.create!(message: "hi", title: "discussion title")
       end
       @migration.migration_type = "course_copy_importer"
@@ -876,12 +907,17 @@ describe ContentMigrationsController, type: :request do
       @src = course_factory active_all: true
       @ann = @src.announcements.create! title: "ann", message: "ohai"
       @assign = @src.assignments.create! name: "assign"
+      @shell_assign = @src.assignments.create! submission_types: "discussion_topic", description: "assigned"
+      @assign_topic = @shell_assign.discussion_topic
       @mod = @src.context_modules.create! name: "mod"
       @tag = @mod.add_item type: "sub_header", title: "blah"
       @page = @src.wiki_pages.create! title: "der page"
       @topic = @src.discussion_topics.create! message: "some topic"
       @quiz = @src.quizzes.create! title: "a quiz", quiz_type: "assignment"
       @file = @src.attachments.create! filename: "teh_file.txt", uploaded_data: StringIO.new("data")
+
+      @media_object = @src.media_objects.create!(media_id: "m1234_fish_and_wildlife", title: "fish_and_wildlife.mp4")
+      @media_file = @media_object.attachment
 
       @dst = course_factory active_all: true
       @user = @dst.teachers.first
@@ -890,12 +926,51 @@ describe ContentMigrationsController, type: :request do
     def test_asset_id_mapping(json)
       expect(@dst.announcements.find(json["announcements"][@ann.id.to_s]).title).to eq "ann"
       expect(@dst.assignments.find(json["assignments"][@assign.id.to_s]).name).to eq "assign"
+      expect(@dst.assignments.find(json["assignments"][@shell_assign.id.to_s]).description).to eq "assigned"
       expect(@dst.context_modules.find(json["modules"][@mod.id.to_s]).name).to eq "mod"
       expect(@dst.context_module_tags.find(json["module_items"][@tag.id.to_s]).title).to eq "blah"
       expect(@dst.wiki_pages.find(json["pages"][@page.id.to_s]).title).to eq "der page"
       expect(@dst.discussion_topics.find(json["discussion_topics"][@topic.id.to_s]).message).to eq "some topic"
+      expect(@dst.discussion_topics.find(json["discussion_topics"][@assign_topic.id.to_s]).message).to eq "assigned"
       expect(@dst.quizzes.find(json["quizzes"][@quiz.id.to_s]).title).to eq "a quiz"
       expect(@dst.attachments.find(json["files"][@file.id.to_s]).filename).to eq "teh_file.txt"
+    end
+
+    # accepts block which should return the migration id
+    def test_asset_migration_id_mapping(json)
+      expect(@dst.announcements.find(json["announcements"][yield(@ann)]["destination"]["id"]).title).to eq "ann"
+      expect(@dst.assignments.find(json["assignments"][yield(@assign)]["destination"]["id"]).name).to eq "assign"
+      expect(@dst.assignments.find(json["assignments"][yield(@shell_assign)]["destination"]["id"]).description).to eq "assigned"
+      expect(@dst.context_modules.find(json["modules"][yield(@mod)]["destination"]["id"]).name).to eq "mod"
+      expect(@dst.context_module_tags.find(json["module_items"][yield(@tag)]["destination"]["id"]).title).to eq "blah"
+
+      dst_page = @dst.wiki_pages.find(json["pages"][yield(@page)]["destination"]["id"])
+      expect(dst_page.title).to eq "der page"
+      expect(json["pages"][yield(@page)]["destination"]["url"]).to eq "der-page"
+      expect(dst_page.url).to eq "der-page"
+
+      expect(@dst.wiki_pages.find(json["pages"][yield(@page)]["destination"]["id"]).title).to eq "der page"
+      expect(@dst.discussion_topics.find(json["discussion_topics"][yield(@topic)]["destination"]["id"]).message).to eq "some topic"
+      expect(@dst.discussion_topics.find(json["discussion_topics"][yield(@assign_topic)]["destination"]["id"]).message).to eq "assigned"
+      expect(@dst.quizzes.find(json["quizzes"][yield(@quiz)]["destination"]["id"]).title).to eq "a quiz"
+      expect(@dst.attachments.find(json["files"][yield(@file)]["destination"]["id"]).filename).to eq "teh_file.txt"
+
+      dst_media_attachment = @dst.attachments.find(json["files"][yield(@media_file)]["destination"]["id"])
+      expect(dst_media_attachment.filename).to eq "fish_and_wildlife.mp4"
+      expect(json["files"][yield(@media_file)]["destination"]["media_entry_id"]).to eq "m1234_fish_and_wildlife"
+    end
+
+    def test_asset_migration_id_mapping_nil(json)
+      expect(json["announcements"][yield(@ann)]).to be_nil
+      expect(json["assignments"][yield(@assign)]).to be_nil
+      expect(json["assignments"][yield(@shell_assign)]).to be_nil
+      expect(json["modules"][yield(@mod)]).to be_nil
+      expect(json["module_items"][yield(@tag)]).to be_nil
+      expect(json["pages"][yield(@page)]).to be_nil
+      expect(json["discussion_topics"][yield(@topic)]).to be_nil
+      expect(json["discussion_topics"][yield(@assign_topic)]).to be_nil
+      expect(json["quizzes"][yield(@quiz)]).to be_nil
+      expect(json["files"][yield(@file)]).to be_nil
     end
 
     describe "course copy" do
@@ -905,18 +980,66 @@ describe ContentMigrationsController, type: :request do
         run_jobs
       end
 
+      def migration_id(asset)
+        asset_string = asset.class.asset_string(asset.id)
+        CC::CCHelper.create_key(asset_string, global: true)
+      end
+
       it "requires permission" do
         user_factory
-        api_call(:get, "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
-                 { controller: "content_migrations", action: "asset_id_mapping", format: "json", course_id: @dst.to_param,
-                   id: @migration.to_param }, {}, {}, { expected_status: 401 })
+        api_call(:get,
+                 "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                 { controller: "content_migrations",
+                   action: "asset_id_mapping",
+                   format: "json",
+                   course_id: @dst.to_param,
+                   id: @migration.to_param },
+                 {},
+                 {},
+                 { expected_status: 401 })
       end
 
       it "maps ids" do
-        json = api_call(:get, "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
-                        { controller: "content_migrations", action: "asset_id_mapping", format: "json", course_id: @dst.to_param,
+        json = api_call(:get,
+                        "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                        { controller: "content_migrations",
+                          action: "asset_id_mapping",
+                          format: "json",
+                          course_id: @dst.to_param,
                           id: @migration.to_param })
         test_asset_id_mapping(json)
+      end
+
+      context "with the :content_migration_asset_map_v2 flag on" do
+        it "maps migration_ids to a hash containing the destination id" do
+          Account.site_admin.enable_feature!(:content_migration_asset_map_v2)
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping(json) do |asset|
+            migration_id(asset)
+          end
+          Account.site_admin.disable_feature!(:content_migration_asset_map_v2)
+        end
+      end
+
+      context "with the :content_migration_asset_map_v2 flag off" do
+        it "does not map migration_ids to a hash containing the destination id" do
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping_nil(json) do |asset|
+            migration_id(asset)
+          end
+        end
       end
     end
 
@@ -928,13 +1051,73 @@ describe ContentMigrationsController, type: :request do
         run_jobs
         @mm.reload
         @migration = @mm.migration_results.first.content_migration
+
+        @master_content_tags = @template.master_content_tags.select(:content_id, :migration_id, :content_type)
+      end
+
+      def migration_id(asset)
+        if asset.instance_of?(ContentTag)
+          global_asset_string = asset.class.asset_string(Shard.global_id_for(asset.id, @src.shard))
+          @template.migration_id_for(global_asset_string)
+        elsif asset.instance_of?(Assignment) && asset.submission_types == "discussion_topic"
+          dt = DiscussionTopic.where(assignment_id: asset.id).first
+          mct = @master_content_tags.find do |t|
+            t.content_type == "DiscussionTopic" && t.content_id == dt.id
+          end
+
+          mct&.migration_id
+        else
+          mct = @master_content_tags.find do |t|
+            asset_type = asset.class.name
+            content_type = (asset_type == "Announcement") ? "DiscussionTopic" : asset_type
+            t.content_type == content_type && t.content_id == asset.id
+          end
+
+          mct&.migration_id
+        end
       end
 
       it "maps ids" do
-        json = api_call(:get, "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
-                        { controller: "content_migrations", action: "asset_id_mapping", format: "json", course_id: @dst.to_param,
+        json = api_call(:get,
+                        "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                        { controller: "content_migrations",
+                          action: "asset_id_mapping",
+                          format: "json",
+                          course_id: @dst.to_param,
                           id: @migration.to_param })
         test_asset_id_mapping(json)
+      end
+
+      context "with the :content_migration_asset_map_v2 on" do
+        it "maps migration_ids to a hash containing the destination id" do
+          Account.site_admin.enable_feature!(:content_migration_asset_map_v2)
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping(json) do |asset|
+            migration_id(asset)
+          end
+          Account.site_admin.disable_feature!(:content_migration_asset_map_v2)
+        end
+      end
+
+      context "with the :content_migration_asset_map_v2 off" do
+        it "does not map migration_ids to a hash containing the destination id" do
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping_nil(json) do |asset|
+            migration_id(asset)
+          end
+        end
       end
 
       it "includes assets from previous syncs" do
@@ -942,8 +1125,12 @@ describe ContentMigrationsController, type: :request do
         mm = MasterCourses::MasterMigration.start_new_migration!(@template, nil)
         run_jobs
         migration = mm.reload.migration_results.first.content_migration
-        json = api_call(:get, "/api/v1/courses/#{@dst.to_param}/content_migrations/#{migration.to_param}/asset_id_mapping",
-                        { controller: "content_migrations", action: "asset_id_mapping", format: "json", course_id: @dst.to_param,
+        json = api_call(:get,
+                        "/api/v1/courses/#{@dst.to_param}/content_migrations/#{migration.to_param}/asset_id_mapping",
+                        { controller: "content_migrations",
+                          action: "asset_id_mapping",
+                          format: "json",
+                          course_id: @dst.to_param,
                           id: migration.to_param })
         test_asset_id_mapping(json)
         expect(@dst.assignments.find(json["assignments"][new_assignment.id.to_s]).name).to eq "booga"

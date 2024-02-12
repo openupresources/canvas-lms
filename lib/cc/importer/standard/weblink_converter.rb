@@ -26,9 +26,9 @@ module CC::Importer::Standard
       if resource[:files]&.first
         path = get_full_path(resource[:files].first[:href])
         if File.exist?(path)
-          xml = File.open(path).read
+          xml = File.read(path)
           # because of some sadness from certain vendors clear empty namespace declarations
-          xml.gsub!(/xmlns=""/, "")
+          xml.gsub!('xmlns=""', "")
           doc = create_xml_doc(xml)
           doc.remove_namespaces! unless doc.namespaces["xmlns"]
           title = get_node_val(doc, "webLink title")

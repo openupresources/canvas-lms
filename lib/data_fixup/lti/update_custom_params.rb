@@ -18,6 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+# NOTE: If you are looking for a way to add custom parameters or change LTI 1.1
+# tool settings in bulk, there is an easier way written after this fixup. See
+# DataFixup::BulkToolUpdater in instructure_misc_plugin (run
+# `DataFixup::BulkToolUpdater.help` in Rails console for help)
+
 module DataFixup::Lti::UpdateCustomParams
   LOGGER_PREFIX = "Lti::UpdateCustomParams => "
 
@@ -60,10 +65,10 @@ module DataFixup::Lti::UpdateCustomParams
       failures
     end
 
-    def search(domains, subdomain_matching, validate_domain, &block)
+    def search(domains, subdomain_matching, validate_domain, &)
       validate_domains!(domains) if validate_domain
       Switchman::Shard.with_each_shard do
-        select_by_domains(domains, subdomain_matching).find_each(&block)
+        select_by_domains(domains, subdomain_matching).find_each(&)
       end
     end
 

@@ -69,13 +69,13 @@ describe LearningOutcomeResult do
     let_once(:assessed_at) { 2.weeks.ago }
 
     it "returns #submitted_at when present" do
-      learning_outcome_result.update(submitted_at: submitted_at)
+      learning_outcome_result.update(submitted_at:)
       expect(learning_outcome_result.submitted_or_assessed_at).to eq(submitted_at)
     end
 
     it "returns #assessed_at when #submitted_at is not present" do
       learning_outcome_result.assign_attributes({
-                                                  assessed_at: assessed_at,
+                                                  assessed_at:,
                                                   submitted_at: nil
                                                 })
       expect(learning_outcome_result.submitted_or_assessed_at).to eq(assessed_at)
@@ -187,7 +187,7 @@ describe LearningOutcomeResult do
     it "returns accurate results" do
       points_possible = 5.5
       allow(learning_outcome_result.learning_outcome).to receive_messages({
-                                                                            points_possible: points_possible, mastery_points: 3.5
+                                                                            points_possible:, mastery_points: 3.5
                                                                           })
       allow(learning_outcome_result.alignment).to receive_messages(mastery_score: 0.6)
       learning_outcome_result.update(score: 6)
@@ -379,7 +379,7 @@ describe LearningOutcomeResult do
     it "returns nil if no explicit assignment or artifact exists" do
       lor = create_and_associate_lor(nil)
 
-      expect(lor.assignment).to eq(nil)
+      expect(lor.assignment).to be_nil
     end
   end
 
@@ -397,6 +397,7 @@ describe LearningOutcomeResult do
                                         }),
           user: student,
           score: 2,
+          possible: 9,
           learning_outcome_id: @outcome.id
         )
       end
@@ -406,6 +407,16 @@ describe LearningOutcomeResult do
         same_lor.save!
         expect(LearningOutcomeResult.find(@lor.id).workflow_state).to eq("active")
         expect(LearningOutcomeResult.find(same_lor.id).workflow_state).to eq("deleted")
+      end
+
+      it "updates score and possible if there is a previous one for the same user, learning outcome, and alignment" do
+        same_lor = @lor.clone
+        same_lor.score = 3
+        same_lor.possible = 10
+        same_lor.save!
+        @lor.reload
+        expect(@lor.score).to eq(3)
+        expect(@lor.possible).to eq(10)
       end
 
       it "creates a LearningOutcomeResult for the same user and learning outcome if there is none for the alignment" do
@@ -471,11 +482,30 @@ describe LearningOutcomeResult do
           expect(LearningOutcomeResult.find(lor1.id).workflow_state).to eq("active")
           expect(LearningOutcomeResult.find(same_lor.id).workflow_state).to eq("deleted")
         end
+
+        it "updates score and possible if there is a previous one for the same user, learning outcome, and associated asset" do
+          lor1 = LearningOutcomeResult.create(
+            alignment: @qb_alignment,
+            user: student,
+            score: 2,
+            possible: 9,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz1.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          same_lor = lor1.clone
+          same_lor.score = 3
+          same_lor.possible = 10
+          same_lor.save!
+          lor1.reload
+          expect(lor1.score).to eq(3)
+          expect(lor1.possible).to eq(10)
+        end
       end
 
       describe "for multiple QuestionBanks with questions used in same quizzes" do
         def create_bank(title, course, quiz, outcome)
-          bank = course.assessment_question_banks.create!(title: title)
+          bank = course.assessment_question_banks.create!(title:)
           q = bank.assessment_questions.create!(
             question_data: {
               "name" => "#{title} question 1",
@@ -551,7 +581,7 @@ describe LearningOutcomeResult do
       }
 
       attributes.each do |method_name, value|
-        learning_outcome_result.send("#{method_name}=".to_sym, value)
+        learning_outcome_result.send(:"#{method_name}=", value)
       end
       learning_outcome_result.save!
 

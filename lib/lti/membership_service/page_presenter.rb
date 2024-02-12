@@ -26,8 +26,8 @@ module Lti
         @membership_collator = MembershipCollatorFactory.collator_instance(context, user, opts)
         @base_url = base_url
         @page = ::IMS::LTI::Models::MembershipService::Page.new(
-          page_of: page_of,
-          next_page: next_page
+          page_of:,
+          next_page:
         )
       end
 
@@ -39,7 +39,7 @@ module Lti
 
       def next_page
         if @membership_collator.next_page?
-          method = "#{@membership_collator.context.class.to_s.downcase}_membership_service_url".to_sym
+          method = :"#{@membership_collator.context.class.to_s.downcase}_membership_service_url"
           send method, @membership_collator.context, next_page_query_params.merge(host: @base_url)
         end
       end

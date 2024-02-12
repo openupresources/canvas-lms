@@ -163,7 +163,9 @@ describe CanvasOutcomesHelper do
 
     describe "if ApplicationController.test_cluster_name is specified" do
       it "returns a domain using the test_cluster_name domain" do
-        settings = { consumer_key: "key", jwt_secret: "secret", domain: "domain",
+        settings = { consumer_key: "key",
+                     jwt_secret: "secret",
+                     domain: "domain",
                      beta_domain: "beta.domain" }
         account.settings[:provision] = { "outcomes" => settings }
         account.save!
@@ -186,27 +188,27 @@ describe CanvasOutcomesHelper do
 
     context "without outcome ids" do
       it "returns nil when outcome ids is nil" do
-        expect(subject.get_outcome_alignments(@course, nil)).to eq nil
+        expect(subject.get_outcome_alignments(@course, nil)).to be_nil
       end
 
       it "returns nil when outcome ids is empty" do
-        expect(subject.get_outcome_alignments(@course, "")).to eq nil
+        expect(subject.get_outcome_alignments(@course, "")).to be_nil
       end
     end
 
     context "without context" do
       it "returns nil when context is nil" do
-        expect(subject.get_outcome_alignments(nil, "123")).to eq nil
+        expect(subject.get_outcome_alignments(nil, "123")).to be_nil
       end
 
       it "returns nil when context is empty" do
-        expect(subject.get_outcome_alignments("", "123")).to eq nil
+        expect(subject.get_outcome_alignments("", "123")).to be_nil
       end
     end
 
     context "without outcome_service_results_to_canvas feature flag enabled" do
       it "returns nil" do
-        expect(subject.get_outcome_alignments(@course, "123")).to eq nil
+        expect(subject.get_outcome_alignments(@course, "123")).to be_nil
       end
     end
 
@@ -229,7 +231,7 @@ describe CanvasOutcomesHelper do
           }
         end
         if alignments
-          response = response.map do |r|
+          response = response.each do |r|
             r[:alignments] = [
               {
                 id: 1,
@@ -267,10 +269,22 @@ describe CanvasOutcomesHelper do
         expect(subject.get_outcome_alignments(@course, "1,2")).to eq mock_alignment_response("1,2", false, false)
       end
 
+      it "outcome with no alignments" do
+        stub_get_alignments("context_uuid=#{@course.uuid}&external_outcome_id_list=1&includes=alignments")
+          .to_return(status: 200, body: mock_alignment_response("1", false, false).to_json)
+        expect(subject.get_outcome_alignments(@course, "1", { includes: "alignments" })).to eq mock_alignment_response("1", false, false)
+
+        outcome = LearningOutcome.new(id: 1)
+        expect(subject.outcome_has_alignments?(outcome, @course)).to be false
+      end
+
       it "outcome with alignments" do
         stub_get_alignments("context_uuid=#{@course.uuid}&external_outcome_id_list=1&includes=alignments")
           .to_return(status: 200, body: mock_alignment_response("1", false, true).to_json)
         expect(subject.get_outcome_alignments(@course, "1", { includes: "alignments" })).to eq mock_alignment_response("1", false, true)
+
+        outcome = LearningOutcome.new(id: 1)
+        expect(subject.outcome_has_alignments?(outcome, @course)).to be true
       end
 
       it "outcome with alignments and groups" do
@@ -310,13 +324,13 @@ describe CanvasOutcomesHelper do
 
     context "without account outcome settings" do
       it "returns nil with no provision settings" do
-        expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq nil
+        expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to be_nil
       end
 
       it "returns nil with no outcome provision settings" do
         account.settings[:provision] = {}
         account.save!
-        expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq nil
+        expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to be_nil
       end
     end
 
@@ -329,41 +343,41 @@ describe CanvasOutcomesHelper do
 
       context "without assignment ids" do
         it "returns nil when assignment ids is nil" do
-          expect(subject.get_lmgb_results(account, nil, "assign.type", "1", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, nil, "assign.type", "1", one_user_uuid)).to be_nil
         end
 
         it "returns nil when assignment ids is empty" do
-          expect(subject.get_lmgb_results(account, "", "assign.type", "1", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "", "assign.type", "1", one_user_uuid)).to be_nil
         end
       end
 
       context "without assignment type" do
         it "returns nil when assignment type is nil" do
-          expect(subject.get_lmgb_results(account, "1", nil, "1", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", nil, "1", one_user_uuid)).to be_nil
         end
 
         it "returns nil when assignment type is empty" do
-          expect(subject.get_lmgb_results(account, "1", "", "1", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "", "1", one_user_uuid)).to be_nil
         end
       end
 
       context "without outcome ids" do
         it "returns nil when outcome ids is nil" do
-          expect(subject.get_lmgb_results(account, "1", "assign.type", nil, one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "assign.type", nil, one_user_uuid)).to be_nil
         end
 
         it "returns nil when outcome ids is empty" do
-          expect(subject.get_lmgb_results(account, "1", "assign.type", "", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "assign.type", "", one_user_uuid)).to be_nil
         end
       end
 
       context "without user uuids" do
         it "returns nil when user uuids is nil" do
-          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", nil)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", nil)).to be_nil
         end
 
         it "returns nil when user uuids is empty" do
-          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", "")).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", "")).to be_nil
         end
       end
 
@@ -383,69 +397,81 @@ describe CanvasOutcomesHelper do
           end
 
           it "raises error on non 2xx response" do
-            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 401, body: '{"valid_jwt":false}')
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 401, body: '{"valid_jwt":false}')
             expect { subject.get_lmgb_results(@course, "1", "assign.type", "1", one_user_uuid) }.to raise_error(CanvasOutcomesHelper::OSFetchError, /Error retrieving results from Outcomes Service:/)
           end
 
           it "returns results with one assignment id" do
             expected_results = [{ result: "stuff" }]
-            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
             expect(subject.get_lmgb_results(@course, "1", "assign.type", "1", one_user_uuid)).to eq expected_results
           end
 
           it "returns results with multiple assignment ids" do
             expected_results = [{ result_one: "stuff1" }, { result_two: "stuff2" }]
-            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
             expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1", one_user_uuid)).to eq expected_results
           end
 
           it "returns results with one outcome id" do
             expected_results = [{ result_one: "stuff" }]
-            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
             expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1", one_user_uuid)).to eq expected_results
           end
 
           it "returns results with multiple outcome ids" do
             expected_results = [{ result_one: "stuff1" }, { result_two: "stuff2" }]
-            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&per_page=200&page=1&user_uuid_list=#{one_user_uuid}")
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&per_page=200&page=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}")
               .to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
             expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1,2", one_user_uuid)).to eq expected_results
           end
 
           it "returns results with one user uuid" do
             expected_results = [{ result_one: "stuff1" }]
-            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
             expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1,2", one_user_uuid)).to eq expected_results
           end
 
           it "returns results with multiple user uuids" do
             expected_results = [{ result_one: "stuff1" }, { result_two: "stuff2" }]
-            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&user_uuid_list=#{multiple_user_uuids}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&artifact_type=quizzes.quiz&user_uuid_list=#{multiple_user_uuids}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
             expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1,2", multiple_user_uuids)).to eq expected_results
           end
 
           it "returns empty array when assignment type is not matched" do
             expected_results = []
-            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type.no.match&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type.no.match&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
             expect(subject.get_lmgb_results(@course, "1", "assign.type.no.match", "1", one_user_uuid)).to eq expected_results
           end
 
           it "returns empty array when assignment ids are not matched" do
             expected_results = []
-            stub_get_lmgb_results("associated_asset_id_list=4,5&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
+            stub_get_lmgb_results("associated_asset_id_list=4,5&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
             expect(subject.get_lmgb_results(@course, "4,5", "assign.type", "1", one_user_uuid)).to eq expected_results
           end
 
           it "returns empty array when no outcome ids are matched" do
             expected_results = []
-            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=5&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=5&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
             expect(subject.get_lmgb_results(@course, "1", "assign.type", "5", one_user_uuid)).to eq expected_results
           end
 
           it "returns empty array when no user uuids are matched" do
             expected_results = []
-            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=fake_no_match_uuid&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=fake_no_match_uuid&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
             expect(subject.get_lmgb_results(@course, "1", "assign.type", "1", "fake_no_match_uuid")).to eq expected_results
+          end
+
+          it "returns empty array when artifact type is not matched" do
+            expected_results = []
+            stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&artifact_type=no.match.type&per_page=200&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 200, "Total" => 0 })
+            expect(subject.get_lmgb_results(@course, "1", "assign.type", "1", one_user_uuid, "no.match.type")).to eq expected_results
+          end
+
+          it "returns results with no artifact type" do
+            expected_results = [{ result_one: "stuff1" }, { result_two: "stuff2" }]
+            stub_get_lmgb_results("associated_asset_id_list=1,2&associated_asset_type=assign.type&external_outcome_id_list=1,2&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result_one":"stuff1"},{"result_two":"stuff2"}]}', headers: { "Per-Page" => 200, "Total" => 2 })
+            expect(subject.get_lmgb_results(@course, "1,2", "assign.type", "1,2", one_user_uuid, "")).to eq expected_results
           end
 
           context "pagination" do
@@ -458,9 +484,23 @@ describe CanvasOutcomesHelper do
               { results: array_results }.to_json
             end
             it "fetches each page and returns concatentated results" do
-              stub_get_lmgb_results("associated_asset_id_list=1,2,3,4&associated_asset_type=assign.type&external_outcome_id_list=1,2,3,4&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: get_response(200), headers: { "Per-Page" => 200, "Total" => 201 })
-              stub_get_lmgb_results("associated_asset_id_list=1,2,3,4&associated_asset_type=assign.type&external_outcome_id_list=1,2,3,4&user_uuid_list=#{one_user_uuid}&per_page=200&page=2").to_return(status: 200, body: '{"results":[{"result_200":"stuff200"}]}', headers: { "Per-Page" => 200, "Total" => 201 })
+              stub_get_lmgb_results("associated_asset_id_list=1,2,3,4&associated_asset_type=assign.type&external_outcome_id_list=1,2,3,4&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: get_response(200), headers: { "Per-Page" => 200, "Total" => 201 })
+              stub_get_lmgb_results("associated_asset_id_list=1,2,3,4&associated_asset_type=assign.type&external_outcome_id_list=1,2,3,4&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=2").to_return(status: 200, body: '{"results":[{"result_200":"stuff200"}]}', headers: { "Per-Page" => 200, "Total" => 201 })
               expect(subject.get_lmgb_results(@course, "1,2,3,4", "assign.type", "1,2,3,4", one_user_uuid)).to eq get_results(201)
+            end
+
+            it "there are authoritative results" do
+              a = new_quizzes_assignment(course: @course, title: "New Quiz")
+              outcome = outcome_model(context: @course)
+              stub_get_lmgb_results("associated_asset_id_list=#{a.id}&associated_asset_type=canvas.assignment.quizzes&external_outcome_id_list=#{outcome.id}&per_page=1&page=1").to_return(status: 200, body: get_response(1), headers: { "Per-Page" => 1, "Total" => 201 })
+              expect(subject.outcome_has_authoritative_results?(outcome, @course)).to be true
+            end
+
+            it "there are no authoritative results" do
+              a = new_quizzes_assignment(course: @course, title: "New Quiz")
+              outcome = outcome_model(context: @course)
+              stub_get_lmgb_results("associated_asset_id_list=#{a.id}&associated_asset_type=canvas.assignment.quizzes&external_outcome_id_list=#{outcome.id}&per_page=1&page=1").to_return(status: 200, body: '{"results":[]}', headers: { "Per-Page" => 1, "Total" => 0 })
+              expect(subject.outcome_has_authoritative_results?(outcome, @course)).to be false
             end
           end
         end
@@ -471,7 +511,7 @@ describe CanvasOutcomesHelper do
           end
 
           it "returns nil when FF is off" do
-            expect(subject.get_lmgb_results(@course, "1", "assign.type", "1", one_user_uuid)).to eq nil
+            expect(subject.get_lmgb_results(@course, "1", "assign.type", "1", one_user_uuid)).to be_nil
           end
         end
       end
@@ -491,7 +531,7 @@ describe CanvasOutcomesHelper do
 
       context "with outcome_service_results_to_canvas FF off" do
         it "returns nil when FF is off" do
-          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq nil
+          expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to be_nil
         end
       end
 
@@ -502,7 +542,7 @@ describe CanvasOutcomesHelper do
 
         it "returns results with one assignment id" do
           expected_results = [{ result: "stuff" }]
-          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
+          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1").to_return(status: 200, body: '{"results":[{"result":"stuff"}]}', headers: { "Per-Page" => 200, "Total" => 1 })
           expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq expected_results
         end
 
@@ -510,7 +550,7 @@ describe CanvasOutcomesHelper do
           metadata = "{\"question_metadata\":[{\"quiz_item_id\":\"#{id}\",\"quiz_item_title\":\"Question #{id}\",\"points\":\"#{points}\",\"points_possible\":\"3.0\"}]}"
           if json_to_hash_with_symbol_keys
             metadata = JSON.parse(metadata).deep_symbolize_keys
-            { id: id, metadata: metadata }
+            { id:, metadata: }
           else
             { "id" => id, "metadata" => metadata }
           end
@@ -532,7 +572,7 @@ describe CanvasOutcomesHelper do
               }
             }]
           }]
-          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
+          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
             .to_return(status: 200, body: mocked_result, headers: { "Per-Page" => 200, "Total" => 2 })
           expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq expected_results
         end
@@ -546,7 +586,7 @@ describe CanvasOutcomesHelper do
               metadata: nil
             }]
           }]
-          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
+          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
             .to_return(status: 200, body: mocked_result, headers: { "Per-Page" => 200, "Total" => 2 })
           expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq expected_results
         end
@@ -567,7 +607,7 @@ describe CanvasOutcomesHelper do
               }
             }]
           }]
-          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
+          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
             .to_return(status: 200, body: mocked_result, headers: { "Per-Page" => 200, "Total" => 2 })
           expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq expected_results
         end
@@ -612,7 +652,7 @@ describe CanvasOutcomesHelper do
             }
           ]
 
-          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
+          stub_get_lmgb_results("associated_asset_id_list=1&associated_asset_type=assign.type&external_outcome_id_list=1&artifact_type=quizzes.quiz&user_uuid_list=#{one_user_uuid}&per_page=200&page=1")
             .to_return(status: 200, body: mocked_result.to_json.to_s, headers: { "Per-Page" => 200, "Total" => 2 })
 
           expect(subject.get_lmgb_results(account, "1", "assign.type", "1", one_user_uuid)).to eq expected_results

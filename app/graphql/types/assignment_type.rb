@@ -41,6 +41,8 @@ module Types
       value "fail_to_import"
       value "migrating"
       value "failed_to_migrate"
+      value "outcome_alignment_cloning"
+      value "failed_to_clone_outcome_alignment"
     end
 
     GRADING_TYPES = Assignment::ALLOWED_GRADING_TYPES.zip(Assignment::ALLOWED_GRADING_TYPES).to_h
@@ -54,47 +56,66 @@ module Types
       graphql_name "PeerReviews"
       description "Settings for Peer Reviews on an Assignment"
 
-      field :enabled, Boolean,
+      field :enabled,
+            Boolean,
             "Boolean indicating if peer reviews are required for this assignment",
-            method: :peer_reviews, null: true
-      field :count, Int,
+            method: :peer_reviews,
+            null: true
+      field :count,
+            Int,
             "Integer representing the amount of reviews each user is assigned.",
-            method: :peer_review_count, null: true
-      field :due_at, DateTimeType,
+            method: :peer_review_count,
+            null: true
+      field :due_at,
+            DateTimeType,
             "Date and Time representing when the peer reviews are due",
-            method: :peer_reviews_due_at, null: true
-      field :intra_reviews, Boolean,
+            method: :peer_reviews_due_at,
+            null: true
+      field :intra_reviews,
+            Boolean,
             "Boolean representing whether or not members from within the same group on a group assignment can be assigned to peer review their own group's work",
-            method: :intra_group_peer_reviews, null: true
-      field :anonymous_reviews, Boolean,
+            method: :intra_group_peer_reviews,
+            null: true
+      field :anonymous_reviews,
+            Boolean,
             "Boolean representing whether or not peer reviews are anonymous",
-            method: :anonymous_peer_reviews, null: true
-      field :automatic_reviews, Boolean,
+            method: :anonymous_peer_reviews,
+            null: true
+      field :automatic_reviews,
+            Boolean,
             "Boolean indicating peer reviews are assigned automatically. If false, the teacher is expected to manually assign peer reviews.",
-            method: :automatic_peer_reviews, null: true
+            method: :automatic_peer_reviews,
+            null: true
     end
 
     class AssignmentModeratedGrading < ApplicationObjectType
       graphql_name "ModeratedGrading"
       description "Settings for Moderated Grading on an Assignment"
 
-      field :enabled, Boolean,
+      field :enabled,
+            Boolean,
             "Boolean indicating if the assignment is moderated.",
-            method: :moderated_grading, null: true
-      field :grader_count, Int,
+            method: :moderated_grading,
+            null: true
+      field :grader_count,
+            Int,
             "The maximum number of provisional graders who may issue grades for this assignment.",
             null: true
-      field :grader_comments_visible_to_graders, Boolean,
+      field :grader_comments_visible_to_graders,
+            Boolean,
             "Boolean indicating if provisional graders' comments are visible to other provisional graders.",
             null: true
-      field :grader_names_visible_to_final_grader, Boolean,
+      field :grader_names_visible_to_final_grader,
+            Boolean,
             "Boolean indicating if provisional graders' identities are hidden from other provisional graders.",
             null: true
-      field :graders_anonymous_to_graders, Boolean,
+      field :graders_anonymous_to_graders,
+            Boolean,
             "Boolean indicating if provisional grader identities are visible to the final grader.",
             null: true
 
-      field :final_grader, UserType,
+      field :final_grader,
+            UserType,
             "The user of the grader responsible for choosing final grades for this assignment.",
             null: true
       def final_grader
@@ -102,16 +123,60 @@ module Types
       end
     end
 
+    class AssignmentScoreStatisticType < ApplicationObjectType
+      graphql_name "AssignmentScoreStatistic"
+      description "Statistics for an Assignment"
+
+      field :minimum,
+            Float,
+            "The minimum score for the assignment",
+            null: true
+      field :maximum,
+            Float,
+            "The maximum score for the assignment",
+            null: true
+      field :mean,
+            Float,
+            "The mean score for the assignment",
+            null: true
+      field :count,
+            Int,
+            "The number of scores for the assignment",
+            null: true
+      field :lower_q,
+            Float,
+            "The lower quartile score for the assignment",
+            null: true
+      field :median,
+            Float,
+            "The median score for the assignment",
+            null: true
+      field :upper_q,
+            Float,
+            "The upper quartile score for the assignment",
+            null: true
+    end
+
     global_id_field :id
     key_field_id
 
     field :name, String, null: true
 
-    field :position, Int,
+    field :position,
+          Int,
           "determines the order this assignment is displayed in in its assignment group",
           null: true
-    field :points_possible, Float, "the assignment is out of this many points",
+    field :points_possible,
+          Float,
+          "the assignment is out of this many points",
           null: true
+
+    field :restrict_quantitative_data, Boolean, "Is the current user restricted from viewing quantitative data", null: true do
+      argument :check_extra_permissions, Boolean, "Check extra permissions in RQD method", required: false
+    end
+    def restrict_quantitative_data(check_extra_permissions: false)
+      assignment.restrict_quantitative_data?(current_user, check_extra_permissions)
+    end
 
     def self.overridden_field(field_name, description)
       field field_name, DateTimeType, description, null: true do
@@ -153,7 +218,8 @@ module Types
 
     field :lock_info, LockInfoType, null: true
 
-    field :post_to_sis, Boolean,
+    field :post_to_sis,
+          Boolean,
           "present if Sync Grades to SIS feature is enabled",
           null: true
 
@@ -164,7 +230,7 @@ module Types
 
     field :assessment_requests_for_current_user, [AssessmentRequestType], null: true
     def assessment_requests_for_current_user
-      Loaders::AssessmentRequestLoader.for(current_user: current_user).load(assignment)
+      Loaders::AssessmentRequestLoader.for(current_user:).load(assignment)
     end
 
     field :moderated_grading, AssignmentModeratedGrading, null: true
@@ -172,18 +238,23 @@ module Types
       assignment
     end
 
-    field :anonymous_grading, Boolean,
+    field :anonymous_grading,
+          Boolean,
           null: true
-    field :omit_from_final_grade, Boolean,
+    field :omit_from_final_grade,
+          Boolean,
           "If true, the assignment will be omitted from the student's final grade",
           null: true
     field :anonymous_instructor_annotations, Boolean, null: true
-    field :has_submitted_submissions, Boolean,
+    field :has_submitted_submissions,
+          Boolean,
           "If true, the assignment has been submitted to by at least one student",
-          method: :has_submitted_submissions?, null: true
+          method: :has_submitted_submissions?,
+          null: true
     field :can_duplicate, Boolean, method: :can_duplicate?, null: true
 
-    field :grade_group_students_individually, Boolean,
+    field :grade_group_students_individually,
+          Boolean,
           "If this is a group assignment, boolean flag indicating whether or not students will be graded individually.",
           null: true
     field :group_category_id, Int, null: true
@@ -234,7 +305,8 @@ module Types
       end
     end
 
-    field :allowed_attempts, Int,
+    field :allowed_attempts,
+          Int,
           "The number of submission attempts a student can make for this assignment. null implies unlimited.",
           null: true
 
@@ -244,7 +316,8 @@ module Types
       assignment.allowed_attempts
     end
 
-    field :allowed_extensions, [String],
+    field :allowed_extensions,
+          [String],
           "permitted uploaded file extensions (e.g. ['doc', 'xls', 'txt'])",
           null: true
 
@@ -283,7 +356,7 @@ module Types
                                               context: assignment.context,
                                               user: current_user,
                                               in_app: context[:in_app],
-                                              preloaded_attachments: preloaded_attachments)
+                                              preloaded_attachments:)
         end
       end
     end
@@ -308,7 +381,15 @@ module Types
       GRADING_TYPES[assignment.grading_type]
     end
 
-    field :submission_types, [Types::AssignmentSubmissionType],
+    field :grading_period_id, String, null: true
+    def grading_period_id
+      load_association(:submissions).then do |submissions|
+        submissions.pluck(:grading_period_id).uniq.first
+      end
+    end
+
+    field :submission_types,
+          [Types::AssignmentSubmissionType],
           null: true
     def submission_types
       # there's some weird data in the db so we'll just ignore anything that
@@ -321,12 +402,40 @@ module Types
       load_association(:context)
     end
 
+    field :course_id, ID, null: true
+    def course_id
+      assignment.context_id
+    end
+
+    field :grades_published, Boolean, null: true
+    def grades_published
+      assignment.grades_published?
+    end
+
+    field :moderated_grading_enabled, Boolean, null: true
+    def moderated_grading_enabled
+      assignment.moderated_grading?
+    end
+
+    field :post_manually, Boolean, null: true
+    def post_manually
+      assignment.post_manually?
+    end
+
+    field :published, Boolean, null: true
+    def published
+      assignment.published?
+    end
+
     field :assignment_group, AssignmentGroupType, null: true
     def assignment_group
       load_association(:assignment_group)
     end
 
-    field :only_visible_to_overrides, Boolean,
+    field :assignment_group_id, ID, null: true
+
+    field :only_visible_to_overrides,
+          Boolean,
           "specifies that this assignment is only assigned to students for whom an
        `AssignmentOverride` applies.",
           null: false
@@ -356,8 +465,14 @@ module Types
       filter = filter.to_h
       order_by ||= []
       filter[:states] ||= DEFAULT_SUBMISSION_STATES
+      filter[:states] = filter[:states] + ["unsubmitted"].freeze if filter[:include_unsubmitted]
       filter[:order_by] = order_by.map(&:to_h)
       SubmissionSearch.new(assignment, current_user, session, filter).search
+    end
+
+    field :grading_standard, GradingStandardType, null: true
+    def grading_standard
+      load_association(:grading_standard)
     end
 
     field :group_submissions_connection, SubmissionType.connection_type, null: true do
@@ -391,10 +506,32 @@ module Types
       end
     end
 
+    field :score_statistic, AssignmentScoreStatisticType, null: true
+    def score_statistic
+      load_association(:context).then do |course|
+        if course.grants_right?(current_user, :read_as_admin)
+          object.score_statistic if object.can_view_score_statistics?(current_user)
+        elsif object.can_view_score_statistics?(current_user) && object.submissions.first.eligible_for_showing_score_statistics?
+          object.score_statistic
+        end
+      end
+    end
+
     field :sis_id, String, null: true
     def sis_id
       load_association(:context).then do |course|
         assignment.sis_source_id if course.grants_any_right?(current_user, :read_sis, :manage_sis)
+      end
+    end
+
+    field :has_sub_assignments, Boolean, null: false
+
+    field :checkpoints, [CheckpointType], null: true
+    def checkpoints
+      load_association(:context).then do |course|
+        return nil unless course.root_account&.feature_enabled?(:discussion_checkpoints)
+
+        load_association(:sub_assignments)
       end
     end
   end

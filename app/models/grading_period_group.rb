@@ -67,7 +67,7 @@ class GradingPeriodGroup < ActiveRecord::Base
     return course_group if course_group.present?
 
     account_group = context.enrollment_term.grading_period_group
-    account_group.nil? || account_group.deleted? ? nil : account_group
+    (account_group.nil? || account_group.deleted?) ? nil : account_group
   end
 
   def recompute_scores_for_each_term(update_all_grading_period_scores, term_ids: nil)
@@ -75,7 +75,7 @@ class GradingPeriodGroup < ActiveRecord::Base
 
     terms.find_each do |term|
       term.recompute_course_scores_later(
-        update_all_grading_period_scores: update_all_grading_period_scores,
+        update_all_grading_period_scores:,
         strand_identifier: "GradingPeriodGroup:#{global_id}"
       )
     end
@@ -99,8 +99,8 @@ class GradingPeriodGroup < ActiveRecord::Base
   end
 
   def recache_grading_period
-    DueDateCacher.recompute_course(course) if course
-    DueDateCacher.recompute_course(course_id_before_last_save) if course_id_before_last_save
+    SubmissionLifecycleManager.recompute_course(course) if course
+    SubmissionLifecycleManager.recompute_course(course_id_before_last_save) if course_id_before_last_save
   end
 
   def associated_with_course_or_root_account
@@ -123,7 +123,7 @@ class GradingPeriodGroup < ActiveRecord::Base
     root_account_id = course_id ? course.root_account.global_id : root_account.global_id
     delay_if_production(strand: "GradingPeriodGroup#cleanup_associations_and_recompute_scores:Account#{root_account_id}",
                         priority: Delayed::LOW_PRIORITY)
-      .cleanup_associations_and_recompute_scores(updating_user: updating_user)
+      .cleanup_associations_and_recompute_scores(updating_user:)
   end
 
   def cleanup_associations_and_recompute_scores(updating_user: nil)
@@ -136,11 +136,11 @@ class GradingPeriodGroup < ActiveRecord::Base
     # Legacy Grading Period support. Grading Periods can no longer have a course_id.
     if course_id.present?
       course.recompute_student_scores(update_all_grading_period_scores: true, run_immediately: true)
-      DueDateCacher.recompute_course(course, run_immediately: true, executing_user: updating_user)
+      SubmissionLifecycleManager.recompute_course(course, run_immediately: true, executing_user: updating_user)
     else
       term_ids = enrollment_terms.pluck(:id)
       update_in_batches(enrollment_terms, grading_period_group_id: nil)
-      recompute_scores_for_each_term(true, term_ids: term_ids)
+      recompute_scores_for_each_term(true, term_ids:)
     end
   end
 

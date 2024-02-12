@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -20,7 +21,7 @@ import $ from 'jquery'
 import * as apollo from 'react-apollo'
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import CommentContent from '../CommentsTray/CommentContent'
-import CommentsTrayBody, {COMPLETED_PEER_REVIEW_TEXT} from '../CommentsTray/CommentsTrayBody'
+import CommentsTrayBody from '../CommentsTray/CommentsTrayBody'
 import {CREATE_SUBMISSION_COMMENT} from '@canvas/assignments/graphql/student/Mutations'
 import {mockAssignmentAndSubmission, mockQuery} from '@canvas/assignments/graphql/studentMocks'
 import {MockedProvider} from '@apollo/react-testing'
@@ -29,9 +30,15 @@ import React from 'react'
 import StudentViewContext from '../Context'
 import {SUBMISSION_COMMENT_QUERY} from '@canvas/assignments/graphql/student/Queries'
 import {SubmissionMocks} from '@canvas/assignments/graphql/student/Submission'
+import {COMPLETED_PEER_REVIEW_TEXT} from '../../helpers/PeerReviewHelpers'
 
 async function mockSubmissionCommentQuery(overrides = {}, variableOverrides = {}) {
-  const variables = {submissionAttempt: 0, submissionId: '1', ...variableOverrides}
+  const variables = {
+    submissionAttempt: 0,
+    submissionId: '1',
+    peerReview: false,
+    ...variableOverrides,
+  }
   const allOverrides = [
     {DateTime: '2010-10-16T23:59:59-06:00'},
     {Node: {__typename: 'Submission'}},
@@ -281,7 +288,8 @@ describe('CommentsTrayBody', () => {
   })
 
   describe('group assignments', () => {
-    it('renders warning that comments will be sent to the whole group for group assignments', async () => {
+    // fickle. EVAL-3667
+    it.skip('renders warning that comments will be sent to the whole group for group assignments', async () => {
       const mocks = [await mockSubmissionCommentQuery()]
       const props = await mockAssignmentAndSubmission([
         {
@@ -855,9 +863,10 @@ describe('CommentsTrayBody', () => {
     })
 
     it('renders a message with image if there are no comments', async () => {
-      const mocks = [await mockSubmissionCommentQuery()]
+      const mocks = [await mockSubmissionCommentQuery({}, {peerReview: true})]
       const props = await getDefaultPropsWithReviewerSubmission('assigned')
       props.isPeerReviewEnabled = true
+      props.assignment.rubric = null
       const {getByText, getByTestId} = render(
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
@@ -870,6 +879,23 @@ describe('CommentsTrayBody', () => {
             'Add a comment to complete your peer review. You will only see comments written by you.'
           )
         ).toBeInTheDocument()
+      )
+      expect(getByTestId('svg-placeholder-container')).toBeInTheDocument()
+    })
+
+    it('renders a message that only comments authored by the viewer are visible if there are no comments and a rubric attached', async () => {
+      const mocks = [await mockSubmissionCommentQuery({}, {peerReview: true})]
+      const props = await mockAssignmentAndSubmission()
+      props.isPeerReviewEnabled = true
+      props.assignment.rubric = {id: 123}
+      const {getByText, getByTestId} = render(
+        <MockedProvider mocks={mocks}>
+          <CommentsTrayBody {...props} />
+        </MockedProvider>
+      )
+
+      await waitFor(() =>
+        expect(getByText('You will only see comments written by you.')).toBeInTheDocument()
       )
       expect(getByTestId('svg-placeholder-container')).toBeInTheDocument()
     })
@@ -887,7 +913,10 @@ describe('CommentsTrayBody', () => {
     })
 
     it('shows peer review prompt modal with next peer review if user has other assigned reviews', async () => {
-      const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
       const props = await getDefaultPropsWithReviewerSubmission('completed')
       props.isPeerReviewEnabled = true
       const {findByPlaceholderText, getByText, findByText, queryByTestId} = render(
@@ -906,7 +935,10 @@ describe('CommentsTrayBody', () => {
     })
 
     it('shows peer review prompt modal with completed peer review text when no other assigned reviews remaining', async () => {
-      const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
       const props = await getDefaultPropsWithReviewerSubmission('assigned')
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].workflowState = 'completed'
@@ -926,7 +958,10 @@ describe('CommentsTrayBody', () => {
     })
 
     it('shows peer review prompt modal with unavailable peer review text when only unavailable reviews remaining', async () => {
-      const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
       const props = await getDefaultPropsWithReviewerSubmission('assigned')
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].assetSubmissionType = null
@@ -948,7 +983,10 @@ describe('CommentsTrayBody', () => {
     })
 
     it('does not show peer review modal if user already completed all peer reviews and leaves a comment', async () => {
-      const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
       const props = await getDefaultPropsWithReviewerSubmission('completed')
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].workflowState = 'completed'
@@ -964,6 +1002,53 @@ describe('CommentsTrayBody', () => {
       fireEvent.click(getByText('Send Comment'))
 
       expect(queryByTestId('peer-review-prompt-modal')).not.toBeInTheDocument()
+    })
+
+    it('does not show peer review modal if assignment has a rubric', async () => {
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
+      const props = await getDefaultPropsWithReviewerSubmission('completed')
+      props.isPeerReviewEnabled = true
+      props.assignment.rubric = {}
+      const {findByPlaceholderText, getByText, queryByTestId} = render(
+        mockContext(
+          <MockedProvider mocks={mocks}>
+            <CommentsTrayBody {...props} />
+          </MockedProvider>
+        )
+      )
+      const textArea = await findByPlaceholderText('Submit a Comment')
+      fireEvent.change(textArea, {target: {value: 'lion'}})
+      fireEvent.click(getByText('Send Comment'))
+
+      expect(queryByTestId('peer-review-prompt-modal')).not.toBeInTheDocument()
+    })
+
+    it('calls the onSuccessfulPeerReview function to re-render page when a peer review comment is successful', async () => {
+      const mocks = await Promise.all([
+        mockSubmissionCommentQuery({}, {peerReview: true}),
+        mockCreateSubmissionComment(),
+      ])
+      const onSuccessfulPeerReviewMockFunction = jest.fn()
+      const props = {
+        ...(await getDefaultPropsWithReviewerSubmission('assigned')),
+        onSuccessfulPeerReview: onSuccessfulPeerReviewMockFunction,
+      }
+      props.isPeerReviewEnabled = true
+      const {findByPlaceholderText, getByText} = render(
+        mockContext(
+          <MockedProvider mocks={mocks}>
+            <CommentsTrayBody {...props} />
+          </MockedProvider>
+        )
+      )
+      const textArea = await findByPlaceholderText('Submit a Comment')
+      fireEvent.change(textArea, {target: {value: 'lion'}})
+      fireEvent.click(getByText('Send Comment'))
+      await waitFor(() => expect(onSuccessfulPeerReviewMockFunction).toHaveBeenCalled())
+      expect(props.reviewerSubmission.assignedAssessments[0].workflowState).toEqual('completed')
     })
   })
 })

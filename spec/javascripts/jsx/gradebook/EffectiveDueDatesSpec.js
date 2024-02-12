@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import timezone from '@canvas/timezone'
+import _ from 'lodash'
+import * as timezone from '@canvas/datetime'
 import {scopeToUser, updateWithSubmissions} from '@canvas/grading/EffectiveDueDates'
 
 QUnit.module('EffectiveDueDates', () => {

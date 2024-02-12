@@ -16,11 +16,10 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import $ from 'jquery'
-
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import Group from '../models/Group.coffee'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import Group from '../models/Group'
 import natcompare from '@canvas/util/natcompare'
+import {encodeQueryString} from '@canvas/query-string-encoding'
 
 export default class ContextGroupCollection extends PaginatedCollection {
   comparator = (x, y) =>
@@ -33,8 +32,9 @@ export default class ContextGroupCollection extends PaginatedCollection {
       include: ['users', 'group_category', 'permissions'],
       include_inactive_users: 'true',
       section_restricted: 'true',
+      filter: this.options?.filter ?? '',
     }
-    return url_base + $.param(params)
+    return url_base + encodeQueryString(params)
   }
 }
 ContextGroupCollection.prototype.model = Group

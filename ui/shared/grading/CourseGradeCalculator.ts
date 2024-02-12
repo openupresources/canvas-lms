@@ -16,23 +16,43 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import round from 'round'
+import round from '@canvas/round'
+import {reduce, filter, values, map, groupBy, keyBy} from 'lodash'
 import AssignmentGroupGradeCalculator from './AssignmentGroupGradeCalculator'
 import {bigSum, sum, sumBy, toNumber, weightedPercent} from './GradeCalculationHelper'
-import {AssignmentGroupGrade} from './grading.d'
+import type {Assignment, AssignmentGroup, UserDueDateMap} from '../../api.d'
+import type {
+  AssignmentGroupCriteriaMap,
+  AssignmentGroupGrade,
+  AssignmentGroupGradeMap,
+  CamelizedGradingPeriod,
+  CamelizedGradingPeriodSet,
+  GradingPeriodGrade,
+  // GradingPeriodGradeMap,
+  SubmissionGradeCriteria,
+} from './grading.d'
 
-function combineAssignmentGroupGrades(assignmentGroupGrades, includeUngraded: boolean, options) {
-  const scopedAssignmentGroupGrades = _.map(assignmentGroupGrades, assignmentGroupGrade => {
-    const gradeVersion = includeUngraded ? assignmentGroupGrade.final : assignmentGroupGrade.current
-    return {...gradeVersion, weight: assignmentGroupGrade.assignmentGroupWeight}
-  })
+function combineAssignmentGroupGrades(
+  assignmentGroupGrades: AssignmentGroupGrade[],
+  includeUngraded: boolean,
+  options: {
+    weightAssignmentGroups: boolean
+  }
+) {
+  const scopedAssignmentGroupGrades = assignmentGroupGrades.map(
+    (assignmentGroupGrade: AssignmentGroupGrade) => {
+      const gradeVersion = includeUngraded
+        ? assignmentGroupGrade.final
+        : assignmentGroupGrade.current
+      return {...gradeVersion, weight: assignmentGroupGrade.assignmentGroupWeight}
+    }
+  )
 
   if (options.weightAssignmentGroups) {
     const relevantGroupGrades = scopedAssignmentGroupGrades.filter(grade => grade.possible)
     const fullWeight = sumBy(relevantGroupGrades, 'weight')
 
-    let finalGrade = bigSum(_.map(relevantGroupGrades, weightedPercent))
+    let finalGrade = bigSum(relevantGroupGrades.map(weightedPercent))
     if (fullWeight === 0) {
       finalGrade = null
     } else if (fullWeight < 100) {
@@ -53,17 +73,25 @@ function combineAssignmentGroupGrades(assignmentGroupGrades, includeUngraded: bo
   }
 }
 
-function combineGradingPeriodGrades(gradingPeriodGradesByPeriodId, includeUngraded) {
-  let scopedGradingPeriodGrades = _.map(gradingPeriodGradesByPeriodId, gradingPeriodGrade => {
-    const gradeVersion = includeUngraded ? gradingPeriodGrade.final : gradingPeriodGrade.current
-    return {...gradeVersion, weight: gradingPeriodGrade.gradingPeriodWeight}
-  })
+function combineGradingPeriodGrades(
+  gradingPeriodGradesByPeriodId: {
+    [periodId: string]: GradingPeriodGrade
+  },
+  includeUngraded: boolean
+) {
+  let scopedGradingPeriodGrades = map(
+    gradingPeriodGradesByPeriodId,
+    (gradingPeriodGrade: GradingPeriodGrade) => {
+      const gradeVersion = includeUngraded ? gradingPeriodGrade.final : gradingPeriodGrade.current
+      return {...gradeVersion, weight: gradingPeriodGrade.gradingPeriodWeight}
+    }
+  )
 
   if (!includeUngraded) {
-    scopedGradingPeriodGrades = _.filter(scopedGradingPeriodGrades, 'possible')
+    scopedGradingPeriodGrades = filter(scopedGradingPeriodGrades, 'possible')
   }
 
-  const scoreSum = bigSum(_.map(scopedGradingPeriodGrades, weightedPercent))
+  const scoreSum = bigSum(scopedGradingPeriodGrades.map(weightedPercent))
   const totalWeight = sumBy(scopedGradingPeriodGrades, 'weight')
   const totalScore =
     totalWeight === 0 ? 0 : toNumber(scoreSum.times(100).div(Math.min(totalWeight, 100)))
@@ -74,32 +102,45 @@ function combineGradingPeriodGrades(gradingPeriodGradesByPeriodId, includeUngrad
   }
 }
 
-function divideGroupByGradingPeriods(assignmentGroup, effectiveDueDates) {
+function divideGroupByGradingPeriods(
+  assignmentGroup: AssignmentGroup,
+  effectiveDueDates: UserDueDateMap
+): AssignmentGroup[] {
   // When using weighted grading periods, assignment groups must not contain assignments due in different grading
   // periods. This allows for calculated assignment group grades in closed grading periods to be accidentally
   // changed if a related assignment is considered to be in an open grading period.
   //
   // To avoid this, assignment groups meeting this criteria are "divided" (duplicated) in a way where each
   // instance of the assignment group includes assignments only from one grading period.
-  const assignmentsByGradingPeriodId = _.groupBy(
+  const assignmentsByGradingPeriodId: {
+    [periodId: string]: Assignment[]
+  } = groupBy(
     assignmentGroup.assignments,
-    assignment => effectiveDueDates[assignment.id].grading_period_id
+    (assignment: Assignment) => effectiveDueDates[assignment.id].grading_period_id
   )
-  return _.map(assignmentsByGradingPeriodId, assignments => ({...assignmentGroup, assignments}))
+  return map(assignmentsByGradingPeriodId, (assignments: Assignment[]) => ({
+    ...assignmentGroup,
+    assignments,
+  }))
 }
 
-function extractPeriodBasedAssignmentGroups(assignmentGroups, effectiveDueDates) {
-  return _.reduce(
+function extractPeriodBasedAssignmentGroups(
+  assignmentGroups: AssignmentGroupCriteriaMap,
+  effectiveDueDates: UserDueDateMap
+): AssignmentGroup[] {
+  // @ts-expect-error
+  return reduce(
     assignmentGroups,
-    (periodBasedGroups, assignmentGroup) => {
-      const assignedAssignments = _.filter(
+    (periodBasedGroups: AssignmentGroup[], assignmentGroup: AssignmentGroup) => {
+      const assignedAssignments = filter(
         assignmentGroup.assignments,
-        assignment => effectiveDueDates[assignment.id]
+        (assignment: Assignment) => effectiveDueDates[assignment.id]
       )
       if (assignedAssignments.length > 0) {
         const groupWithAssignedAssignments = {...assignmentGroup, assignments: assignedAssignments}
         return [
           ...periodBasedGroups,
+          // @ts-expect-error
           ...divideGroupByGradingPeriods(groupWithAssignedAssignments, effectiveDueDates),
         ]
       }
@@ -109,15 +150,15 @@ function extractPeriodBasedAssignmentGroups(assignmentGroups, effectiveDueDates)
   )
 }
 
-function recombinePeriodBasedAssignmentGroupGrades(grades) {
-  const map = {}
+function recombinePeriodBasedAssignmentGroupGrades(grades: AssignmentGroupGrade[]) {
+  const map_: AssignmentGroupGradeMap = {}
 
   for (let g = 0; g < grades.length; g++) {
     const grade = grades[g]
-    const previousGrade = map[grade.assignmentGroupId]
+    const previousGrade = map_[grade.assignmentGroupId]
 
     if (previousGrade) {
-      map[grade.assignmentGroupId] = {
+      map_[grade.assignmentGroupId] = {
         ...previousGrade,
         current: {
           submission_count: previousGrade.current.submission_count + grade.current.submission_count,
@@ -133,39 +174,61 @@ function recombinePeriodBasedAssignmentGroupGrades(grades) {
         },
       }
     } else {
-      map[grade.assignmentGroupId] = grade
+      map_[grade.assignmentGroupId] = grade
     }
   }
 
-  return map
+  return map_
 }
 
 function calculateWithGradingPeriods(
-  submissions,
-  assignmentGroups,
-  gradingPeriods,
-  effectiveDueDates,
-  options
-) {
+  submissions: SubmissionGradeCriteria[],
+  assignmentGroups: AssignmentGroupCriteriaMap,
+  gradingPeriods: CamelizedGradingPeriod[],
+  effectiveDueDates: UserDueDateMap,
+  options: {
+    weightGradingPeriods: boolean | null | undefined
+    weightAssignmentGroups: boolean
+    ignoreUnpostedAnonymous: boolean
+  }
+): {
+  assignmentGroups: AssignmentGroupGradeMap
+  gradingPeriods: {
+    [periodId: string]: GradingPeriodGrade
+  }
+  current: {
+    score: number
+    possible: number
+  }
+  final: {
+    score: number
+    possible: number
+  }
+  scoreUnit: 'points' | 'percentage'
+} {
   const periodBasedGroups = extractPeriodBasedAssignmentGroups(assignmentGroups, effectiveDueDates)
 
-  const assignmentGroupsByGradingPeriodId = _.groupBy(periodBasedGroups, assignmentGroup => {
+  const assignmentGroupsByGradingPeriodId: {
+    [periodId: string]: AssignmentGroup[]
+  } = groupBy(periodBasedGroups, (assignmentGroup: AssignmentGroup) => {
     const assignmentId = assignmentGroup.assignments[0].id
     return effectiveDueDates[assignmentId].grading_period_id
   })
 
-  const gradingPeriodsById = _.keyBy(gradingPeriods, 'id')
-  const gradingPeriodGradesByPeriodId = {}
+  const gradingPeriodsById: {
+    [periodId: string]: CamelizedGradingPeriod
+  } = keyBy(gradingPeriods, 'id')
+
+  const gradingPeriodGradesByPeriodId: {
+    [periodId: string]: GradingPeriodGrade
+  } = {}
   const periodBasedAssignmentGroupGrades: AssignmentGroupGrade[] = []
 
-  for (let gp = 0; gp < gradingPeriods.length; gp++) {
-    const groupGrades = {}
-    const gradingPeriod = gradingPeriods[gp]
+  for (const gradingPeriod of gradingPeriods) {
+    const groupGrades: AssignmentGroupGradeMap = {}
 
     const assignmentGroupsInPeriod = assignmentGroupsByGradingPeriodId[gradingPeriod.id] || []
-    for (let ag = 0; ag < assignmentGroupsInPeriod.length; ag++) {
-      const assignmentGroup = assignmentGroupsInPeriod[ag]
-
+    for (const assignmentGroup of assignmentGroupsInPeriod) {
       groupGrades[assignmentGroup.id] = AssignmentGroupGradeCalculator.calculate(
         submissions,
         assignmentGroup,
@@ -174,7 +237,7 @@ function calculateWithGradingPeriods(
       periodBasedAssignmentGroupGrades.push(groupGrades[assignmentGroup.id])
     }
 
-    const groupGradesList = _.values(groupGrades)
+    const groupGradesList = values(groupGrades)
 
     gradingPeriodGradesByPeriodId[gradingPeriod.id] = {
       gradingPeriodId: gradingPeriod.id,
@@ -196,16 +259,22 @@ function calculateWithGradingPeriods(
     }
   }
 
-  const allAssignmentGroupGrades = _.map(assignmentGroups, assignmentGroup =>
-    AssignmentGroupGradeCalculator.calculate(
-      submissions,
-      assignmentGroup,
-      options.ignoreUnpostedAnonymous
-    )
+  // @ts-expect-error
+  const allAssignmentGroupGrades: AssignmentGroupGrade[] = map(
+    assignmentGroups,
+    (assignmentGroup: AssignmentGroup) =>
+      AssignmentGroupGradeCalculator.calculate(
+        submissions,
+        assignmentGroup,
+        options.ignoreUnpostedAnonymous
+      )
   )
 
   return {
-    assignmentGroups: _.keyBy(allAssignmentGroupGrades, grade => grade.assignmentGroupId),
+    assignmentGroups: keyBy(
+      allAssignmentGroupGrades,
+      (grade: AssignmentGroupGrade) => grade.assignmentGroupId
+    ),
     gradingPeriods: gradingPeriodGradesByPeriodId,
     current: combineAssignmentGroupGrades(allAssignmentGroupGrades, false, options),
     final: combineAssignmentGroupGrades(allAssignmentGroupGrades, true, options),
@@ -213,17 +282,41 @@ function calculateWithGradingPeriods(
   }
 }
 
-function calculateWithoutGradingPeriods(submissions, assignmentGroups, options) {
-  const assignmentGroupGrades = _.map(assignmentGroups, assignmentGroup =>
-    AssignmentGroupGradeCalculator.calculate(
-      submissions,
-      assignmentGroup,
-      options.ignoreUnpostedAnonymous
-    )
+function calculateWithoutGradingPeriods(
+  submissions: SubmissionGradeCriteria[],
+  assignmentGroups: AssignmentGroupCriteriaMap,
+  options: {
+    weightAssignmentGroups: boolean
+    ignoreUnpostedAnonymous: boolean
+  }
+): {
+  assignmentGroups: AssignmentGroupGradeMap
+  current: {
+    score: number
+    possible: number
+  }
+  final: {
+    score: number
+    possible: number
+  }
+  scoreUnit: 'points' | 'percentage'
+} {
+  // @ts-expect-error
+  const assignmentGroupGrades: AssignmentGroupGrade[] = map(
+    assignmentGroups,
+    (assignmentGroup: AssignmentGroup) =>
+      AssignmentGroupGradeCalculator.calculate(
+        submissions,
+        assignmentGroup,
+        options.ignoreUnpostedAnonymous
+      )
   )
 
   return {
-    assignmentGroups: _.keyBy(assignmentGroupGrades, grade => grade.assignmentGroupId),
+    assignmentGroups: keyBy(
+      assignmentGroupGrades,
+      (grade: AssignmentGroupGrade) => grade.assignmentGroupId
+    ),
     current: combineAssignmentGroupGrades(assignmentGroupGrades, false, options),
     final: combineAssignmentGroupGrades(assignmentGroupGrades, true, options),
     scoreUnit: options.weightAssignmentGroups ? 'percentage' : 'points',
@@ -330,13 +423,27 @@ function calculateWithoutGradingPeriods(submissions, assignmentGroups, options) 
 //   scoreUnit: 'points'|'percent'
 // }
 function calculate(
-  submissions,
-  assignmentGroups,
-  weightingScheme,
-  ignoreUnpostedAnonymous,
-  gradingPeriodSet,
-  effectiveDueDates
-) {
+  submissions: SubmissionGradeCriteria[],
+  assignmentGroups: AssignmentGroupCriteriaMap,
+  weightingScheme: string | null,
+  ignoreUnpostedAnonymous: boolean,
+  gradingPeriodSet?: CamelizedGradingPeriodSet | null,
+  effectiveDueDates?: UserDueDateMap
+): {
+  assignmentGroups: AssignmentGroupGradeMap
+  gradingPeriods?: {
+    [periodId: string]: GradingPeriodGrade
+  }
+  current: {
+    score: number
+    possible: number
+  }
+  final: {
+    score: number
+    possible: number
+  }
+  scoreUnit: 'points' | 'percentage'
+} {
   const options = {
     weightGradingPeriods: gradingPeriodSet && !!gradingPeriodSet.weighted,
     weightAssignmentGroups: weightingScheme === 'percent',

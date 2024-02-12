@@ -225,6 +225,7 @@ describe "new groups" do
     end
 
     it "Allows teacher to join students to groups in unpublished courses", priority: "1" do
+      skip "FOO-4220" # TODO: re-enable this test (or rewrite) after fixing FOO-4263
       group_test_setup(3, 1, 2)
       @course.workflow_state = "unpublished"
       @course.save!
@@ -425,6 +426,7 @@ describe "new groups" do
     end
 
     it "splits students into groups automatically", priority: "1" do
+      skip "FOO-3807 (10/7/2023)"
       seed_students(4)
 
       get "/courses/#{@course.id}/groups"
@@ -457,6 +459,7 @@ describe "new groups" do
     end
 
     it "auto-splits students into groups by section" do
+      skip "FOO-3807 (10/7/2023)"
       course = Course.create!(name: "Group by section")
 
       course.enroll_teacher(@teacher)

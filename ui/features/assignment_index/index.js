@@ -17,17 +17,16 @@
  */
 
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
-import AssignmentGroupListView from './backbone/views/AssignmentGroupListView.coffee'
+import Course from '@canvas/courses/backbone/models/Course'
+import AssignmentGroupListView from './backbone/views/AssignmentGroupListView'
 import CreateGroupView from './backbone/views/CreateGroupView'
-import IndexView from './backbone/views/IndexView.coffee'
-import AssignmentSettingsView from './backbone/views/AssignmentSettingsView.coffee'
-import AssignmentSyncSettingsView from './backbone/views/AssignmentSyncSettingsView.coffee'
+import IndexView from './backbone/views/IndexView'
+import AssignmentSettingsView from './backbone/views/AssignmentSettingsView'
+import AssignmentSyncSettingsView from './backbone/views/AssignmentSyncSettingsView'
 import AssignmentGroupWeightsView from './backbone/views/AssignmentGroupWeightsView'
 import ToggleShowByView from './backbone/views/ToggleShowByView'
-import _ from 'underscore'
 import splitAssetString from '@canvas/util/splitAssetString'
-import {getPrefetchedXHR} from '@instructure/js-utils'
+import {getPrefetchedXHR} from '@canvas/util/xhr'
 import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
 import {addDeepLinkingListener} from '@canvas/deep-linking/DeepLinking'
@@ -42,7 +41,7 @@ const course = new Course({
 })
 course.url = ENV.URLS.course_url
 
-const userIsAdmin = _.includes(ENV.current_user_roles, 'admin')
+const userIsAdmin = ENV.current_user_is_admin
 
 const assignmentGroups = new AssignmentGroupCollection([], {
   course,
@@ -108,6 +107,7 @@ ready(() => {
 
   // kick it all off
   course.trigger('change')
+  // eslint-disable-next-line promise/catch-or-return
   getPrefetchedXHR('assignment_groups_url')
     .then(res =>
       res.json().then(data => {

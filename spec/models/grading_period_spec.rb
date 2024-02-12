@@ -97,7 +97,7 @@ describe GradingPeriod do
 
     it "returns true if the submission is due in a closed grading period" do
       result = GradingPeriod.date_in_closed_grading_period?(
-        course: course,
+        course:,
         date: in_closed_grading_period
       )
       expect(result).to be true
@@ -105,7 +105,7 @@ describe GradingPeriod do
 
     it "returns false if the submission is due in a not closed grading period" do
       result = GradingPeriod.date_in_closed_grading_period?(
-        course: course,
+        course:,
         date: in_not_closed_grading_period
       )
       expect(result).to be false
@@ -113,7 +113,7 @@ describe GradingPeriod do
 
     it "returns false if the submission is due outside of any grading period" do
       result = GradingPeriod.date_in_closed_grading_period?(
-        course: course,
+        course:,
         date: outside_of_any_grading_period
       )
       expect(result).to be false
@@ -122,7 +122,7 @@ describe GradingPeriod do
     it "returns true if the due date is null and the last grading period is closed" do
       not_closed_period.destroy
       result = GradingPeriod.date_in_closed_grading_period?(
-        course: course,
+        course:,
         date: nil
       )
       expect(result).to be true
@@ -130,7 +130,7 @@ describe GradingPeriod do
 
     it "returns false if the due date is null and the last grading period is not closed" do
       result = GradingPeriod.date_in_closed_grading_period?(
-        course: course,
+        course:,
         date: nil
       )
       expect(result).to be false
@@ -231,7 +231,7 @@ describe GradingPeriod do
       it "is invalid if the close date is before the end date" do
         period_params = params.merge(close_date: 1.day.ago(params[:end_date]))
         grading_period = grading_period_group.grading_periods.build(period_params)
-        expect(grading_period).to be_invalid
+        expect(grading_period).not_to be_valid
       end
 
       it "considers the grading period valid if the close date is equal to the end date" do
@@ -375,8 +375,8 @@ describe GradingPeriod do
 
     it "destroys associated scores" do
       course = Course.create!
-      enrollment = student_in_course(course: course)
-      score = enrollment.scores.create!(grading_period: grading_period)
+      enrollment = student_in_course(course:)
+      score = enrollment.scores.create!(grading_period:)
       grading_period.destroy
       expect(score.reload).to be_deleted
     end
@@ -384,34 +384,34 @@ describe GradingPeriod do
     it "recalculates course scores if the grading period group is weighted" do
       course = Course.create!
       grading_period_group.enrollment_terms << course.enrollment_term
-      enrollment = student_in_course(course: course)
-      enrollment.scores.create!(grading_period: grading_period)
+      enrollment = student_in_course(course:)
+      enrollment.scores.create!(grading_period:)
       grading_period_group.update_column(:weighted, true)
       expect(GradeCalculator).to receive(:recompute_final_score)
       grading_period.destroy
     end
 
-    it "runs DueDateCacher for courses from the same enrollment term when the grading period is deleted" do
+    it "runs SubmissionLifecycleManager for courses from the same enrollment term when the grading period is deleted" do
       course2 = account.courses.create!
       course2.enrollment_term = account.enrollment_terms.create!
       course2.save!
       student_in_course(course: course2)
       a = course2.assignments.create!
       a.submissions.find_by(user_id: @student).update(grading_period_id: grading_period.id)
-      expect(DueDateCacher).to receive(:recompute_course).with(course, any_args)
-      expect(DueDateCacher).not_to receive(:recompute_course).with(course2, any_args)
+      expect(SubmissionLifecycleManager).to receive(:recompute_course).with(course, any_args)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course).with(course2, any_args)
       grading_period.destroy
     end
 
-    it "runs DueDateCacher for courses from the same enrollment term when the grading period set is deleted" do
+    it "runs SubmissionLifecycleManager for courses from the same enrollment term when the grading period set is deleted" do
       course2 = account.courses.create!
       course2.enrollment_term = account.enrollment_terms.create!
       course2.save!
       student_in_course(course: course2)
       a = course2.assignments.create!
       a.submissions.find_by(user_id: @student).update(grading_period_id: grading_period.id)
-      expect(DueDateCacher).to receive(:recompute_course).with(course, any_args)
-      expect(DueDateCacher).not_to receive(:recompute_course).with(course2, any_args)
+      expect(SubmissionLifecycleManager).to receive(:recompute_course).with(course, any_args)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course).with(course2, any_args)
       grading_period_group.destroy
     end
 
@@ -525,12 +525,12 @@ describe GradingPeriod do
       end
 
       it "returns an empty array when the course has no grading periods groups" do
-        expect(GradingPeriod.for(@course)).to match_array([])
+        expect(GradingPeriod.for(@course)).to be_empty
       end
 
       it "returns an empty array when the course has no grading periods" do
         group_helper.legacy_create_for_course(@course)
-        expect(GradingPeriod.for(@course)).to match_array([])
+        expect(GradingPeriod.for(@course)).to be_empty
       end
 
       it "includes only 'active' grading periods from the course grading period group" do
@@ -560,7 +560,7 @@ describe GradingPeriod do
         period_2 = period_helper.create_with_weeks_for_group(group, 3, 1)
         period_2.workflow_state = :deleted
         period_2.save
-        expect(GradingPeriod.for(@course, inherit: false)).to match_array([])
+        expect(GradingPeriod.for(@course, inherit: false)).to be_empty
       end
     end
 
@@ -580,19 +580,19 @@ describe GradingPeriod do
       end
 
       it "returns an empty array when the account has no grading period groups" do
-        expect(GradingPeriod.for(@root_account)).to match_array([])
+        expect(GradingPeriod.for(@root_account)).to be_empty
       end
 
       it "returns an empty array when the account has no grading periods" do
         group_helper.create_for_account(@root_account)
-        expect(GradingPeriod.for(@root_account)).to match_array([])
+        expect(GradingPeriod.for(@root_account)).to be_empty
       end
 
       it "does not return grading periods on the course directly" do
         group = group_helper.legacy_create_for_course(@course)
         period_helper.create_with_weeks_for_group(group, 5, 3)
         period_helper.create_with_weeks_for_group(group, 3, 1)
-        expect(GradingPeriod.for(@root_account)).to match_array([])
+        expect(GradingPeriod.for(@root_account)).to be_empty
       end
 
       it "includes only 'active' grading periods from the account grading period group" do
@@ -871,8 +871,8 @@ describe GradingPeriod do
           title: "B"
         )
         json = GradingPeriod.json_for(course, nil)
-        expect(json.map { |el| el["title"] }).to eq %w[A B C]
-        expect(json.map { |el| el["is_last"] }).to eq [false, false, true]
+        expect(json.pluck("title")).to eq %w[A B C]
+        expect(json.pluck("is_last")).to eq [false, false, true]
       end
     end
   end
@@ -908,7 +908,7 @@ describe GradingPeriod do
   describe "#weight" do
     it "can persist double precision values" do
       subject.update!(weight: 1.5)
-      expect(subject.reload.weight).to eql 1.5
+      expect(subject.reload.weight).to be 1.5
     end
   end
 
@@ -949,8 +949,8 @@ describe GradingPeriod do
 
   describe "grading period scores" do
     before do
-      student_in_course(course: course, active_all: true)
-      teacher_in_course(course: course, active_all: true)
+      student_in_course(course:, active_all: true)
+      teacher_in_course(course:, active_all: true)
       @assignment = course.assignments.create!(due_at: 10.days.from_now(now), points_possible: 10)
       @assignment.grade_student(@student, grade: 8, grader: @teacher)
     end

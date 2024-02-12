@@ -35,17 +35,22 @@ module IncomingMail
         context = original_message.context
         user = original_message.user
         raise IncomingMail::Errors::UnknownAddress unless valid_user_and_context?(context, user)
+        raise IncomingMail::Errors::UserSuspended if user.suspended?
 
         from_channel = sent_from_channel(user, incoming_message)
         raise IncomingMail::Errors::UnknownSender unless from_channel
         raise IncomingMail::Errors::MessageTooLong if body.length > ActiveRecord::Base.maximum_text_length
-        raise IncomingMail::Errors::MessageTooLong if html_body.length > ActiveRecord::Base.maximum_text_length
         raise IncomingMail::Errors::BlankMessage if body.blank?
+
+        # Check if html_body is too long, if yes, set html_body to nil so that the plain text is used instead
+        if html_body.length > ActiveRecord::Base.maximum_text_length
+          html_body = nil
+        end
 
         Rails.cache.fetch(["incoming_mail_reply_from", context, incoming_message.message_id].cache_key, expires_in: 7.days) do
           context.reply_from({
                                purpose: "general",
-                               user: user,
+                               user:,
                                subject: IncomingMailProcessor::IncomingMessageProcessor.utf8ify(incoming_message.subject, incoming_message.header[:subject].try(:charset)),
                                html: html_body,
                                text: body
@@ -106,7 +111,7 @@ module IncomingMail
       ndr_body = case error
                  when IncomingMail::Errors::ReplyToDeletedDiscussion
                    InstStatsd::Statsd.increment("incoming_mail_processor.message_processing_error.reply_to_deleted_discussion")
-                   I18n.t(<<~TEXT, subject: subject).gsub(/^ +/, "")
+                   I18n.t(<<~TEXT, subject:).gsub(/^ +/, "")
                      The message titled "%{subject}" could not be delivered because the discussion topic has been deleted. If you are trying to contact someone through Canvas you can try logging in to your account and sending them a message using the Inbox tool.
 
                      Thank you,
@@ -114,7 +119,7 @@ module IncomingMail
                    TEXT
                  when IncomingMail::Errors::ReplyToLockedTopic
                    InstStatsd::Statsd.increment("incoming_mail_processor.message_processing_error.reply_to_locked_topic")
-                   I18n.t("lib.incoming_message_processor.locked_topic.body", <<~TEXT, subject: subject).gsub(/^ +/, "")
+                   I18n.t("lib.incoming_message_processor.locked_topic.body", <<~TEXT, subject:).gsub(/^ +/, "")
                      The message titled "%{subject}" could not be delivered because the discussion topic is locked. If you are trying to contact someone through Canvas you can try logging in to your account and sending them a message using the Inbox tool.
 
                      Thank you,
@@ -122,19 +127,31 @@ module IncomingMail
                    TEXT
                  when IncomingMail::Errors::UnknownSender
                    InstStatsd::Statsd.increment("incoming_mail_processor.message_processing_error.unknown_sender")
-                   I18n.t(<<~TEXT, subject: subject, link: I18n.t(:"community.guides_home")).gsub(/^ +/, "")
+                   I18n.t(<<~TEXT, subject:, link: I18n.t(:"community.guides_home")).gsub(/^ +/, "")
                      The message you sent with the subject line "%{subject}" was not delivered. To reply to Canvas messages from this email, it must first be a confirmed communication channel in your Canvas profile. Please visit your profile and resend the confirmation email for this email address. You may also contact this person via the Canvas Inbox. For help, please see the Inbox chapter for your user role in the Canvas Guides. [See %{link}].
+
+                     Thank you,
+                     Canvas Support
+                   TEXT
+                 when IncomingMail::Errors::UserSuspended
+                   InstStatsd::Statsd.increment("incoming_mail_processor.message_processing_error.user_suspended")
+                   I18n.t(<<~TEXT, subject:).gsub(/^ +/, "")
+                     The message you sent with the subject line "%{subject}" was not delivered because your account has been suspended.
 
                      Thank you,
                      Canvas Support
                    TEXT
                  else # including IncomingMessageProcessor::UnknownAddressError
                    InstStatsd::Statsd.increment("incoming_mail_processor.message_processing_error.catch_all")
-                   I18n.t("lib.incoming_message_processor.failure_message.body", <<~TEXT, subject: subject).gsub(/^ +/, "")
+                   error_info = { tags: { type: :message_processing_error_catch_all }, extra: { ref: get_ref_uuid } }
+                   Canvas::Errors.capture(error, error_info, :error)
+                   I18n.t("lib.incoming_message_processor.failure_message.body", <<~TEXT, subject:, ref: error_info.dig(:extra, :ref)).to_s.gsub(/^ +/, "")
                      The message titled "%{subject}" could not be delivered.  The message was sent to an unknown mailbox address.  If you are trying to contact someone through Canvas you can try logging in to your account and sending them a message using the Inbox tool.
 
                      Thank you,
                      Canvas Support
+
+                     Reference: %{ref}
                    TEXT
                  end
 
@@ -158,7 +175,7 @@ module IncomingMail
 
     def parse_tag(tag)
       match = tag.match(/^(\h+)-([0-9~]+)(?:-([0-9]+))?$/)
-      return match[1], match[2], match[3] if match
+      [match[1], match[2], match[3]] if match
     end
 
     def get_original_message(original_message_id, timestamp)
@@ -167,6 +184,10 @@ module IncomingMail
       else
         Message.where(id: original_message_id).first
       end
+    end
+
+    def get_ref_uuid
+      SecureRandom.uuid
     end
   end
 end

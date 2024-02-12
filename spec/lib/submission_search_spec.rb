@@ -27,12 +27,18 @@ describe SubmissionSearch do
   let_once(:students) { [jonah, amanda, mandy, james, peter] }
   let_once(:teacher) do
     teacher = User.create!(name: "Teacher Miller")
-    TeacherEnrollment.create!(user: teacher, course: course, workflow_state: "active")
+    TeacherEnrollment.create!(user: teacher, course:, workflow_state: "active")
     teacher
+  end
+  let_once(:observer) do
+    observer = User.create!(name: "Observer")
+    observer_enrollment = ObserverEnrollment.create!(user: observer, course:, workflow_state: "active")
+    observer_enrollment.update_attribute(:associated_user_id, amanda.id)
+    observer
   end
   let_once(:assignment) do
     Assignment.create!(
-      course: course,
+      course:,
       workflow_state: "active",
       submission_types: "online_text_entry",
       title: "an assignment",
@@ -42,7 +48,7 @@ describe SubmissionSearch do
 
   before :once do
     students.each do |student|
-      StudentEnrollment.create!(user: student, course: course, workflow_state: "active")
+      StudentEnrollment.create!(user: student, course:, workflow_state: "active")
     end
   end
 
@@ -51,13 +57,130 @@ describe SubmissionSearch do
     expect(results.preload(:user).map(&:user)).to eq students
   end
 
+  it "excludes rejected students by default" do
+    course.enrollments.find_by(user: jonah).reject
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }]).search
+    expect(results.where(user: jonah).exists?).to be false
+  end
+
+  it "excludes deactivated students by default" do
+    course.enrollments.find_by(user: jonah).deactivate
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }]).search
+    expect(results.where(user: jonah).exists?).to be false
+  end
+
+  it "optionally includes deactivated students" do
+    course.enrollments.find_by(user: jonah).deactivate
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }], include_deactivated: true).search
+    expect(results.where(user: jonah).exists?).to be true
+  end
+
+  it "excludes rejected students when including deactivated students" do
+    course.enrollments.find_by(user: jonah).reject
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }], include_deactivated: true).search
+    expect(results.where(user: jonah).exists?).to be false
+  end
+
+  it "excludes concluded students by default" do
+    course.enrollments.find_by(user: jonah).conclude
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }]).search
+    expect(results.where(user: jonah).exists?).to be false
+  end
+
+  it "optionally includes concluded students" do
+    course.enrollments.find_by(user: jonah).conclude
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }], include_concluded: true).search
+    expect(results.where(user: jonah).exists?).to be true
+  end
+
+  it "excludes rejected students when including concluded students" do
+    course.enrollments.find_by(user: jonah).reject
+    results = SubmissionSearch.new(assignment, teacher, nil, order_by: [{ field: "username" }], include_concluded: true).search
+    expect(results.where(user: jonah).exists?).to be false
+  end
+
+  it "optionally includes deactivated students via gradebook settings" do
+    course.enrollments.find_by(user: jonah).deactivate
+    teacher.preferences[:gradebook_settings] = {
+      course.global_id => {
+        "show_inactive_enrollments" => "true"
+      }
+    }
+    teacher.save!
+    results = SubmissionSearch.new(
+      assignment,
+      teacher,
+      nil,
+      order_by: [{ field: "username" }],
+      apply_gradebook_enrollment_filters: true
+    ).search
+    expect(results.where(user: jonah).exists?).to be true
+  end
+
+  it "optionally includes concluded students via gradebook settings" do
+    course.enrollments.find_by(user: jonah).conclude
+    teacher.preferences[:gradebook_settings] = {
+      course.global_id => {
+        "show_concluded_enrollments" => "true"
+      }
+    }
+    teacher.save!
+    results = SubmissionSearch.new(
+      assignment,
+      teacher,
+      nil,
+      order_by: [{ field: "username" }],
+      apply_gradebook_enrollment_filters: true
+    ).search
+    expect(results.where(user: jonah).exists?).to be true
+  end
+
+  it "ignores include_concluded and include_deactivated when apply_gradebook_enrollment_filters is true" do
+    course.enrollments.find_by(user: amanda).deactivate
+    course.enrollments.find_by(user: jonah).conclude
+    teacher.preferences[:gradebook_settings] = {
+      course.global_id => {
+        "show_concluded_enrollments" => "false",
+        "show_inactive_enrollments" => "false"
+      }
+    }
+    teacher.save!
+    results = SubmissionSearch.new(
+      assignment,
+      teacher,
+      nil,
+      order_by: [{ field: "username" }],
+      apply_gradebook_enrollment_filters: true,
+      include_concluded: true,
+      include_deactivated: true
+    ).search
+
+    aggregate_failures do
+      expect(results.where(user: amanda).exists?).to be false
+      expect(results.where(user: jonah).exists?).to be false
+    end
+  end
+
   it "finds submissions with user name search" do
-    results = SubmissionSearch.new(assignment, teacher, nil,
+    results = SubmissionSearch.new(assignment,
+                                   teacher,
+                                   nil,
                                    user_search: "man",
                                    order_by: [{ field: "username", direction: "descending" }]).search
     expect(results).to eq [
       Submission.find_by(user: mandy),
       Submission.find_by(user: amanda),
+    ]
+  end
+
+  it "finds submissions with user id" do
+    results = SubmissionSearch.new(assignment,
+                                   teacher,
+                                   nil,
+                                   user_id: mandy.id,
+                                   order_by: [{ field: "username", direction: "descending" }]).search
+    expect(results).to eq [
+      Submission.find_by(user: mandy)
     ]
   end
 
@@ -69,7 +192,7 @@ describe SubmissionSearch do
 
   it "filters results to specified sections" do
     section = course.course_sections.create!
-    StudentEnrollment.create!(user: amanda, course: course, course_section: section, workflow_state: "active")
+    StudentEnrollment.create!(user: amanda, course:, course_section: section, workflow_state: "active")
     results = SubmissionSearch.new(assignment, teacher, nil, section_ids: [section.id]).search
     expect(results).to eq [Submission.find_by(user: amanda)]
   end
@@ -95,7 +218,7 @@ describe SubmissionSearch do
   end
 
   it "filters by late" do
-    late_student = student_in_course(course: course, active_all: true).user
+    late_student = student_in_course(course:, active_all: true).user
     assignment = course.assignments.create!(name: "assignment", points_possible: 10, due_at: 2.days.ago)
     submission = assignment.submit_homework(late_student, body: "asdf", submitted_at: 1.day.ago)
     results = SubmissionSearch.new(assignment, teacher, nil, late: true).search
@@ -132,6 +255,11 @@ describe SubmissionSearch do
     expect(results).to eq [submission]
   end
 
+  it "limits results to just associated student submissions if the user is an observer" do
+    results = SubmissionSearch.new(assignment, observer, nil, {}).search
+    expect(results).to eq [Submission.find_by(user: amanda)]
+  end
+
   it "limits results to just the user's submission if the user is a student" do
     results = SubmissionSearch.new(assignment, amanda, nil, {}).search
     expect(results).to eq [Submission.find_by(user: amanda)]
@@ -155,7 +283,7 @@ describe SubmissionSearch do
   it "orders by submission date" do
     Timecop.freeze do
       assignment.submit_homework(peter, submission_type: "online_text_entry", body: "homework", submitted_at: Time.zone.now)
-      assignment.submit_homework(amanda, submission_type: "online_text_entry", body: "homework", submitted_at: Time.zone.now + 1.hour)
+      assignment.submit_homework(amanda, submission_type: "online_text_entry", body: "homework", submitted_at: 1.hour.from_now)
       results = SubmissionSearch.new(assignment, teacher, nil, states: "submitted", order_by: [{ field: "submitted_at" }]).search
       expect(results.preload(:user).map(&:user)).to eq [peter, amanda]
     end
@@ -165,7 +293,9 @@ describe SubmissionSearch do
     assignment.grade_student(peter, score: 1, grader: teacher)
     assignment.grade_student(amanda, score: 1, grader: teacher)
     assignment.grade_student(james, score: 3, grader: teacher)
-    results = SubmissionSearch.new(assignment, teacher, nil,
+    results = SubmissionSearch.new(assignment,
+                                   teacher,
+                                   nil,
                                    scored_more_than: 0,
                                    order_by: [
                                      { field: "score", direction: "descending" },

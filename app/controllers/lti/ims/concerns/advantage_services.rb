@@ -34,7 +34,7 @@ module Lti::IMS::Concerns
       end
 
       def verify_context
-        render_error("Context not found", :not_found) if context.blank?
+        render_error("Context is deleted or not found", :not_found) if context.blank? || context.deleted?
       end
 
       def verify_tool
@@ -56,7 +56,7 @@ module Lti::IMS::Concerns
         @tool ||= context && developer_key &&
                   Lti::ContextToolFinder.new(
                     context,
-                    base_scope: ContextExternalTool.order(:id).where(developer_key: developer_key)
+                    base_scope: ContextExternalTool.order(:id).where(developer_key:)
                   ).all_tools_scope_union.take
       end
     end

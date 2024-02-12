@@ -64,11 +64,11 @@ class StudentAssignmentPageV2
     end
 
     def assignment_title(title)
-      fj("h2 span:contains(#{title})")
+      fj("h1 span:contains(#{title})")
     end
 
     def details_toggle
-      f("button[data-test-id='assignments-2-assignment-toggle-details']")
+      f("button[data-testid='assignments-2-assignment-toggle-details']")
     end
 
     def assignment_group_link
@@ -192,11 +192,11 @@ class StudentAssignmentPageV2
     end
 
     def missing_pill
-      f("span[data-test-id='missing-pill']")
+      f("span[data-testid='missing-pill']")
     end
 
     def late_pill
-      f("span[data-test-id='late-pill']")
+      f("span[data-testid='late-pill']")
     end
 
     def rubric_toggle
@@ -223,8 +223,8 @@ class StudentAssignmentPageV2
       f("div[data-testid='online_text_entry']")
     end
 
-    def try_again_button
-      f("button[data-testid='try-again-button']")
+    def new_attempt_button
+      f("button[data-testid='new-attempt-button']")
     end
 
     def cancel_attempt_button
@@ -254,6 +254,62 @@ class StudentAssignmentPageV2
 
     def submit_assignment
       submit_button.click
+    end
+
+    def assignment_sub_header
+      f('[data-testid="assignment-sub-header"]')
+    end
+
+    def peer_review_next_button
+      f('[data-testid="peer-review-next-button"]')
+    end
+
+    def peer_review_close_button
+      f('[data-testid="peer-review-close-button"]')
+    end
+
+    def peer_review_sub_header_text
+      f('[data-testid="peer-review-sub-header-text"]').text
+    end
+
+    def peer_review_header_text
+      f('[data-testid="peer-review-header-text"]').text
+    end
+
+    def fill_out_rubric_toggle
+      f('[data-testid="fill-out-rubric-toggle"]')
+    end
+
+    def rubric_tab
+      f('[data-testid="rubric-tab"]')
+    end
+
+    def select_rubric_criterion(criterion)
+      ff(".rating-description").find { |elt| elt.displayed? && elt.text == criterion }.click
+    end
+
+    def submit_peer_review_button
+      f('[data-testid="submit-peer-review-button"]')
+    end
+
+    def select_grader(grader)
+      click_INSTUI_Select_option(f('[data-testid="select-grader-dropdown"]'), grader)
+    end
+
+    def rubric_comments
+      f(".rubric-freeform")
+    end
+
+    def rubric_rating_selected
+      f(".rating-tier.selected")
+    end
+
+    def peer_review_need_submission_reminder
+      f("h4[data-testid='assignments-2-need-submission-pr-label-1']")
+    end
+
+    def peer_review_unavailible_reminder
+      f("h4[data-testid='assignments-2-unavailable-pr-label-1']")
     end
   end
 end

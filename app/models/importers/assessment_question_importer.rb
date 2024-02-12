@@ -149,9 +149,12 @@ module Importers
       end
 
       if (id = hash["assessment_question_id"])
-        AssessmentQuestion.where(id: id).update_all(name: hash[:question_name], question_data: hash,
-                                                    workflow_state: "active", created_at: Time.now.utc, updated_at: Time.now.utc,
-                                                    assessment_question_bank_id: bank.id)
+        AssessmentQuestion.where(id:).update_all(name: hash[:question_name],
+                                                 question_data: hash,
+                                                 workflow_state: "active",
+                                                 created_at: Time.now.utc,
+                                                 updated_at: Time.now.utc,
+                                                 assessment_question_bank_id: bank.id)
       else
         sql = <<~SQL.squish
           INSERT INTO #{AssessmentQuestion.quoted_table_name} (name, question_data, workflow_state, created_at, updated_at, assessment_question_bank_id, migration_id, root_account_id)
@@ -162,8 +165,11 @@ module Importers
           [sql, hash[:question_name], hash.to_yaml, Time.now.utc, Time.now.utc, bank.id, hash[:migration_id], bank.root_account_id]
         )
         GuardRail.activate(:primary) do
-          id = AssessmentQuestion.connection.insert(query, "#{name} Create",
-                                                    AssessmentQuestion.primary_key, nil, AssessmentQuestion.sequence_name)
+          id = AssessmentQuestion.connection.insert(query,
+                                                    "#{name} Create",
+                                                    AssessmentQuestion.primary_key,
+                                                    nil,
+                                                    AssessmentQuestion.sequence_name)
           hash["assessment_question_id"] = id
         end
       end
@@ -188,7 +194,7 @@ module Importers
         next unless hash[field].present?
 
         hash[field] = migration.convert_html(
-          hash[field], item_type, hash[:migration_id], field, { remove_outer_nodes_if_one_child: true }
+          hash[field], item_type, hash[:migration_id], field, remove_outer_nodes_if_one_child: true
         )
       end
 
@@ -199,7 +205,7 @@ module Importers
       end
 
       %i[correct_comments incorrect_comments neutral_comments more_comments].each do |field|
-        html_field = "#{field}_html".to_sym
+        html_field = :"#{field}_html"
         if hash[field].present? && hash[field] == hash[html_field]
           hash.delete(html_field)
         end
@@ -212,7 +218,7 @@ module Importers
           next unless answer[field].present?
 
           answer[field] = migration.convert_html(
-            answer[field], item_type, hash[:migration_id], key, { remove_outer_nodes_if_one_child: true }
+            answer[field], item_type, hash[:migration_id], key, remove_outer_nodes_if_one_child: true
           )
         end
         if answer[:comments].present? && answer[:comments] == answer[:comments_html]

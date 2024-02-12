@@ -133,7 +133,7 @@ class GroupMembership < ActiveRecord::Base
     return if deleted?
 
     peer_groups = group.peer_groups.map(&:id)
-    GroupMembership.active.where(group_id: peer_groups, user_id: user_id).destroy_all
+    GroupMembership.active.where(group_id: peer_groups, user_id:).destroy_all
   end
   protected :ensure_mutually_exclusive_membership
 
@@ -184,7 +184,7 @@ class GroupMembership < ActiveRecord::Base
     assignments += DiscussionTopic.where(context_type: group.context_type, context_id: group.context_id)
                                   .where.not(assignment_id: nil).where(group_category_id: group.group_category_id).pluck(:assignment_id)
 
-    DueDateCacher.recompute_users_for_course(user.id, group.context_id, assignments) if assignments.any?
+    SubmissionLifecycleManager.recompute_users_for_course(user.id, group.context_id, assignments) if assignments.any?
   end
 
   def touch_groups

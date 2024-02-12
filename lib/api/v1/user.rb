@@ -101,7 +101,7 @@ module Api::V1::User
 
       if enrollments
         json[:enrollments] = enrollments.map do |e|
-          enrollment_json(e, current_user, session, includes: includes, excludes: excludes, opts: enrollment_json_opts)
+          enrollment_json(e, current_user, session, includes:, excludes:, opts: enrollment_json_opts)
         end
       end
       # include a permissions check here to only allow teachers and admins
@@ -262,6 +262,8 @@ module Api::V1::User
                                 course_id
                                 course_section_id
                                 associated_user_id
+                                temporary_enrollment_source_user_id
+                                temporary_enrollment_pairing_id
                                 limit_privileges_to_course_section
                                 workflow_state
                                 updated_at
@@ -273,7 +275,10 @@ module Api::V1::User
   def enrollment_json(enrollment, user, session, includes: [], opts: {}, excludes: [])
     only = API_ENROLLMENT_JSON_OPTS.dup
     only = only.without(:course_section_id) if excludes.include?("course_section_id")
-    api_json(enrollment, user, session, only: only).tap do |json|
+    unless enrollment.course.root_account.feature_enabled?(:temporary_enrollments)
+      only = only.without(:temporary_enrollment_source_user_id, :temporary_enrollment_pairing_id)
+    end
+    api_json(enrollment, user, session, only:).tap do |json|
       json[:enrollment_state] = json.delete("workflow_state")
       if enrollment.course.workflow_state == "deleted" || enrollment.course_section.workflow_state == "deleted"
         json[:enrollment_state] = "deleted"
@@ -315,6 +320,10 @@ module Api::V1::User
       if includes.include?("can_be_removed")
         json[:can_be_removed] = (!enrollment.defined_by_sis? || context.grants_any_right?(@current_user, session, :manage_account_settings, :manage_sis)) &&
                                 enrollment.can_be_deleted_by(@current_user, @context, session)
+      end
+      if includes.include?("temporary_enrollment_providers") && enrollment.temporary_enrollment_source_user_id
+        provider = api_find(User, enrollment.temporary_enrollment_source_user_id)
+        json[:temporary_enrollment_provider] = user_json(provider, user, session) unless provider.deleted?
       end
     end
   end
@@ -405,7 +414,7 @@ module Api::V1::User
 
   def group_ids(user)
     if user.group_memberships.loaded?
-      GroupMembership.where(user: user).active.pluck(:group_id)
+      GroupMembership.where(user:).active.pluck(:group_id)
     else
       user.group_memberships.active.pluck(:group_id)
     end

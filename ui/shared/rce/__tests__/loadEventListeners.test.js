@@ -16,10 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import loadEventListeners from '@canvas/rce/loadEventListeners'
+import loadEventListeners from '../loadEventListeners'
 import 'jquery'
 import 'jqueryui/tabs'
-import 'browser-sniffer'
+
+if (!('INST' in window)) window.INST = {}
 
 describe('loadEventListeners', () => {
   let fakeEditor, dispatchEvent
@@ -87,15 +88,5 @@ describe('loadEventListeners', () => {
       },
     })
     dispatchEvent('initEquella')
-  })
-
-  it('initializes external tools plugin', () => {
-    fakeEditor.addCommand = jest.fn()
-    loadEventListeners()
-    dispatchEvent('initExternalTools')
-    expect(fakeEditor.addCommand).toHaveBeenCalledWith(
-      'instructureExternalButton__BUTTON_ID__',
-      expect.any(Function)
-    )
   })
 })

@@ -19,7 +19,7 @@
 
 describe CoursePacing::CoursePaceService do
   let(:course) { course_model }
-  let!(:course_pace) { course_pace_model(course: course) }
+  let!(:course_pace) { course_pace_model(course:) }
 
   describe ".paces_in_course" do
     it "returns the primary paces for the provided course" do
@@ -36,16 +36,14 @@ describe CoursePacing::CoursePaceService do
       ).to eq course_pace
     end
 
-    it "raises RecordNotFound when the pace is not found" do
-      expect do
-        CoursePacing::CoursePaceService.pace_in_context(course_model)
-      end.to raise_error ActiveRecord::RecordNotFound
+    it "returns nil when the pace is not found" do
+      expect(CoursePacing::CoursePaceService.pace_in_context(course_model)).to be_nil
     end
   end
 
   describe ".template_pace_for" do
     it "returns nil" do
-      expect(CoursePacing::CoursePaceService.template_pace_for(course)).to eq nil
+      expect(CoursePacing::CoursePaceService.template_pace_for(course)).to be_nil
     end
   end
 
@@ -89,7 +87,7 @@ describe CoursePacing::CoursePaceService do
         allow(course_pace).to receive(:update).and_return false
         expect(
           CoursePacing::CoursePaceService.update_pace(course_pace, update_params)
-        ).to eq false
+        ).to be false
       end
     end
   end

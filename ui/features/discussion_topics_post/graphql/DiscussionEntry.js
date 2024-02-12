@@ -57,7 +57,6 @@ export const DiscussionEntry = {
         ...DiscussionEntryPermissions
       }
       rootEntryId
-      isolatedEntryId
       parentId
       quotedEntry {
         _id
@@ -81,6 +80,12 @@ export const DiscussionEntry = {
         nodes {
           ...DiscussionEntryVersion
         }
+      }
+      reportTypeCounts {
+        inappropriateCount
+        offensiveCount
+        otherCount
+        total
       }
       depth
     }
@@ -118,7 +123,6 @@ export const DiscussionEntry = {
     }),
     permissions: DiscussionEntryPermissions.shape,
     rootEntryId: string,
-    isolatedEntryId: string,
     parentId: string,
     quotedEntry: shape({
       createdAt: string,
@@ -137,6 +141,12 @@ export const DiscussionEntry = {
       deleted: bool,
     }),
     discussionEntryVersionsConnection: DiscussionEntryVersion.shape,
+    reportTypeCounts: shape({
+      inappropriateCount: number,
+      offensiveCount: number,
+      otherCount: number,
+      total: number,
+    }),
     depth: number,
   }),
 
@@ -177,7 +187,6 @@ export const DiscussionEntry = {
       __typename: 'DiscussionSubentriesConnection',
     },
     rootEntryId = null,
-    isolatedEntryId = null,
     parentId = null,
     quotedEntry = null,
     discussionEntryVersionsConnection = {
@@ -187,6 +196,13 @@ export const DiscussionEntry = {
         }),
       ],
       __typename: 'DiscussionEntryVersionConnection',
+    },
+    reportTypeCounts = {
+      inappropriateCount: 0,
+      offensiveCount: 0,
+      otherCount: 0,
+      total: 0,
+      __typename: 'DiscussionEntryReportTypeCounts',
     },
     depth = 1,
   } = {}) => ({
@@ -209,10 +225,10 @@ export const DiscussionEntry = {
     permissions,
     discussionSubentriesConnection,
     rootEntryId,
-    isolatedEntryId,
     parentId,
     quotedEntry,
     discussionEntryVersionsConnection,
+    reportTypeCounts,
     depth,
     __typename: 'DiscussionEntry',
   }),

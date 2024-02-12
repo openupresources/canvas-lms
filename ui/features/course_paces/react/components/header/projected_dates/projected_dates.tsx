@@ -37,7 +37,6 @@ import {
 } from '../../../reducers/course_paces'
 import {coursePaceTimezone, coursePaceDateFormatter} from '../../../shared/api/backend_serializer'
 
-const {Item: FlexItem} = Flex as any
 const I18n = useI18nScope('course_paces_projected_dates')
 
 const DASH = String.fromCharCode(0x2013)
@@ -73,7 +72,7 @@ type StoreProps = {
   readonly compression: number
 }
 
-export const ProjectedDates: React.FC<StoreProps> = ({
+export const ProjectedDates = ({
   coursePace,
   assignments,
   paceDuration,
@@ -81,7 +80,7 @@ export const ProjectedDates: React.FC<StoreProps> = ({
   compressDates,
   uncompressDates,
   compression,
-}) => {
+}: StoreProps) => {
   const [dateFormatter] = useState(coursePaceDateFormatter)
 
   const enrollmentType = coursePace.context_type === 'Enrollment'
@@ -134,7 +133,7 @@ export const ProjectedDates: React.FC<StoreProps> = ({
   const renderSummary = () => {
     return (
       <Flex as="section" direction="column" alignItems="end" wrap="wrap">
-        <FlexItem margin="0">
+        <Flex.Item margin="0">
           <View padding="0 xxx-small 0 0" margin="0 x-small 0 0">
             <Text data-testid="number-of-assignments" size="small" fontStyle="italic">
               {I18n.t(
@@ -168,12 +167,12 @@ export const ProjectedDates: React.FC<StoreProps> = ({
               )}{' '}
             </Text>
           </View>
-        </FlexItem>
-        <FlexItem margin="0">
+        </Flex.Item>
+        <Flex.Item margin="0">
           <Text data-testid="dates-shown-time-zone" fontStyle="italic" size="small">
             {I18n.t('Dates shown in course time zone')}
           </Text>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     )
   }
@@ -183,22 +182,22 @@ export const ProjectedDates: React.FC<StoreProps> = ({
       <Flex as="section" alignItems="end" margin="0" wrap="wrap">
         {hasAtLeastOneDate() && (
           <>
-            <FlexItem margin="0 medium medium 0">
+            <Flex.Item margin="0 medium medium 0">
               {renderDate(
                 I18n.t('Start Date'),
                 startDateValue,
                 startHelpText,
                 'coursepace-start-date'
               )}
-            </FlexItem>
-            <FlexItem margin="0 medium medium 0" shouldGrow={true}>
+            </Flex.Item>
+            <Flex.Item margin="0 medium medium 0" shouldGrow={true}>
               {renderDate(I18n.t('End Date'), endDateValue, endHelpText, 'coursepace-end-date')}
-            </FlexItem>
+            </Flex.Item>
           </>
         )}
-        <FlexItem margin="0 0 x-small 0" shouldGrow={true}>
+        <Flex.Item margin="0 0 x-small 0" shouldGrow={true}>
           {renderSummary()}
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     </div>
   )

@@ -20,9 +20,9 @@
 describe Quizzes::QuizStatisticsSerializer do
   subject do
     Quizzes::QuizStatisticsSerializer.new(statistics, {
-                                            controller: controller,
+                                            controller:,
                                             scope: user,
-                                            session: session
+                                            session:
                                           })
   end
 
@@ -70,8 +70,7 @@ describe Quizzes::QuizStatisticsSerializer do
     }
 
     ActiveModel::FakeController.new(options).tap do |controller|
-      allow(controller).to receive(:session).and_return session
-      allow(controller).to receive(:context).and_return context
+      allow(controller).to receive_messages(session:, context:)
     end
   end
 
@@ -80,8 +79,11 @@ describe Quizzes::QuizStatisticsSerializer do
   end
 
   %w[
-    question_statistics submission_statistics multiple_attempts_exist
-    includes_all_versions generated_at
+    question_statistics
+    submission_statistics
+    multiple_attempts_exist
+    includes_all_versions
+    generated_at
   ].each do |attr|
     it "serializes #{attr}" do
       expect(@json).to have_key(attr)

@@ -19,15 +19,15 @@
 import 'jqueryui/dialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
 import axios from '@canvas/axios'
 import {setupCache} from 'axios-cache-adapter/src/index'
 import 'jqueryui/tabs'
 import globalAnnouncements from './global_announcements'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' // date_field, time_field, datetime_field, /\$\.datetime/
-import '@canvas/forms/jquery/jquery.instructure_forms' // formSubmit, getFormData, validateForm
+import '@canvas/datetime/jquery' // date_field, time_field, datetime_field, /\$\.datetime/
+import '@canvas/jquery/jquery.instructure_forms' // formSubmit, getFormData, validateForm
 import '@canvas/jquery/jquery.instructure_misc_helpers' // replaceTags
 import '@canvas/jquery/jquery.instructure_misc_plugins' // confirmDelete, showIf, /\.log/
 import '@canvas/loading-image'
@@ -146,6 +146,22 @@ $(document).ready(function () {
       return false
     }
   })
+
+  $('#account_settings_suppress_notifications').click(event => {
+    if (event.target.checked) {
+      // eslint-disable-next-line no-alert
+      const result = window.confirm(
+        I18n.t(
+          'suppress_notifications_warning',
+          "You have 'Suppress notifications from being created and sent out' checked, are you sure you want to continue?"
+        )
+      )
+      if (!result) {
+        $('#account_settings_suppress_notifications').attr('checked', false)
+      }
+    }
+  })
+
   $('.datetime_field').datetime_field({
     addHiddenInput: true,
   })
@@ -288,6 +304,15 @@ $(document).ready(function () {
     .tabs({active: initialTab >= 0 ? initialTab : null})
     .show()
 
+  $('#account_settings_restrict_quantitative_data_value').click(event => {
+    const lockbox = $('#account_settings_restrict_quantitative_data_locked')
+    if (event.target.checked) {
+      lockbox.attr('disabled', false)
+    } else {
+      lockbox.attr('checked', false)
+      lockbox.attr('disabled', true)
+    }
+  })
   $('.add_ip_filter_link').click(event => {
     event.preventDefault()
     const $filter = $('.ip_filter.blank:first').clone(true).removeClass('blank')
@@ -304,6 +329,13 @@ $(document).ready(function () {
     event.preventDefault()
     $('#ip_filters_dialog').dialog({
       title: I18n.t('titles.what_are_quiz_ip_filters', 'What are Quiz IP Filters?'),
+      width: 400,
+    })
+  })
+  $('.rqd_help_btn').click(event => {
+    event.preventDefault()
+    $('#rqd_dialog').dialog({
+      title: I18n.t('titles.rqd_help', 'Restrict Quantitative Data'),
       width: 400,
     })
   })
@@ -478,7 +510,6 @@ $(document).ready(function () {
     const $customName = $('#account_settings_outgoing_email_default_name')
     if ($useCustom.attr('checked')) {
       $customName.removeAttr('disabled')
-      $customName.focus()
     } else {
       $customName.attr('disabled', 'disabled')
     }

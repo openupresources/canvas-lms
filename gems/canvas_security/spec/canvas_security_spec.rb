@@ -31,8 +31,8 @@ describe CanvasSecurity do
             expires = 1.hour.from_now
             token = CanvasSecurity.create_jwt({ a: 1 }, expires)
 
-            expected_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9."\
-                             "eyJhIjoxLCJleHAiOjEzNjMxNjk1MjB9."\
+            expected_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." \
+                             "eyJhIjoxLCJleHAiOjEzNjMxNjk1MjB9." \
                              "VwDKl46gfjFLPAIDwlkVPze1UwC6H_ApdyWYoUXFT8M"
             expect(token).to eq(expected_token)
           end
@@ -40,8 +40,8 @@ describe CanvasSecurity do
 
         it "generates a token without expiration" do
           token = CanvasSecurity.create_jwt({ a: 1 })
-          expected_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9."\
-                           "eyJhIjoxfQ."\
+          expected_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." \
+                           "eyJhIjoxfQ." \
                            "Pr4RQfnytL0LMwQ0pJXiKoHmEGAYw2OW3pYJTQM4d9I"
           expect(token).to eq(expected_token)
         end
@@ -108,10 +108,10 @@ describe CanvasSecurity do
 
     describe ".base64_encode" do
       it "trims off newlines" do
-        input = "SuperSuperSuperSuperSuperSuperSuperSuper"\
+        input = "SuperSuperSuperSuperSuperSuperSuperSuper" \
                 "SuperSuperSuperSuperSuperSuperSuperSuperLongString"
-        output = "U3VwZXJTdXBlclN1cGVyU3VwZXJTdXBlclN1cGVy"\
-                 "U3VwZXJTdXBlclN1cGVyU3VwZXJTdXBlclN1cGVy"\
+        output = "U3VwZXJTdXBlclN1cGVyU3VwZXJTdXBlclN1cGVy" \
+                 "U3VwZXJTdXBlclN1cGVyU3VwZXJTdXBlclN1cGVy" \
                  "U3VwZXJTdXBlclN1cGVyU3VwZXJMb25nU3RyaW5n"
         expect(CanvasSecurity.base64_encode(input)).to eq(output)
       end
@@ -197,8 +197,7 @@ describe CanvasSecurity do
     end
 
     it "internally manages signing-secret rotation" do
-      allow(CanvasSecurity).to receive(:services_signing_secret).and_return("current_secret")
-      allow(CanvasSecurity).to receive(:services_previous_signing_secret).and_return("previous_secret")
+      allow(CanvasSecurity).to receive_messages(services_signing_secret: "current_secret", services_previous_signing_secret: "previous_secret")
       signature = CanvasSecurity.sign_hmac_sha512(message, "previous_secret")
       verification = CanvasSecurity.verify_hmac_sha512(message, signature, "current_secret")
       expect(verification).to be_truthy
@@ -215,6 +214,13 @@ describe CanvasSecurity do
       expect(File).to receive(:read).with(Rails.root.join("config/security.yml").to_s).and_return(config)
       expect(ENV).to receive(:[]).with("ENCRYPTION_KEY").and_return("secret")
       expect(CanvasSecurity.config).to eq("encryption_key" => "secret")
+    end
+
+    it "falls back to Vault for the encryption key if not defined in the config file" do
+      config = "test:\n  another_key: true"
+      expect(File).to receive(:read).with(Rails.root.join("config/security.yml").to_s).and_return(config)
+      expect(Rails).to receive(:application).and_return(OpenStruct.new({ credentials: OpenStruct.new({ security_encryption_key: "secret" }) }))
+      expect(CanvasSecurity.config).to eq("encryption_key" => "secret", "another_key" => true)
     end
   end
 end

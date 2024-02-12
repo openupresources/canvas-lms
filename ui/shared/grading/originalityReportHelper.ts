@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import type {SubmissionOriginalityData, OriginalityData} from '@canvas/grading/grading.d'
+import type {SubmissionOriginalityData, OriginalityData} from './grading.d'
 
 export function originalityReportSubmissionKey(submission: {
-  id: string
-  submitted_at: null | string | Date
+  id?: string
+  submitted_at?: null | string | Date
   submittedAt?: null | string | Date
 }): string {
   try {
@@ -69,7 +69,8 @@ export function getOriginalityData(
       [key: string]: SubmissionOriginalityData
     }
     attachments: any
-    submitted_at: string
+    submittedAt?: null | string | Date
+    submitted_at?: null | string | Date
   },
   index: number
 ): false | OriginalityData {

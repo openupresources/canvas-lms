@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "webdrivers/chromedriver"
 require_relative "common_helper_methods/custom_alert_actions"
 require_relative "common_helper_methods/custom_screen_actions"
 require_relative "patches/selenium/webdriver/remote/w3c/bridge"
@@ -32,7 +31,7 @@ module SeleniumDriverSetup
     implicit_wait: 0,
     # except finding elements
     finder: CONFIG[:finder_timeout_seconds] || 5,
-    script: CONFIG[:script_timeout_seconds] || 5
+    script: CONFIG[:script_timeout_seconds] || 5,
   }.freeze
 
   # If you have some really slow UI, you can temporarily override
@@ -75,19 +74,13 @@ module SeleniumDriverSetup
       @driver = nil
     end
 
-    def saucelabs_test_run?
-      SeleniumDriverSetup::CONFIG[:remote_url].present? &&
-        SeleniumDriverSetup::CONFIG[:remote_url].downcase.include?("saucelabs")
-    end
-
     def run
       begin
         [
           Thread.new { start_webserver },
-          Thread.new { start_driver }
+          Thread.new { start_driver },
         ].each(&:join)
       rescue Selenium::WebDriver::Error::WebDriverError
-        driver.quit if saucelabs_test_run?
       rescue
         puts "selenium startup failed: #{$ERROR_INFO}"
         puts "exiting :'("
@@ -104,10 +97,7 @@ module SeleniumDriverSetup
 
     def shutdown
       server&.shutdown
-      if driver
-        driver.close
-        driver.quit
-      end
+      driver&.quit
     rescue
       nil
     end
@@ -251,12 +241,7 @@ module SeleniumDriverSetup
 
     def ruby_chrome_driver
       puts "Thread: provisioning local chrome driver"
-      # in your selenium.yml you can define a different chromedriver version
-      # by modifying 'chromedriver_version: <version>' for the version you want.
-      # otherwise this will use the default version matching what is used in docker.
-      Webdrivers::Chromedriver.required_version = CONFIG[:chromedriver_version]
-
-      Selenium::WebDriver.for :chrome, capabilities: desired_capabilities
+      Selenium::WebDriver.for :chrome, options: desired_capabilities
     end
 
     def ruby_safari_driver
@@ -294,11 +279,15 @@ module SeleniumDriverSetup
         options.log_level = :debug
       when :chrome
         options = Selenium::WebDriver::Options.chrome
-        options.add_argument("no-sandbox")
-        options.add_argument("start-maximized")
-        options.add_argument("disable-dev-shm-usage")
+        options.browser_version = CONFIG[:browser_version] if CONFIG[:browser_version]
+        options.args << "no-sandbox"
+        options.args << "start-maximized"
+        options.args << "disable-dev-shm-usage"
+        if ENV["DISABLE_CORS"]
+          options.args << "disable-web-security"
+        end
         options.logging_prefs = {
-          browser: "ALL"
+          browser: "ALL",
         }
         # put `auto_open_devtools: true` in your selenium.yml if you want to have
         # the chrome dev tools open by default by selenium
@@ -340,13 +329,15 @@ module SeleniumDriverSetup
     def ruby_firefox_driver
       puts "Thread: provisioning local firefox driver"
       Selenium::WebDriver.for(:firefox,
-                              capabilities: desired_capabilities)
+                              options: desired_capabilities)
     end
 
-    def_delegator :driver_capabilities, :browser_name
+    def browser_name
+      driver.capabilities[:browser_name]
+    end
 
     def browser_version
-      driver_capabilities.version
+      driver.capabilities[:browser_version]
     end
 
     def driver_capabilities
@@ -398,7 +389,8 @@ module SeleniumDriverSetup
       end.to_app
     end
 
-    ASSET_PATH = %r{\A/(dist|fonts|images|javascripts)/.*\.[a-z0-9]+\z}.freeze
+    ASSET_PATH = %r{\A/(dist|fonts|images|javascripts)/.*\.[a-z0-9]+\z}
+
     def asset_request?(url)
       url =~ ASSET_PATH
     end

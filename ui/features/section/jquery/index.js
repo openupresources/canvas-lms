@@ -1,3 +1,4 @@
+/* eslint-disable eqeqeq */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -19,19 +20,21 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* time_field, datetime_field */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, formErrors */
+import '@canvas/datetime/jquery' /* time_field, datetime_field */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, showIf */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
-import 'jqueryui/autocomplete'
+import 'jqueryui-unpatched/menu'
+import 'jqueryui-unpatched/autocomplete'
 import PaginatedList from './PaginatedList'
 import enrollmentTemplate from '../jst/enrollment.handlebars'
 import sectionEnrollmentPresenter from '../sectionEnrollmentPresenter'
 import '@canvas/context-cards/react/StudentContextCardTrigger'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('section')
 
@@ -175,7 +178,7 @@ $(document).ready(function () {
     $.screenReaderFlashMessage(confirmingText)
     $('#sis_id_holder,#account_name_holder').hide()
     $('#course_autocomplete_account_name').hide()
-    const url = $.replaceTags($('#course_confirm_crosslist_url').attr('href'), 'id', course.id)
+    const url = replaceTags($('#course_confirm_crosslist_url').attr('href'), 'id', course.id)
     latest_course_id = course.id
     const course_id_before_get = latest_course_id
     $.ajaxJSON(

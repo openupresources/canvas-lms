@@ -28,7 +28,7 @@ module Api
       def self.process_incoming(html, host: nil, port: nil)
         return html unless html.present?
 
-        content = new(html, host: host, port: port)
+        content = new(html, host:, port:)
 
         content.validate_is_parsable!
 
@@ -41,7 +41,7 @@ module Api
       def self.rewrite_outgoing(html, account, url_helper, include_mobile: false, rewrite_api_urls: true)
         return html if html.blank?
 
-        new(html, account, include_mobile: include_mobile, rewrite_api_urls: rewrite_api_urls)
+        new(html, account, include_mobile:, rewrite_api_urls:)
           .rewritten_html(url_helper)
       end
 
@@ -55,7 +55,7 @@ module Api
 
           # NOTE: we use "x-canvaslms-safe-mathml" instead of just "data-mathml"
           # because canvas_sanitize will strip it out on the way in but it won't
-          # strip out data-mathml. This means we can gaurentee that there is never
+          # strip out data-mathml. This means we can guarantee that there is never
           # user input in x-canvaslms-safe-mathml and we can safely pass it to
           # $el.html() in translateMathmlForScreenreaders in the js in the frontend
           node["x-canvaslms-safe-mathml"] = mathml
@@ -102,7 +102,8 @@ module Api
         "img" => ["src"].freeze,
         "object" => ["data"].freeze, # needed?
         "embed" => ["src"].freeze, # needed?
-        "iframe" => ["src"].freeze # needed?
+        "iframe" => ["src"].freeze, # needed?
+        "source" => ["srcset"].freeze, # needed?
       }.freeze
 
       # rewrite HTML being sent out to an API request to make sure

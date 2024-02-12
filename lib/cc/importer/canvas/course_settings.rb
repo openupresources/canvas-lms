@@ -29,7 +29,7 @@ module CC::Importer::Canvas
     def settings_doc(file, html = false)
       path = @package_root.item_path(COURSE_SETTINGS_DIR, file)
       return nil unless File.exist? path
-      return nil if File.size(path) > Setting.get("course_settings_import_xml_threshold", 25.megabytes).to_i # totally arbitrary hack to keep some broken exports from killing things
+      return nil if File.size(path) > 25.megabytes.to_i # totally arbitrary hack to keep some broken exports from killing things
 
       if html
         open_file path
@@ -63,26 +63,61 @@ module CC::Importer::Canvas
 
       course[:migration_id] = get_node_att(doc, "course", "identifier")
 
-      %w[title course_code default_wiki_editing_roles
-         turnitin_comments default_view license locale
-         group_weighting_scheme storage_quota grading_standard_identifier_ref
-         overridden_course_visibility root_account_uuid
-         image_url image_identifier_ref banner_image_url banner_image_identifier_ref
-         course_color alt_name time_zone].each do |string_type|
+      %w[title
+         course_code
+         default_wiki_editing_roles
+         turnitin_comments
+         default_view
+         license
+         locale
+         group_weighting_scheme
+         storage_quota
+         grading_standard_identifier_ref
+         overridden_course_visibility
+         root_account_uuid
+         image_url
+         image_identifier_ref
+         banner_image_url
+         banner_image_identifier_ref
+         course_color
+         alt_name
+         time_zone].each do |string_type|
         val = get_node_val(doc, string_type)
         course[string_type] = val unless val.nil?
       end
-      %w[is_public is_public_to_auth_users
-         public_syllabus public_syllabus_to_auth syllabus_course_summary
-         indexed allow_student_wiki_edits allow_student_assignment_edits
-         show_public_context_messages allow_student_forum_attachments
-         allow_student_organized_groups lock_all_announcements open_enrollment allow_wiki_comments
-         self_enrollment hide_final_grade filter_speed_grader_by_student_group
-         grading_standard_enabled hide_distribution_graphs allow_student_discussion_topics
-         allow_student_discussion_editing show_announcements_on_home_page usage_rights_required
-         restrict_student_future_view restrict_student_past_view show_total_grade_as_points
-         organize_epub_by_content_type enable_offline_web_export restrict_enrollments_to_course_dates
-         homeroom_course allow_final_grade_override enable_course_paces].each do |bool_val|
+      %w[is_public
+         is_public_to_auth_users
+         public_syllabus
+         public_syllabus_to_auth
+         syllabus_course_summary
+         indexed
+         allow_student_wiki_edits
+         allow_student_assignment_edits
+         show_public_context_messages
+         allow_student_forum_attachments
+         allow_student_organized_groups
+         lock_all_announcements
+         open_enrollment
+         allow_wiki_comments
+         self_enrollment
+         hide_final_grade
+         filter_speed_grader_by_student_group
+         grading_standard_enabled
+         hide_distribution_graphs
+         allow_student_discussion_topics
+         allow_student_discussion_editing
+         show_announcements_on_home_page
+         usage_rights_required
+         restrict_student_future_view
+         restrict_student_past_view
+         restrict_quantitative_data
+         show_total_grade_as_points
+         organize_epub_by_content_type
+         enable_offline_web_export
+         restrict_enrollments_to_course_dates
+         homeroom_course
+         allow_final_grade_override
+         enable_course_paces].each do |bool_val|
         val = get_bool_val(doc, bool_val)
         course[bool_val] = val unless val.nil?
       end
@@ -109,7 +144,7 @@ module CC::Importer::Canvas
       end
 
       post_manually = get_bool_val(doc, "default_post_policy post_manually")
-      course[:default_post_policy] = { post_manually: post_manually } unless post_manually.nil?
+      course[:default_post_policy] = { post_manually: } unless post_manually.nil?
 
       course
     end
@@ -191,6 +226,8 @@ module CC::Importer::Canvas
         standard["version"] = node["version"]
         standard["title"] = get_node_val(node, "title")
         standard["data"] = get_node_val(node, "data")
+        standard["points_based"] = get_bool_val(node, "points_based")
+        standard["scaling_factor"] = get_node_val(node, "scaling_factor")
         standards << standard
       end
 
@@ -210,6 +247,9 @@ module CC::Importer::Canvas
         event["end_at"] = get_time_val(node, "end_at")
         event["all_day_date"] = get_time_val(node, "all_day_date")
         event["all_day"] = get_bool_val(node, "all_day", false)
+        event["rrule"] = get_node_val(node, "rrule")
+        event["series_uuid"] = get_node_val(node, "series_uuid")
+        event["series_head"] = get_node_val(node, "series_head", nil)
         events << event
       end
 

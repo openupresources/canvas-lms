@@ -54,7 +54,7 @@ describe WikiPagesApiController, type: :request do
         }
         path[:url_or_id] = "new-page" if @http_verb == :put
         params = { wiki_page: wiki_params }
-        api_call_as_user(user, @http_verb, @url, path, params, {}, { expected_status: expected_status })
+        api_call_as_user(user, @http_verb, @url, path, params, {}, { expected_status: })
       end
 
       context "with a title containing charaters from the Katakana script" do
@@ -130,6 +130,43 @@ describe WikiPagesApiController, type: :request do
             create_wiki_page(@teacher, { title: "New Page", editing_roles: "public" }, 401)
             expect(WikiPage.last).to be_nil
           end
+
+          context "with the block editor" do
+            context "with the block editor feature flag on" do
+              before do
+                Account.default.enable_feature!(:block_editor)
+              end
+
+              it "succeeds" do
+                block_editor_attributes = {
+                  time: Time.now.to_i,
+                  blocks: [{ "data" => { "text" => "test" }, "id" => "R0iGYLKhw2", "type" => "paragraph" }],
+                  version: "1.0"
+                }
+                create_wiki_page(@teacher, { title: "New Page", block_editor_attributes: })
+                expect(WikiPage.last.title).to eq "New Page"
+                expect(WikiPage.last.block_editor).to be_present
+                expect(WikiPage.last.block_editor.blocks).to eq([{ "data" => { "text" => "test" }, "id" => "R0iGYLKhw2", "type" => "paragraph" }])
+              end
+            end
+
+            context "with the block editor feature flag off" do
+              before do
+                Account.default.disable_feature!(:block_editor)
+              end
+
+              it "ignores the block_editor_attributes" do
+                block_editor_attributes = {
+                  time: Time.now.to_i,
+                  blocks: [{ "data" => { "text" => "test" }, "id" => "R0iGYLKhw2", "type" => "paragraph" }],
+                  version: "1.0"
+                }
+                create_wiki_page(@teacher, { title: "New Page", block_editor_attributes: })
+                expect(WikiPage.last.title).to eq "New Page"
+                expect(WikiPage.last.block_editor).not_to be_present
+              end
+            end
+          end
         end
 
         context "with the user not having manage_wiki_create permission" do
@@ -183,7 +220,7 @@ describe WikiPagesApiController, type: :request do
         course_id: @course.id.to_s,
         url_or_id: @page.url,
       }
-      api_call_as_user(user, :delete, url, path, {}, {}, { expected_status: expected_status })
+      api_call_as_user(user, :delete, url, path, {}, {}, { expected_status: })
     end
 
     it "allows you to destroy a wiki page if you have the manage_wiki_delete permission" do
@@ -220,7 +257,7 @@ describe WikiPagesApiController, type: :request do
         course_id: @course.id.to_s,
         url_or_id: @page.url,
       }
-      api_call_as_user(user, :get, url, path, {}, {}, { expected_status: expected_status })
+      api_call_as_user(user, :get, url, path, {}, {}, { expected_status: })
     end
 
     it "works for teachers" do
@@ -254,7 +291,8 @@ describe WikiPagesApiController, type: :request do
     end
 
     it "returns unauthorized if not a teacher" do
-      api_call_as_user(@student, :post,
+      api_call_as_user(@student,
+                       :post,
                        "/api/v1/courses/#{@course.id}/pages/#{@page.url}/duplicate.json",
                        { controller: "wiki_pages_api",
                          action: "duplicate",
@@ -267,7 +305,8 @@ describe WikiPagesApiController, type: :request do
     end
 
     it "can duplicate wiki non-assignment if teacher" do
-      json = api_call_as_user(@teacher, :post,
+      json = api_call_as_user(@teacher,
+                              :post,
                               "/api/v1/courses/#{@course.id}/pages/#{@page.url}/duplicate.json",
                               { controller: "wiki_pages_api",
                                 action: "duplicate",
@@ -282,7 +321,8 @@ describe WikiPagesApiController, type: :request do
 
     it "can duplicate wiki assignment if teacher" do
       wiki_page_assignment_model({ title: "Assignment Wiki" })
-      json = api_call_as_user(@teacher, :post,
+      json = api_call_as_user(@teacher,
+                              :post,
                               "/api/v1/courses/#{@course.id}/pages/#{@page.url}/duplicate.json",
                               { controller: "wiki_pages_api",
                                 action: "duplicate",
@@ -293,6 +333,109 @@ describe WikiPagesApiController, type: :request do
                               {},
                               { expected_status: 200 })
       expect(json["title"]).to eq "Assignment Wiki Copy"
+    end
+  end
+
+  describe "GET 'check_title_availability'" do
+    before do
+      course_with_teacher(active_all: true)
+      wiki_page_model({ title: "Learning Foundations" })
+    end
+
+    context "with the flag off" do
+      before do
+        Account.site_admin.disable_feature!(:permanent_page_links)
+      end
+
+      it "404s" do
+        api_call_as_user(@teacher,
+                         :get,
+                         "/api/v1/courses/#{@course.id}/page_title_availability",
+                         { controller: "wiki_pages_api",
+                           action: "check_title_availability",
+                           format: "json",
+                           course_id: @course.id.to_s },
+                         {},
+                         {},
+                         { expected_status: 404 })
+      end
+    end
+
+    context "with the flag on" do
+      before do
+        Account.site_admin.enable_feature!(:permanent_page_links)
+      end
+
+      it "401s for unauthorized users" do
+        new_user = User.create!
+        api_call_as_user(new_user,
+                         :get,
+                         "/api/v1/courses/#{@course.id}/page_title_availability",
+                         { controller: "wiki_pages_api",
+                           action: "check_title_availability",
+                           format: "json",
+                           course_id: @course.id.to_s },
+                         {},
+                         {},
+                         { expected_status: 401 })
+      end
+
+      it "400s if missing title field in request body" do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                {},
+                                {},
+                                { expected_status: 400 })
+        expect(json["errors"][0]["message"]).to eq "title is missing"
+      end
+
+      it "correctly indicates conflicts" do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                { title: @page.title },
+                                {},
+                                { expected_status: 200 })
+        expect(json["conflict"]).to be true
+      end
+
+      it "correctly indicates lack of conflicts" do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                { title: "Einzigartig" },
+                                {},
+                                { expected_status: 200 })
+        expect(json["conflict"]).to be false
+      end
+
+      it "doesn't indicate conflict for deleted page titles" do
+        @page.destroy
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                { title: @page.title },
+                                {},
+                                { expected_status: 200 })
+        expect(json["conflict"]).to be false
+      end
     end
   end
 end

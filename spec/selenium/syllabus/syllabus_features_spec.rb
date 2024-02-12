@@ -22,7 +22,7 @@ require_relative "../helpers/public_courses_context"
 require_relative "../helpers/files_common"
 require_relative "../helpers/wiki_and_tiny_common"
 require_relative "../rcs/pages/rce_next_page"
-require_relative "./pages/syllabus_page"
+require_relative "pages/syllabus_page"
 
 describe "course syllabus" do
   include_context "in-process server selenium tests"
@@ -35,7 +35,7 @@ describe "course syllabus" do
     # assignment data
     assignment = assignment_model({
                                     course: @course,
-                                    title: title,
+                                    title:,
                                     due_at: nil,
                                     points_possible: points,
                                     submission_types: "online_text_entry",
@@ -76,7 +76,7 @@ describe "course syllabus" do
       expect(f("#course_syllabus").text).to eq new_description
     end
 
-    it "inserts a file using RCE in the syllabus", priority: "1", custom_timeout: 30 do
+    it "inserts a file using RCE in the syllabus", custom_timeout: 30, priority: "1" do
       file = @course.attachments.create!(display_name: "text_file.txt", uploaded_data: default_uploaded_data)
       file.context = @course
       file.save!

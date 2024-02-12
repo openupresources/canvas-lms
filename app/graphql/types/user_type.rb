@@ -40,10 +40,12 @@ module Types
     global_id_field :id
 
     field :name, String, null: true
-    field :sortable_name, String,
+    field :sortable_name,
+          String,
           "The name of the user that is should be used for sorting groups of users, such as in the gradebook.",
           null: true
-    field :short_name, String,
+    field :short_name,
+          String,
           "A short name the user has selected, for use in conversations or other less formal places through the site.",
           null: true
 
@@ -64,6 +66,17 @@ module Types
       end
     end
 
+    field :html_url, UrlType, null: true do
+      argument :course_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
+    end
+    def html_url(course_id:)
+      GraphQLHelpers::UrlHelpers.course_user_url(
+        course_id:,
+        id: object.id,
+        host: context[:request].host_with_port
+      )
+    end
+
     field :email, String, null: true
 
     def email
@@ -76,6 +89,8 @@ module Types
                                 .then { object.email }
     end
 
+    field :uuid, String, null: true
+
     field :sis_id, String, null: true
     def sis_id
       domain_root_account = context[:domain_root_account]
@@ -84,8 +99,12 @@ module Types
         Loaders::AssociationLoader.for(User, :pseudonyms)
                                   .load(object)
                                   .then do
-          pseudonym = SisPseudonym.for(object, domain_root_account, type: :implicit, require_sis: false,
-                                                                    root_account: domain_root_account, in_region: true)
+          pseudonym = SisPseudonym.for(object,
+                                       domain_root_account,
+                                       type: :implicit,
+                                       require_sis: false,
+                                       root_account: domain_root_account,
+                                       in_region: true)
           pseudonym&.sis_user_id
         end
       end
@@ -99,25 +118,33 @@ module Types
         Loaders::AssociationLoader.for(User, :pseudonyms)
                                   .load(object)
                                   .then do
-          pseudonym = SisPseudonym.for(object, domain_root_account, type: :implicit, require_sis: false,
-                                                                    root_account: domain_root_account, in_region: true)
+          pseudonym = SisPseudonym.for(object,
+                                       domain_root_account,
+                                       type: :implicit,
+                                       require_sis: false,
+                                       root_account: domain_root_account,
+                                       in_region: true)
           pseudonym&.integration_id
         end
       end
     end
 
     field :enrollments, [EnrollmentType], null: false do
-      argument :course_id, ID,
+      argument :course_id,
+               ID,
                "only return enrollments for this course",
                required: false,
                prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
-      argument :current_only, Boolean,
+      argument :current_only,
+               Boolean,
                "Whether or not to restrict results to `active` enrollments in `available` courses",
                required: false
-      argument :order_by, [String],
+      argument :order_by,
+               [String],
                "The fields to order the results by",
                required: false
-      argument :exclude_concluded, Boolean,
+      argument :exclude_concluded,
+               Boolean,
                "Whether or not to exclude `completed` enrollments",
                required: false
     end
@@ -143,10 +170,10 @@ module Types
     def enrollments(course_id: nil, current_only: false, order_by: [], exclude_concluded: false)
       course_ids = [course_id].compact
       Loaders::UserCourseEnrollmentLoader.for(
-        course_ids: course_ids,
-        order_by: order_by,
-        current_only: current_only,
-        exclude_concluded: exclude_concluded
+        course_ids:,
+        order_by:,
+        current_only:,
+        exclude_concluded:
       ).load(object.id).then do |enrollments|
         (enrollments || []).select do |enrollment|
           object == context[:current_user] ||
@@ -237,44 +264,46 @@ module Types
     def recipients(search: nil, context: nil)
       return nil unless object == self.context[:current_user]
 
-      @current_user = object
-      search_context = AddressBook.load_context(context)
+      GuardRail.activate(:secondary) do
+        @current_user = object
+        search_context = AddressBook.load_context(context)
 
-      load_all_contexts(
-        context: search_context,
-        permissions: [:send_messages, :send_messages_all],
-        base_url: self.context[:request].base_url
-      )
+        load_all_contexts(
+          context: search_context,
+          permissions: [:send_messages, :send_messages_all],
+          base_url: self.context[:request].base_url
+        )
 
-      collections = search_contexts_and_users(
-        search: search,
-        context: context,
-        synthetic_contexts: true,
-        messageable_only: true,
-        base_url: self.context[:request].base_url
-      )
+        collections = search_contexts_and_users(
+          search:,
+          context:,
+          synthetic_contexts: true,
+          messageable_only: true,
+          base_url: self.context[:request].base_url
+        )
 
-      contexts_collection = collections.select { |c| c[0] == "contexts" }
-      users_collection = collections.select { |c| c[0] == "participants" }
+        contexts_collection = collections.select { |c| c[0] == "contexts" }
+        users_collection = collections.select { |c| c[0] == "participants" }
 
-      contexts_collection = contexts_collection[0][1] if contexts_collection.count > 0
-      users_collection = users_collection[0][1] if users_collection.count > 0
+        contexts_collection = contexts_collection[0][1] if contexts_collection.count > 0
+        users_collection = users_collection[0][1] if users_collection.count > 0
 
-      can_send_all = if search_context.nil?
-                       false
-                     elsif search_context.is_a?(Course)
-                       search_context.grants_any_right?(object, :send_messages_all)
-                     elsif !search_context.course.nil?
-                       search_context.course.grants_any_right?(object, :send_messages_all)
-                     end
+        can_send_all = if search_context.nil?
+                         false
+                       elsif search_context.is_a?(Course)
+                         search_context.grants_any_right?(object, :send_messages_all)
+                       elsif !search_context.course.nil?
+                         search_context.course.grants_any_right?(object, :send_messages_all)
+                       end
 
-      # The contexts_connection and users_connection return types of custom Collections
-      # These special data structures are handled in the collection_connection.rb files
-      {
-        sendMessagesAll: !!can_send_all,
-        contexts_connection: contexts_collection,
-        users_connection: users_collection
-      }
+        # The contexts_connection and users_connection return types of custom Collections
+        # These special data structures are handled in the collection_connection.rb files
+        {
+          sendMessagesAll: !!can_send_all,
+          contexts_connection: contexts_collection,
+          users_connection: users_collection
+        }
+      end
     rescue ActiveRecord::RecordNotFound
       nil
     end
@@ -292,11 +321,11 @@ module Types
 
       # Setting this global variable is required for helper functions to run correctly
       @current_user = object
-      normalized_recipient_ids = normalize_recipients(recipients: recipient_ids, context_code: context_code).map(&:id)
+      normalized_recipient_ids = normalize_recipients(recipients: recipient_ids, context_code:).map(&:id)
       course_observers_observing_recipients_ids = course_context.enrollments.not_fake.active_by_date.of_observer_type.where(associated_user_id: normalized_recipient_ids).distinct.pluck(:user_id)
 
       # Normalize recipients should remove any observers that the current user is not able to message
-      normalize_recipients(recipients: course_observers_observing_recipients_ids, context_code: context_code)
+      normalize_recipients(recipients: course_observers_observing_recipients_ids, context_code:)
     end
 
     # TODO: deprecate this
@@ -320,7 +349,8 @@ module Types
     end
 
     field :summary_analytics, StudentSummaryAnalyticsType, null: true do
-      argument :course_id, ID,
+      argument :course_id,
+               ID,
                "returns summary analytics for this course",
                required: true,
                prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
@@ -329,7 +359,8 @@ module Types
     def summary_analytics(course_id:)
       Loaders::CourseStudentAnalyticsLoader.for(
         course_id,
-        current_user: context[:current_user], session: context[:session]
+        current_user: context[:current_user],
+        session: context[:session]
       ).load(object)
     end
 
@@ -404,7 +435,8 @@ module Types
         submissions += Submission.where(id: submission_ids)
       end
       InstStatsd::Statsd.increment("inbox.visit.scope.submission_comments.pages_loaded.react")
-      submissions.sort_by { |t| t.last_comment_at || t.created_at }.reverse
+      # if .last_comment_at is nil check the last created submission comment
+      submissions.sort_by { |t| t.last_comment_at || t.submission_comments.last.created_at }.reverse
     rescue
       []
     end
@@ -444,7 +476,14 @@ module Types
       # contains a discussionRoles field
       return if course_id.nil?
 
-      Loaders::CourseRoleLoader.for(course_id: course_id, role_types: role_types, built_in_only: built_in_only).load(object)
+      Loaders::CourseRoleLoader.for(course_id:, role_types:, built_in_only:).load(object)
+    end
+
+    field :inbox_labels, [String], null: true
+    def inbox_labels
+      return unless object == current_user
+
+      object.inbox_labels
     end
   end
 end
@@ -465,7 +504,7 @@ module Loaders
 
       scope = scope.where.not(enrollments: { workflow_state: "completed" }) if exclude_concluded
 
-      scope = scope.active_by_date_or_completed if exclude_pending_enrollments
+      scope = scope.excluding_pending if exclude_pending_enrollments
 
       order_by.each { |o| scope = scope.order(o) }
 

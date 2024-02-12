@@ -19,12 +19,12 @@
 
 require "microsoft_sync/membership_diff"
 
-describe MicrosoftSync::GroupsController, type: :controller do
-  let!(:group) { MicrosoftSync::Group.create!(course: course, workflow_state: workflow_state) }
+describe MicrosoftSync::GroupsController do
+  let!(:group) { MicrosoftSync::Group.create!(course:, workflow_state:) }
 
   let(:course_id) { course.id }
   let(:feature) { :microsoft_group_enrollments_syncing }
-  let(:params) { { course_id: course_id } }
+  let(:params) { { course_id: } }
   let(:student) { course.student_enrollments.first.user }
   let(:teacher) { course.teacher_enrollments.first.user }
   let(:workflow_state) { :completed }
@@ -125,7 +125,7 @@ describe MicrosoftSync::GroupsController, type: :controller do
   end
 
   describe "#sync" do
-    subject { post :sync, params: params }
+    subject { post :sync, params: }
 
     before { user_session(teacher) }
 
@@ -191,7 +191,7 @@ describe MicrosoftSync::GroupsController, type: :controller do
   end
 
   describe "#create" do
-    subject { post :create, params: params }
+    subject { post :create, params: }
 
     before { user_session(teacher) }
 
@@ -259,7 +259,7 @@ describe MicrosoftSync::GroupsController, type: :controller do
 
       it 'responds with "created"' do
         subject
-        expect(response.status).to eq 201
+        expect(response).to have_http_status :created
       end
 
       it "creates a new group" do
@@ -274,7 +274,7 @@ describe MicrosoftSync::GroupsController, type: :controller do
       end
 
       context "when too many owners are enrolled in the course" do
-        before { 3.times { teacher_in_course(course: course, active_enrollment: true) } }
+        before { 3.times { teacher_in_course(course:, active_enrollment: true) } }
 
         before { stub_const("MicrosoftSync::MembershipDiff::MAX_ENROLLMENT_OWNERS", 2) }
 
@@ -283,12 +283,12 @@ describe MicrosoftSync::GroupsController, type: :controller do
           expect(response.parsed_body["message"]).to match(
             /allows a maximum of 2 owners/
           )
-          expect(response.status).to eq 422
+          expect(response).to have_http_status :unprocessable_entity
         end
       end
 
       context "when too many members are enrolled in the course" do
-        before { 3.times { student_in_course(course: course, active_enrollment: true) } }
+        before { 3.times { student_in_course(course:, active_enrollment: true) } }
 
         before { stub_const("MicrosoftSync::MembershipDiff::MAX_ENROLLMENT_MEMBERS", 2) }
 
@@ -297,14 +297,14 @@ describe MicrosoftSync::GroupsController, type: :controller do
           expect(response.parsed_body["message"]).to match(
             /allows a maximum of 2 members/
           )
-          expect(response.status).to eq 422
+          expect(response).to have_http_status :unprocessable_entity
         end
       end
     end
   end
 
   describe "#deleted" do
-    subject { delete :destroy, params: params }
+    subject { delete :destroy, params: }
 
     before { user_session(teacher) }
 
@@ -323,7 +323,7 @@ describe MicrosoftSync::GroupsController, type: :controller do
   end
 
   describe "#show" do
-    subject { get :show, params: params }
+    subject { get :show, params: }
 
     before { user_session(teacher) }
 
@@ -341,6 +341,32 @@ describe MicrosoftSync::GroupsController, type: :controller do
       expect(json_parse).to eq(
         JSON.parse(group.to_json(include_root: false, except: %i[job_state last_error_report_id]))
       )
+    end
+
+    describe "when there is debug info present on the entry" do
+      let(:debug_info) { [{ "msg" => "Some fake debug info", "timestamp" => "2020-01-01T00:00:00Z" }] }
+
+      before { group.update debug_info:, last_error_report: ErrorReport.create! }
+
+      context "when the user is SiteAdmin" do
+        before { user_session(site_admin) }
+
+        let(:site_admin) { site_admin_user(user: user_with_pseudonym(account: Account.site_admin)) }
+
+        it "includes the debugging info and error report id" do
+          expect(subject).to be_successful
+          expect(json_parse["debug_info"]).to eq(debug_info)
+          expect(json_parse["last_error_report_id"]).to eq(group.last_error_report.id)
+        end
+      end
+
+      context "when the user is not SiteAdmin" do
+        it "does not include the debugging info or last error report id" do
+          expect(subject).to be_successful
+          expect(json_parse["debug_info"]).to be_nil
+          expect(json_parse["last_error_report_id"]).to be_nil
+        end
+      end
     end
   end
 end

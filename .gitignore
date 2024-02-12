@@ -10,14 +10,17 @@
 #
 # That's what .git/info/exclude and core.excludesfile are for :)
 .bundle/
-.byebug_history
 .env
 .mutagen
+.swc
 /.yardoc/
 /.ruby-version
 /app/views/info/styleguide.html.erb
 /config/*.yml
+/config/*.yml.cached
 /config/credentials.yml.enc
+!/config/brakeman.yml
+!/config/code_ownership.yml
 !/config/credentials.test.yml
 !/config/crystalball.yml
 /config/environments/*-local.rb
@@ -29,13 +32,12 @@
 /db/*sql
 docker-compose.override.yml
 /exports/
-Gemfile.lock
-Gemfile.*.lock
+/Gemfile.*.plugins.lock
 /log/*
 !/log/.keep
 !/log/parallel-runtime-rspec.log
 mkmf.log
-/node_modules
+node_modules
 npm-debug.log
 /public/dist/
 /public/doc/api/
@@ -48,6 +50,7 @@ npm-debug.log
 yarn-error.log
 dump.rdb
 .eslintcache
+tsconfig.tsbuildinfo
 
 # canvas-gems
 /gems/*/coverage
@@ -63,6 +66,7 @@ dump.rdb
 
 # user docker compose overrides
 docker-compose.local.*
+!/inst-cli/docker-compose/docker-compose.local.dev.yml
 # experimental api gateway config
 docker-compose/api-gateway.override.yml
 
@@ -70,10 +74,8 @@ docker-compose/api-gateway.override.yml
 /packages/*/node_modules
 /packages/*/es
 /packages/*/lib
-!/packages/babel-plugin-themeable-styles/lib
 /packages/*/coverage/
 /packages/*/coverage-js/
-/packages/canvas-planner/.babel-cache
 
 # pact artifacts
 /reports/

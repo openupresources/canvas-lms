@@ -27,7 +27,8 @@ describe "User data exports" do
     @assignment.save!
 
     @file = Attachment.create!(uploaded_data: StringIO.new("blah"),
-                               context: @course, filename: "blah.txt")
+                               context: @course,
+                               filename: "blah.txt")
     @sub1 = @assignment.submit_homework(@student, attachments: [@file], submission_type: "online_upload")
     @sub2 = @assignment.submit_homework(@student, body: "blahblahblah text entry", submission_type: "online_text_entry")
     @sub3 = @assignment.submit_homework(@student, url: "http://reddit.com/r/mylittlepony", submission_type: "online_url")
@@ -55,9 +56,8 @@ describe "User data exports" do
   end
 
   it "uses inst-fs if enabled" do
-    allow(InstFS).to receive(:enabled?).and_return(true)
     uuid = "1234-abcd"
-    allow(InstFS).to receive(:direct_upload).and_return(uuid)
+    allow(InstFS).to receive_messages(enabled?: true, direct_upload: uuid)
 
     exported_attachment = Exporters::UserDataExporter.create_user_data_export(@student)
 

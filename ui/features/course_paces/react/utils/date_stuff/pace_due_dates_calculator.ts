@@ -18,8 +18,8 @@
 
 import moment from 'moment-timezone'
 
-import {CoursePaceItem, CoursePaceItemDueDates} from '../../types'
-import {BlackoutDate} from '../../shared/types'
+import type {CoursePaceItem, CoursePaceItemDueDates} from '../../types'
+import type {BlackoutDate} from '../../shared/types'
 import * as DateHelpers from './date_helpers'
 
 /*
@@ -59,7 +59,9 @@ export const getDueDates = (
   blackoutDates: BlackoutDate[],
   startDate?: string
 ): CoursePaceItemDueDates => {
-  const dueDates = {}
+  const dueDates: {
+    [key: string]: string
+  } = {}
   if (!startDate) return dueDates
 
   let currentStart = DateHelpers.formatDate(moment(startDate))

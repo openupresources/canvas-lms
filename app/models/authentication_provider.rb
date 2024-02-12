@@ -26,6 +26,8 @@ class AuthenticationProvider < ActiveRecord::Base
   include Workflow
   validates :auth_filter, length: { maximum: maximum_text_length, allow_blank: true }
 
+  DEBUG_EXPIRE = 30.minutes
+
   workflow do
     state :active
     state :deleted
@@ -90,20 +92,6 @@ class AuthenticationProvider < ActiveRecord::Base
     t("Login with %{provider}", provider: display_name)
   end
 
-  # Drop and recreate the authentication_providers view, if it exists.
-  #
-  # to be used from migrations that existed before the table rename. should
-  # only be used from inside a transaction.
-  def self.maybe_recreate_view
-    if (view_exists = connection.view_exists?("authentication_providers"))
-      connection.execute("DROP VIEW #{connection.quote_table_name("authentication_providers")}")
-    end
-    yield
-    if view_exists
-      connection.execute("CREATE VIEW #{connection.quote_table_name("authentication_providers")} AS SELECT * FROM #{connection.quote_table_name("account_authorization_configs")}")
-    end
-  end
-
   scope :active, -> { where("workflow_state <> 'deleted'") }
   belongs_to :account
   include ::Canvas::RootAccountCacher
@@ -133,7 +121,7 @@ class AuthenticationProvider < ActiveRecord::Base
   end
 
   def self.recognized_params
-    [:mfa_required, :skip_internal_mfa].freeze
+    %i[mfa_required skip_internal_mfa otp_via_sms].freeze
   end
 
   def self.site_admin_params
@@ -230,6 +218,20 @@ class AuthenticationProvider < ActiveRecord::Base
     settings["skip_internal_mfa"] = ::Canvas::Plugin.value_to_boolean(value)
   end
 
+  # Default to true if not set, for backwards compatibility/opt-out
+  def otp_via_sms?
+    if settings.key?("otp_via_sms")
+      !!settings["otp_via_sms"]
+    else
+      true
+    end
+  end
+  alias_method :otp_via_sms, :otp_via_sms?
+
+  def otp_via_sms=(value)
+    settings["otp_via_sms"] = ::Canvas::Plugin.value_to_boolean(value)
+  end
+
   def federated_attributes_for_api
     if jit_provisioning?
       federated_attributes
@@ -278,7 +280,7 @@ class AuthenticationProvider < ActiveRecord::Base
     user = pseudonym.user
 
     canvas_attributes = translate_provider_attributes(provider_attributes,
-                                                      purpose: purpose)
+                                                      purpose:)
     given_name = canvas_attributes.delete("given_name")
     surname = canvas_attributes.delete("surname")
     if given_name || surname
@@ -306,15 +308,19 @@ class AuthenticationProvider < ActiveRecord::Base
         account_users_to_delete = existing_account_users.select { |au| au.active? && !roles.include?(au.role) }
         account_users_to_activate = existing_account_users.select { |au| au.deleted? && roles.include?(au.role) }
         roles_to_add.each do |role|
-          account.account_users.create!(user: user, role: role)
+          account.account_users.create!(user:, role:)
         end
         account_users_to_delete.each(&:destroy)
         account_users_to_activate.each(&:reactivate)
       when "sis_user_id", "integration_id"
+        next if value.empty?
+
         pseudonym[attribute] = value
       when "display_name"
         user.short_name = value
       when "email"
+        next if value.empty?
+
         cc = user.communication_channels.email.by_path(value).first
         cc ||= user.communication_channels.email.new(path: value)
         cc.workflow_state = "active"
@@ -322,7 +328,7 @@ class AuthenticationProvider < ActiveRecord::Base
       when "locale"
         # convert _ to -, be lenient about case, and perform fallbacks
         value = value.tr("_", "-")
-        lowercase_locales = I18n.available_locales.map(&:to_s).map(&:downcase)
+        lowercase_locales = I18n.available_locales.map { |locale| locale.to_s.downcase }
         while value.include?("-")
           break if lowercase_locales.include?(value.downcase)
 
@@ -332,7 +338,7 @@ class AuthenticationProvider < ActiveRecord::Base
           user.locale = I18n.available_locales[i].to_s
         end
       else
-        user.send("#{attribute}=", value)
+        user.send(:"#{attribute}=", value)
       end
     end
     if pseudonym.changed? && !pseudonym.save
@@ -363,11 +369,11 @@ class AuthenticationProvider < ActiveRecord::Base
   end
 
   def debug_get(key)
-    ::Canvas.redis.get(debug_key(key))
+    ::Canvas.redis.get(debug_key(key), failsafe: nil)
   end
 
   def debug_set(key, value, overwrite: true)
-    ::Canvas.redis.set(debug_key(key), value, ex: debug_expire.to_i, nx: overwrite ? nil : true)
+    ::Canvas.redis.set(debug_key(key), value, ex: DEBUG_EXPIRE.to_i, nx: overwrite ? nil : true)
   end
 
   protected
@@ -406,7 +412,7 @@ class AuthenticationProvider < ActiveRecord::Base
 
     return if self.class.recognized_federated_attributes.nil?
 
-    bad_values = federated_attributes.values.map { |v| v["attribute"] } - self.class.recognized_federated_attributes
+    bad_values = federated_attributes.values.pluck("attribute") - self.class.recognized_federated_attributes
     unless bad_values.empty?
       errors.add(:federated_attributes, "#{bad_values.join(", ")} is not a valid attribute")
     end
@@ -438,9 +444,5 @@ class AuthenticationProvider < ActiveRecord::Base
 
   def debug_key(key)
     ["auth_provider_debugging", global_id, key.to_s].cache_key
-  end
-
-  def debug_expire
-    Setting.get("auth_provider_debug_expire_minutes", 30).to_i.minutes
   end
 end

@@ -50,16 +50,12 @@ import PaceModal from './components/pace_modal'
 
 const I18n = useI18nScope('course_paces_app')
 
-const {Item: FlexItem} = Flex as any
-
 interface StoreProps {
   readonly loadingMessage: string
   readonly showLoadingOverlay: boolean
   readonly modalOpen: boolean
   readonly unpublishedChanges: SummarizedChange[]
   readonly coursePace: CoursePace
-  readonly isSyncing: boolean
-  readonly isPacePublishing: boolean
 }
 
 interface DispatchProps {
@@ -75,7 +71,7 @@ type ResponsiveComponentProps = ComponentProps & {
   readonly responsiveSize: ResponsiveSizes
 }
 
-export const App: React.FC<ResponsiveComponentProps> = ({
+export const App = ({
   loadingMessage,
   setResponsiveSize,
   setBlueprintLocked,
@@ -86,7 +82,7 @@ export const App: React.FC<ResponsiveComponentProps> = ({
   pollForPublishStatus,
   unpublishedChanges,
   coursePace,
-}) => {
+}: ResponsiveComponentProps) => {
   const [trayOpen, setTrayOpen] = useState(false)
 
   // Start polling for publish status on mount if applicable
@@ -117,7 +113,7 @@ export const App: React.FC<ResponsiveComponentProps> = ({
       return (
         <>
           <Flex as="section" alignItems="end" wrap="wrap">
-            <FlexItem margin="0 0 small">
+            <Flex.Item margin="0 0 small">
               <Header
                 handleDrawerToggle={() => setTrayOpen(!trayOpen)}
                 responsiveSize={responsiveSize}
@@ -128,7 +124,7 @@ export const App: React.FC<ResponsiveComponentProps> = ({
                 // Make sure changes have finished before updating contexts
                 <PaceContent />
               )}
-            </FlexItem>
+            </Flex.Item>
           </Flex>
           <PaceModal
             isOpen={modalOpen}
@@ -169,7 +165,7 @@ export const App: React.FC<ResponsiveComponentProps> = ({
   return (
     <View>
       <Overlay open={showLoadingOverlay} transition="fade" label={loadingMessage}>
-        <Mask theme={{zIndex: 10001 /* to appear over the fullscreen modal */}}>
+        <Mask themeOverride={{zIndex: 10001 /* to appear over the fullscreen modal */}}>
           <Spinner renderTitle="Loading" size="large" margin="0 0 0 medium" />
         </Mask>
       </Overlay>
@@ -180,7 +176,7 @@ export const App: React.FC<ResponsiveComponentProps> = ({
   )
 }
 
-export const ResponsiveApp: React.FC<ComponentProps> = props => (
+export const ResponsiveApp = (props: ComponentProps) => (
   <Responsive
     query={{
       small: {maxWidth: '40rem'},

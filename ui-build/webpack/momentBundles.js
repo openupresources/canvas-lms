@@ -18,7 +18,7 @@
 
 const glob = require('glob')
 const path = require('path')
-const {canvasDir} = require('#params')
+const {canvasDir} = require('../params')
 
 // Put any custom moment locales here:
 const customMomentLocales = [
@@ -33,6 +33,8 @@ const customMomentLocales = [
   'mi-nz',
   'pl',
   'sl',
+  'ja',
+  'zh-cn',
 ]
 
 const momentLocaleBundles = glob

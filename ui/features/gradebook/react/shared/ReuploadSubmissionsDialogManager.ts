@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,11 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import type JQuery from 'jquery'
 import authenticity_token from '@canvas/authenticity-token'
+// @ts-expect-error
 import re_upload_submissions_form from '@canvas/grading/jst/re_upload_submissions_form.handlebars'
 import {setupSubmitHandler} from '@canvas/assignments/jquery/reuploadSubmissionsHelper'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
+import replaceTags from '@canvas/util/replaceTags'
 import type {Assignment} from '../../../../api.d'
 
 class ReuploadSubmissionsDialogManager {
@@ -35,29 +37,34 @@ class ReuploadSubmissionsDialogManager {
     [assignmentId: string]: boolean
   }
 
+  reuploadForm: JQuery | null
+
   constructor(
     assignment: Assignment,
-    reuploadUrlTemplate,
+    reuploadUrlTemplate: string,
     userAssetString: string,
-    downloadedSubmissionsMap
+    downloadedSubmissionsMap: {
+      [assignmentId: string]: boolean
+    }
   ) {
     this.assignment = assignment
     this.downloadedSubmissionsMap = downloadedSubmissionsMap
-    this.reuploadUrl = $.replaceTags(reuploadUrlTemplate, 'assignment_id', assignment.id)
+    this.reuploadUrl = replaceTags(reuploadUrlTemplate, 'assignment_id', assignment.id)
     this.showDialog = this.showDialog.bind(this)
     this.userAssetString = userAssetString
+    this.reuploadForm = null
   }
 
   isDialogEnabled() {
     return this.downloadedSubmissionsMap[this.assignment.id]
   }
 
-  getReuploadForm(cb) {
-    if (ReuploadSubmissionsDialogManager.reuploadForm) {
-      return ReuploadSubmissionsDialogManager.reuploadForm
+  getReuploadForm(cb: () => void) {
+    if (this.reuploadForm) {
+      return this.reuploadForm
     }
 
-    ReuploadSubmissionsDialogManager.reuploadForm = $(
+    this.reuploadForm = $(
       re_upload_submissions_form({authenticityToken: authenticity_token()})
     ).dialog({
       width: 400,
@@ -73,10 +80,10 @@ class ReuploadSubmissionsDialogManager {
 
     setupSubmitHandler(this.userAssetString)
 
-    return ReuploadSubmissionsDialogManager.reuploadForm
+    return this.reuploadForm
   }
 
-  showDialog(cb) {
+  showDialog(cb: () => void) {
     const form = this.getReuploadForm(cb)
     form.attr('action', this.reuploadUrl).dialog('open')
   }

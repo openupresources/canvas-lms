@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import formatMessage from '../../../../format-message'
+const formatMessage = require('../../../../format-message')
 
-export default [
+module.exports = [
   {
     name: formatMessage('Basic'),
     commands: [
@@ -304,6 +304,7 @@ export default [
       {command: '\\Leftarrow', label: formatMessage('Thick Leftward Arrow')},
       {command: '\\leftrightarrow', label: formatMessage('Logical Equivalence (Short)')},
       {command: '\\Leftrightarrow', label: formatMessage('Logical Equivalence (Short And Thick)')},
+      {command: '\\rightleftharpoons', label: formatMessage('Equilibrium')},
     ],
   },
 

@@ -43,14 +43,14 @@ class StudentEnrollment < Enrollment
   end
 
   def update_override_score(override_score:, grading_period_id: nil, updating_user:, record_grade_change: true)
-    score_params = { grading_period_id: grading_period_id } if grading_period_id.present?
+    score_params = { grading_period_id: } if grading_period_id.present?
     score = find_score(score_params)
 
     raise ActiveRecord::RecordNotFound if score.blank?
 
     old_score = score[:override_score]
     old_grade = score.override_grade
-    score.update!(override_score: override_score)
+    score.update!(override_score:)
 
     return score unless score.saved_change_to_override_score?
 
@@ -58,14 +58,21 @@ class StudentEnrollment < Enrollment
     if record_grade_change && updating_user.present?
       override_grade_change = Auditors::GradeChange::OverrideGradeChange.new(
         grader: updating_user,
-        old_grade: old_grade,
-        old_score: old_score,
-        score: score
+        old_grade:,
+        old_score:,
+        score:
       )
-      Auditors::GradeChange.record(override_grade_change: override_grade_change)
+      Auditors::GradeChange.record(override_grade_change:)
     end
 
     score
+  end
+
+  def update_override_status(custom_grade_status:, grading_period_id: nil)
+    score_params = { grading_period_id: } if grading_period_id.present?
+    score = find_score(score_params)
+
+    score.update!(custom_grade_status:)
   end
 
   class << self
@@ -85,14 +92,14 @@ class StudentEnrollment < Enrollment
           .where(user_id: students.map(&:user_id), workflow_state: "deleted", assignments: { context_id: course_id })
           .merge(Assignment.active)
           .in_batches
-          .update_all("workflow_state = #{DueDateCacher.infer_submission_workflow_state_sql}")
+          .update_all("workflow_state = #{SubmissionLifecycleManager.infer_submission_workflow_state_sql}")
       end
     end
 
     def restore_deleted_scores_for_enrollments(student_enrollments)
       raise ArgumentError, "Cannot call with more than 1000 enrollments" if student_enrollments.count > 1_000
 
-      student_enrollments.group_by(&:course_id).each do |_course_id, students|
+      student_enrollments.group_by(&:course_id).each_value do |students|
         course = students.first.course
         assignment_groups = course.assignment_groups.active.except(:order)
         grading_periods = GradingPeriod.for(course)
@@ -136,7 +143,7 @@ class StudentEnrollment < Enrollment
     return unless saved_change_to_id? || saved_change_to_start_at? || (saved_change_to_workflow_state? && workflow_state != "deleted")
     return unless course.enable_course_paces?
 
-    pace = course.course_paces.published.where(course_section_id: course_section_id).last
+    pace = course.course_paces.published.where(course_section_id:).last
     pace ||= course.course_paces.published.for_user(user).take || course.course_paces.published.primary.take
     pace&.create_publish_progress
     track_multiple_section_paces
@@ -145,7 +152,7 @@ class StudentEnrollment < Enrollment
   def republish_base_pace_if_needed
     return unless course.enable_course_paces? && course_section_id && workflow_state == "deleted"
 
-    student_section_ids = user.enrollments.where(course: course).where.not(workflow_state: "deleted").pluck(:course_section_id)
+    student_section_ids = user.enrollments.where(course:).where.not(workflow_state: "deleted").pluck(:course_section_id)
     pace = course.course_paces.published.where(course_section_id: student_section_ids).last
     pace ||= course.course_paces.published.primary.take
     pace&.create_publish_progress

@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative "./state_poller"
+require_relative "state_poller"
 
 module CustomWaitMethods
   # #initialize and #to_s are overwritten to allow message customization
@@ -52,30 +52,41 @@ module CustomWaitMethods
   # If we're looking for the loading image, we can't just do a normal assertion, because the image
   # could end up getting loaded too quickly.
   def wait_for_transient_element(selector)
+    puts "wait for transient element #{selector}"
     driver.execute_script(<<~JS)
       window.__WAIT_FOR_LOADING_IMAGE = 0
       window.__WAIT_FOR_LOADING_IMAGE_CALLBACK = null
 
       var _checkAddedNodes = function(addedNodes) {
-        for(var newNode of addedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            window.__WAIT_FOR_LOADING_IMAGE = 1
+        try {
+          for(var newNode of addedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              window.__WAIT_FOR_LOADING_IMAGE = 1
+            }
           }
+        } catch (e) {
+          console.error('CHECK ADDED NODES FAILED'); console.error(e)
         }
       }
 
       var _checkRemovedNodes = function(removedNodes) {
-        if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
-          return
-        }
-
-        for(var newNode of removedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            observer.disconnect()
-
-            window.__WAIT_FOR_LOADING_IMAGE = 2
-            window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+        try {
+          if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
+            return
           }
+
+          for(var newNode of removedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              observer.disconnect()
+
+              window.__WAIT_FOR_LOADING_IMAGE = 2
+              window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+            }
+          }
+        } catch (e) {
+          console.error('CHECK REMOVED NODES FAILED'); console.error(e)
         }
       }
 
@@ -114,10 +125,11 @@ module CustomWaitMethods
 
   # NOTE: for "$.timers" see https://github.com/jquery/jquery/blob/6c2c7362fb18d3df7c2a7b13715c2763645acfcb/src/effects.js#L638
   ANIMATION_COUNT_SCRIPT = "return (typeof($) !== 'undefined' && $.timers) ? $.timers.length : 0"
-  ANIMATION_ELEMENTS_SCRIPT =
-    "return $.timers.map(t => (" \
-    " t.elem.tagName + (t.elem.id?'#'+t.elem.id:'') + (t.elem.className?'.'+t.elem.className.replaceAll(' ','.'):'')" \
-    "))"
+  ANIMATION_ELEMENTS_SCRIPT = <<~JS
+    return $.timers.map(t => (
+     t.elem.tagName + (t.elem.id?'#'+t.elem.id:'') + (t.elem.className?'.'+t.elem.className.replaceAll(' ','.'):'')
+    ))
+  JS
   def wait_for_animations(bridge = nil)
     bridge = driver if bridge.nil?
 
@@ -177,8 +189,8 @@ module CustomWaitMethods
     end
   end
 
-  def pause_ajax(&block)
-    SeleniumDriverSetup.request_mutex.synchronize(&block)
+  def pause_ajax(&)
+    SeleniumDriverSetup.request_mutex.synchronize(&)
   end
 
   def keep_trying_until(seconds = SeleniumDriverSetup::SECONDS_UNTIL_GIVING_UP)
@@ -239,8 +251,8 @@ module CustomWaitMethods
     tiny_frame
   end
 
-  def disable_implicit_wait(&block)
-    ::SeleniumExtensions::FinderWaiting.disable(&block)
+  def disable_implicit_wait(&)
+    ::SeleniumExtensions::FinderWaiting.disable(&)
   end
 
   # little wrapper around Selenium::WebDriver::Wait, notably it:
@@ -253,7 +265,7 @@ module CustomWaitMethods
   end
 
   def wait_for_no_such_element(method: nil, timeout: SeleniumExtensions::FinderWaiting.timeout)
-    wait_for(method: method, timeout: timeout, ignore: []) do
+    wait_for(method:, timeout:, ignore: []) do
       # so find_element calls return ASAP
       disable_implicit_wait do
         yield

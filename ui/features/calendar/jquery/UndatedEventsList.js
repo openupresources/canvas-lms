@@ -20,8 +20,11 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import undatedEventsTemplate from '../jst/undatedEvents.handlebars'
 import ShowEventDetailsDialog from './ShowEventDetailsDialog'
-import 'jqueryui/draggable'
-import 'jqueryui/droppable'
+import 'jqueryui-unpatched/core'
+import 'jqueryui-unpatched/widget'
+import 'jqueryui-unpatched/mouse'
+import 'jqueryui-unpatched/draggable'
+import 'jqueryui-unpatched/droppable'
 import '@canvas/jquery/jquery.disableWhileLoading'
 import 'jquery-tinypubsub'
 
@@ -42,6 +45,7 @@ export default class UndatedEventsList {
       'CommonEvent/eventDeleted': this.eventDeleted,
       'CommonEvent/eventSaving': this.eventSaving,
       'CommonEvent/eventSaved': this.eventSaved,
+      'CommonEvent/eventsSavedFromSeries': this.eventsSavedFromSeries,
       'Calendar/visibleContextListChanged': this.visibleContextListChanged,
     })
 
@@ -154,6 +158,10 @@ export default class UndatedEventsList {
   }
 
   eventSaved = () => {
+    this.load()
+  }
+
+  eventsSavedFromSeries = () => {
     this.load()
   }
 

@@ -24,9 +24,11 @@ class Mutations::AssignmentOverrideCreateOrUpdate < GraphQL::Schema::InputObject
   argument :lock_at, Types::DateTimeType, required: false
   argument :unlock_at, Types::DateTimeType, required: false
 
-  argument :section_id, ID, required: false
+  argument :course_section_id, ID, required: false
   argument :group_id, ID, required: false
   argument :student_ids, [ID], required: false
+  argument :noop_id, ID, required: false
+  argument :title, String, required: false
 end
 
 class Mutations::AssignmentModeratedGradingUpdate < GraphQL::Schema::InputObject
@@ -47,6 +49,32 @@ class Mutations::AssignmentPeerReviewsUpdate < GraphQL::Schema::InputObject
   argument :automatic_reviews, Boolean, required: false
 end
 
+class Mutations::AssignmentInputBase < GraphQL::Schema::InputObject
+  argument :assignment_group_id, ID, required: false
+  argument :assignment_overrides, [Mutations::AssignmentOverrideCreateOrUpdate], required: false
+  argument :due_at, Types::DateTimeType, required: false
+  argument :grading_standard_id, ID, required: false
+  argument :grading_type, Types::AssignmentType::AssignmentGradingType, required: false
+  argument :group_category_id, ID, required: false
+  argument :intra_reviews, Boolean, required: false
+  argument :lock_at, Types::DateTimeType, required: false
+  argument :only_visible_to_overrides, Boolean, required: false
+  argument :peer_reviews, Mutations::AssignmentPeerReviewsUpdate, required: false
+  argument :points_possible, Float, required: false
+  argument :post_to_sis, Boolean, required: false
+  argument :unlock_at, Types::DateTimeType, required: false
+  argument :for_checkpoints, Boolean, required: false
+end
+
+class Mutations::AssignmentCreate < Mutations::AssignmentInputBase
+  argument :course_id, ID, required: true
+  argument :name, String, required: true
+end
+
+class Mutations::AssignmentUpdate < Mutations::AssignmentInputBase
+  argument :set_assignment, Boolean, required: false
+end
+
 class Mutations::AssignmentBase < Mutations::BaseMutation
   # we are required to wrap the update method with a proxy class because
   # we are required to include `Api` for instance methods within the module.
@@ -64,6 +92,7 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
       @working_assignment = working_assignment
       @session = session
       @current_user = current_user
+      @context = working_assignment.context
     end
 
     attr_reader :session
@@ -109,6 +138,7 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
   argument :allowed_attempts, Int, required: false
   argument :only_visible_to_overrides, Boolean, required: false
   argument :submission_types, [Types::AssignmentSubmissionType], required: false
+  argument :grading_standard_id, ID, required: false
   argument :peer_reviews, Mutations::AssignmentPeerReviewsUpdate, required: false
   argument :moderated_grading, Mutations::AssignmentModeratedGradingUpdate, required: false
   argument :grade_group_students_individually, Boolean, required: false
@@ -116,10 +146,12 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
   argument :omit_from_final_grade, Boolean, required: false
   argument :anonymous_instructor_annotations, Boolean, required: false
   argument :post_to_sis, Boolean, required: false
-  argument :anonymous_grading, Boolean,
+  argument :anonymous_grading,
+           Boolean,
            "requires anonymous_marking course feature to be set to true",
            required: false
   argument :module_ids, [ID], required: false
+  argument :for_checkpoints, Boolean, required: false
 
   # the return data if the update is successful
   field :assignment, Types::AssignmentType, null: true
@@ -148,7 +180,11 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
   end
 
   def prepare_overrides!(input_hash, api_proxy)
-    if input_hash.key? :assignment_overrides
+    if input_hash.key?(:assignment_overrides) && input_hash[:assignment_overrides].present?
+      if input_hash[:for_checkpoints]
+        raise GraphQL::ExecutionError, "Assignment overrides are not allowed in the parent assignment for checkpoints."
+      end
+
       api_proxy.load_root_account
       input_hash[:assignment_overrides].each do |override|
         if override[:id].blank?
@@ -156,9 +192,9 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
         else
           override[:id] = GraphQLHelpers.parse_relay_or_legacy_id(override[:id], "AssignmentOverride")
         end
-        override[:course_section_id] = GraphQLHelpers.parse_relay_or_legacy_id(override[:section_id], "Section") if override.key? :section_id
-        override[:group_id] = GraphQLHelpers.parse_relay_or_legacy_id(override[:group_id], "Group") if override.key? :group_id
-        override[:student_ids] = override[:student_ids].map { |id| GraphQLHelpers.parse_relay_or_legacy_id(id, "User") } if override.key? :student_ids
+        override[:course_section_id] = GraphQLHelpers.parse_relay_or_legacy_id(override[:section_id], "Section") if override.key?(:section_id) && override[:section_id].present?
+        override[:group_id] = GraphQLHelpers.parse_relay_or_legacy_id(override[:group_id], "Group") if override.key?(:group_id) && override[:group_id].present?
+        override[:student_ids] = override[:student_ids].map { |id| GraphQLHelpers.parse_relay_or_legacy_id(id, "User") } if override.key?(:student_ids) && override[:student_ids].present?
       end
     end
   end
@@ -167,8 +203,10 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     if input_hash.key? :moderated_grading
       moderated_grading = input_hash.delete(:moderated_grading)
       input_hash[:moderated_grading] = moderated_grading[:enabled] if moderated_grading.key? :enabled
-      input_hash.merge!(moderated_grading.slice(:grader_count, :grader_comments_visible_to_graders,
-                                                :grader_names_visible_to_final_grader, :graders_anonymous_to_graders))
+      input_hash.merge!(moderated_grading.slice(:grader_count,
+                                                :grader_comments_visible_to_graders,
+                                                :grader_names_visible_to_final_grader,
+                                                :graders_anonymous_to_graders))
       if moderated_grading.key? :final_grader_id
         input_hash[:final_grader_id] = GraphQLHelpers.parse_relay_or_legacy_id(moderated_grading[:final_grader_id], "User")
       end
@@ -176,13 +214,16 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
   end
 
   def prepare_peer_reviews!(input_hash)
-    if input_hash.key? :peer_reviews
+    if input_hash.key?(:peer_reviews) && input_hash[:peer_reviews].present?
       peer_reviews = input_hash.delete(:peer_reviews)
-      input_hash[:peer_reviews] = peer_reviews[:enabled] if peer_reviews.key? :enabled
-      input_hash[:peer_review_count] = peer_reviews[:count] if peer_reviews.key? :count
-      input_hash[:intra_group_peer_reviews] = peer_reviews[:intra_reviews] if peer_reviews.key? :intra_reviews
-      input_hash[:anonymous_peer_reviews] = peer_reviews[:anonymous_reviews] if peer_reviews.key? :anonymous_reviews
-      input_hash[:automatic_peer_reviews] = peer_reviews[:automatic_reviews] if peer_reviews.key? :automatic_reviews
+      input_hash[:peer_reviews] = peer_reviews[:enabled] if peer_reviews.key?(:enabled) && peer_reviews[:enabled].present?
+      input_hash[:peer_review_count] = peer_reviews[:count] if peer_reviews.key?(:count) && peer_reviews[:count].present?
+      input_hash[:anonymous_peer_reviews] = peer_reviews[:anonymous_reviews] if peer_reviews.key?(:anonymous_reviews) && peer_reviews[:anonymous_reviews].present?
+      input_hash[:automatic_peer_reviews] = peer_reviews[:automatic_reviews] if peer_reviews.key?(:automatic_reviews) && peer_reviews[:automatic_reviews].present?
+
+      # checking peer_reviews[:intra_reviews].present? does not apply since it's a bool, fails in the false case.
+      # peer_reviews.key?(:intra_reviews) should be sufficient.
+      input_hash[:intra_group_peer_reviews] = peer_reviews[:intra_reviews] if peer_reviews.key?(:intra_reviews)
 
       # this should be peer_reviews_due_at, but its not permitted in the backend and peer_reviews_assign_at
       # is transformed into peer_reviews_due_at. that's probably a bug, but just to keep this update resilient
@@ -242,7 +283,7 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     return if @working_assignment.workflow_state == "deleted"
 
     # actually destroy now.
-    DueDateCacher.with_executing_user(@current_user) do
+    SubmissionLifecycleManager.with_executing_user(@current_user) do
       @working_assignment.destroy
     end
   end
@@ -253,5 +294,17 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     return if @working_assignment.workflow_state != "deleted"
 
     @working_assignment.restore
+  end
+
+  def validate_for_checkpoints(input_hash)
+    return unless input_hash[:for_checkpoints]
+
+    restricted_keys = %i[points_possible due_at lock_at unlock_at].freeze
+
+    restricted_keys.each do |key|
+      if input_hash.key?(key)
+        raise GraphQL::ExecutionError, "Cannot set #{key} in the parent assignment for checkpoints."
+      end
+    end
   end
 end

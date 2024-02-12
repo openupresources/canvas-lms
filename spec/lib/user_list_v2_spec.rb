@@ -98,7 +98,7 @@ describe UserListV2 do
 
   it "does not find users from untrusted accounts" do
     account = Account.create!
-    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account: account)
+    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account:)
     ul = UserListV2.new("jt@instructure.com", search_type: "unique_id")
     expect(ul.resolved_results).to be_empty
     expect(ul.missing_results.first[:address]).to eq "jt@instructure.com"
@@ -125,7 +125,7 @@ describe UserListV2 do
   it "finds users from trusted accounts" do
     account = Account.create!(name: "naem")
     allow(Account.default).to receive(:trusted_account_ids).and_return([account.id])
-    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account: account)
+    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account:)
     ul = UserListV2.new("jt@instructure.com", search_type: "unique_id")
     expect(ul.resolved_results).to eq [{ address: "jt@instructure.com", user_id: @user.id, user_token: @user.token, user_name: "JT", account_id: account.id, account_name: account.name }]
   end
@@ -135,7 +135,7 @@ describe UserListV2 do
     @user1 = @user
     account = Account.create!
     allow(Account.default).to receive(:trusted_account_ids).and_return([account.id])
-    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account: account)
+    user_with_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account:)
     ul = UserListV2.new("jt@instructure.com", search_type: "unique_id")
 
     expect(ul.resolved_results).to be_empty
@@ -154,8 +154,7 @@ describe UserListV2 do
     it "shows duplicates for two results from the current account and the trusted account" do
       account1 = Account.create!
       account2 = Account.create!
-      allow(account1).to receive(:trusted_account_ids).and_return([account2.id])
-      allow(account1).to receive(:trust_exists?).and_return(true)
+      allow(account1).to receive_messages(trusted_account_ids: [account2.id], trust_exists?: true)
 
       user_with_managed_pseudonym(name: "JT", username: "jt@instructure.com", active_all: true, account: account1, sis_user_id: "SISID")
       @user1 = @user
@@ -210,7 +209,7 @@ describe UserListV2 do
 
   it "does not find a user from a different account by SMS" do
     account = Account.create!
-    user_with_pseudonym(name: "JT", active_all: 1, account: account)
+    user_with_pseudonym(name: "JT", active_all: 1, account:)
     communication_channel(@user, { username: "8015555555@txt.att.net", path_type: "sms", active_cc: true })
     ul = UserListV2.new("(801) 555-5555", search_type: "cc_path")
     expect(ul.resolved_results).to eq []

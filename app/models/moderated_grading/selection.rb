@@ -21,18 +21,18 @@ class ModeratedGrading::Selection < ActiveRecord::Base
   belongs_to :provisional_grade,
              foreign_key: :selected_provisional_grade_id,
              class_name: "ModeratedGrading::ProvisionalGrade"
-  belongs_to :assignment
+  belongs_to :assignment, inverse_of: :moderated_grading_selections, class_name: "AbstractAssignment"
   belongs_to :student, class_name: "User"
 
   validates :student_id, uniqueness: { scope: :assignment_id }
 
   def create_moderation_event(user)
     AnonymousOrModerationEvent.create!(
-      assignment_id: assignment_id,
-      user: user,
+      assignment_id:,
+      user:,
       submission_id: provisional_grade&.submission_id,
       event_type: :provisional_grade_selected,
-      payload: { id: selected_provisional_grade_id, student_id: student_id }
+      payload: { id: selected_provisional_grade_id, student_id: }
     )
   end
 end

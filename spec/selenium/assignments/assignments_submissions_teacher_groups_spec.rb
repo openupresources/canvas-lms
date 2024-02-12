@@ -39,8 +39,11 @@ describe "submissions" do
     end
 
     it "Edit an assignment", priority: "1" do
-      @assignment = @course.assignments.create!(title: "assignment 1", name: "assignment 1", due_at: Time.now.utc + 2.days,
-                                                points_possible: 50, submission_types: "online_text_entry")
+      @assignment = @course.assignments.create!(title: "assignment 1",
+                                                name: "assignment 1",
+                                                due_at: Time.now.utc + 2.days,
+                                                points_possible: 50,
+                                                submission_types: "online_text_entry")
       group_test_setup(3, 3, 1)
       get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
       select_assignment_group_category(-2)
@@ -48,6 +51,7 @@ describe "submissions" do
     end
 
     it "is able to create a new student group category from the assignment edit page", priority: "1" do
+      skip "FOO-3799 (10/7/2023)"
       original_number_of_assignment = Assignment.count
       original_number_of_group = Group.count
       create_assignment_preparation

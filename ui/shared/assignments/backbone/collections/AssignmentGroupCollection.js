@@ -15,11 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import ModuleCollection from '@canvas/modules/backbone/collections/ModuleCollection.coffee'
+import ModuleCollection from '@canvas/modules/backbone/collections/ModuleCollection'
 import {savedObservedId} from '@canvas/observer-picker/ObserverGetObservee'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import _ from 'underscore'
-import AssignmentGroup from '../models/AssignmentGroup.coffee'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import AssignmentGroup from '../models/AssignmentGroup'
 import SubmissionCollection from './SubmissionCollection'
 
 const PER_PAGE_LIMIT = 50
@@ -37,7 +36,8 @@ export default class AssignmentGroupCollection extends PaginatedCollection {
       }
 
       for (const assignment of this.assignments()) {
-        const assignmentModuleNames = _(assignment.get('module_ids')).map(id => moduleNames[id])
+        const moduleIds = assignment.get('module_ids') || []
+        const assignmentModuleNames = moduleIds.map(id => moduleNames[id])
         assignment.set('modules', assignmentModuleNames)
       }
     })

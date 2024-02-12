@@ -46,19 +46,8 @@ class ContentParticipation < ActiveRecord::Base
     user = opts.delete(:user)
     return nil unless user && content
 
-    if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-      workflow_state = opts.fetch(:workflow_state, "unread")
-      return participate(content: content, user: user, workflow_state: workflow_state)
-    end
-
-    participant = nil
-    unique_constraint_retry do
-      participant = content.content_participations.where(user_id: user).first
-      participant ||= content.content_participations.build(user: user, workflow_state: "unread")
-      participant.attributes = opts.slice(*ACCESSIBLE_ATTRIBUTES)
-      participant.save if participant.new_record? || participant.changed?
-    end
-    participant
+    workflow_state = opts.fetch(:workflow_state, "unread")
+    participate(content:, user:, workflow_state:)
   end
 
   def self.content_posted?(content)
@@ -68,17 +57,12 @@ class ContentParticipation < ActiveRecord::Base
   def update_participation_count
     return unless saved_change_to_workflow_state?
 
-    offset = if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-               ContentParticipation.content_posted?(content) ? unread_count_offset : 0
-             else
-               ((workflow_state == "unread") ? 1 : -1)
-             end
-
+    offset = ContentParticipation.content_posted?(content) ? unread_count_offset : 0
     ContentParticipationCount.create_or_update({
                                                  context: content.context,
-                                                 user: user,
-                                                 content_type: content_type,
-                                                 offset: offset,
+                                                 user:,
+                                                 content_type:,
+                                                 offset:,
                                                })
   end
 
@@ -87,21 +71,14 @@ class ContentParticipation < ActiveRecord::Base
   end
 
   def self.participate(content:, user:, workflow_state: "unread", content_item: "grade")
-    return unless Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-
     raise "cannot read user and content" unless content.is_a?(Submission) && user.is_a?(User)
 
     participant = nil
-
     unique_constraint_retry do
       participations = content.content_participations.where(user_id: user)
-
       participant = create_first_participation_item(participations, content, user, workflow_state, content_item)
-
       participant ||= update_existing_participation_item(participations, workflow_state, content_item, content)
-
       participant ||= add_participation_item(participations, content, user, workflow_state, content_item)
-
       participant.save! if participant.new_record? || participant.changed?
     end
 
@@ -148,7 +125,7 @@ class ContentParticipation < ActiveRecord::Base
   private_class_method :all_read?
 
   def self.build_item(content, user, workflow_state, content_item)
-    content.content_participations.build(user: user, workflow_state: workflow_state, content_item: content_item)
+    content.content_participations.build(user:, workflow_state:, content_item:)
   end
   private_class_method :build_item
 
@@ -170,9 +147,9 @@ class ContentParticipation < ActiveRecord::Base
     raise "#{content_item} is invalid" if content_item.present? && !CONTENT_ITEMS.include?(content_item)
 
     states = if content_item.present?
-               ContentParticipation.where(content: content, user: user, content_item: content_item).pluck(:workflow_state)
+               ContentParticipation.where(content:, user:, content_item:).pluck(:workflow_state)
              else
-               ContentParticipation.where(content: content, user: user).pluck(:workflow_state)
+               ContentParticipation.where(content:, user:).pluck(:workflow_state)
              end
 
     return nil if states.empty?
@@ -203,5 +180,50 @@ class ContentParticipation < ActiveRecord::Base
       .having("sum(case workflow_state when 'unread' then 1 else 0 end) = 0")
       .pluck(:content_id)
       .count
+  end
+
+  def self.create_read_item(user_id:, content_id:, content_item:)
+    { user_id:, content_id:, content_type: "Submission", content_item:, workflow_state: "read" }
+  end
+  private_class_method :create_read_item
+
+  def self.add_missing_content_participation_items(course, user)
+    user_id = user.id
+    potential_subs_by_type = ContentParticipationCount.potential_submissions_by_type(course, user)
+    subs_with_grades, subs_with_comments, subs_with_assessments = potential_subs_by_type.values
+    uniq_submission_ids = (subs_with_grades + subs_with_comments + subs_with_assessments).uniq
+
+    cp = ContentParticipation.where(user:, content: uniq_submission_ids).pluck(:content_item, :content_id)
+
+    grouped_cp_items = cp.group_by(&:first).transform_values { |values| values.map(&:last) }
+
+    missing_subs_with_grades = subs_with_grades - (grouped_cp_items["grade"] || [])
+    missing_subs_with_comments = subs_with_comments - (grouped_cp_items["comment"] || [])
+    missing_subs_with_assessments = subs_with_assessments - (grouped_cp_items["rubric"] || [])
+
+    new_content_participations = []
+
+    missing_subs_with_grades.each do |content_id|
+      new_content_participations << create_read_item(user_id:, content_id:, content_item: "grade")
+    end
+    missing_subs_with_comments.each do |content_id|
+      new_content_participations << create_read_item(user_id:, content_id:, content_item: "comment")
+    end
+    missing_subs_with_assessments.each do |content_id|
+      new_content_participations << create_read_item(user_id:, content_id:, content_item: "rubric")
+    end
+
+    ContentParticipation.insert_all(new_content_participations) if new_content_participations.any?
+
+    new_content_participations
+  end
+
+  def self.mark_all_as_read_for_user(user, contents, course)
+    content_participations = ContentParticipation.where(user:, content: contents, workflow_state: "unread")
+    ids = content_participations.pluck(:id)
+    content_participations.update_all(workflow_state: "read")
+    cp_count = ContentParticipationCount.find_by(user:, context: course)
+    cp_count.refresh_unread_count
+    ids
   end
 end

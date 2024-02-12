@@ -99,6 +99,11 @@
 #           "type": "array",
 #           "items": {"$ref": "Appointment"}
 #         },
+#         "allow_observer_signup": {
+#           "description": "Boolean indicating whether observer users should be able to sign-up for an appointment",
+#           "example": false,
+#           "type": "boolean"
+#         },
 #         "context_codes": {
 #           "description": "The context codes (i.e. courses) this appointment group belongs to. Only people in these courses will be eligible to sign up.",
 #           "example": ["course_123"],
@@ -326,6 +331,9 @@ class AppointmentGroupsController < ApplicationController
   #   "protected":: participants can see who has signed up.  Defaults to
   #                 "private".
   #
+  # @argument appointment_group[allow_observer_signup] [Boolean]
+  #   Whether observer users can sign-up for an appointment. Defaults to false.
+  #
   # @example_request
   #
   #   curl 'https://<canvas>/api/v1/appointment_groups.json' \
@@ -352,6 +360,11 @@ class AppointmentGroupsController < ApplicationController
                     status: :bad_request
     end
 
+    if value_to_boolean(params[:appointment_group][:allow_observer_signup]) && contexts.any? { |c| !c.is_a?(Course) || !c.account.allow_observers_in_appointment_groups? }
+      return render json: { error: "cannot allow observers to sign up for appointment groups in this course" },
+                    status: :forbidden
+    end
+
     raise ActiveRecord::RecordNotFound unless contexts.present?
 
     # if all contexts are in the same shard, create the appointment group in the same shard
@@ -361,7 +374,7 @@ class AppointmentGroupsController < ApplicationController
 
     shard.activate do
       publish = value_to_boolean(params[:appointment_group].delete(:publish))
-      @group = AppointmentGroup.new(appointment_group_params.merge(contexts: contexts))
+      @group = AppointmentGroup.new(appointment_group_params.merge(contexts:))
       @group.update_contexts_and_sub_contexts
       if authorized_action(@group, @current_user, :manage)
         if @group.save
@@ -389,7 +402,9 @@ class AppointmentGroupsController < ApplicationController
     if authorized_action(@group, @current_user, :read)
       return web_show unless request.format == :json
 
-      render json: appointment_group_json(@group, @current_user, session,
+      render json: appointment_group_json(@group,
+                                          @current_user,
+                                          session,
                                           include: ((params[:include] || []) | ["appointments"]),
                                           include_past_appointments: @group.grants_right?(@current_user, :manage))
     end
@@ -464,6 +479,9 @@ class AppointmentGroupsController < ApplicationController
   #   "private":: participants cannot see who has signed up for a particular
   #               time slot
   #   "protected":: participants can see who has signed up. Defaults to "private".
+  #
+  # @argument appointment_group[allow_observer_signup] [Boolean]
+  #   Whether observer users can sign-up for an appointment.
   #
   # @example_request
   #
@@ -565,15 +583,15 @@ class AppointmentGroupsController < ApplicationController
 
   protected
 
-  def participants(type, &formatter)
+  def participants(type, &)
     if authorized_action(@group, @current_user, :read)
       return render json: [] unless @group.participant_type == type
 
       render json: Api.paginate(
         @group.possible_participants(registration_status: params[:registration_status]),
         self,
-        send("api_v1_appointment_group_#{params[:action]}_url", @group)
-      ).map(&formatter)
+        send(:"api_v1_appointment_group_#{params[:action]}_url", @group)
+      ).map(&)
     end
   end
 
@@ -593,16 +611,25 @@ class AppointmentGroupsController < ApplicationController
   end
 
   def appointment_group_params
-    params.require(:appointment_group).permit(:title, :description, :location_name, :location_address, :participants_per_appointment,
-                                              :min_appointments_per_participant, :max_appointments_per_participant, :participant_visibility, :cancel_reason,
-                                              sub_context_codes: [], new_appointments: strong_anything)
+    params.require(:appointment_group).permit(:title,
+                                              :description,
+                                              :location_name,
+                                              :location_address,
+                                              :participants_per_appointment,
+                                              :min_appointments_per_participant,
+                                              :max_appointments_per_participant,
+                                              :participant_visibility,
+                                              :cancel_reason,
+                                              :allow_observer_signup,
+                                              sub_context_codes: [],
+                                              new_appointments: strong_anything)
   end
 
   def web_index
     # start with the first reservable appointment group
     group = AppointmentGroup.reservable_by(@current_user, params[:context_codes]).current.order(:start_at).first
     anchor = calendar_fragment view_name: :agenda, view_start: group&.start_at&.strftime("%Y-%m-%d")
-    redirect_to calendar2_url(anchor: anchor)
+    redirect_to calendar2_url(anchor:)
   end
 
   def web_show
@@ -611,9 +638,9 @@ class AppointmentGroupsController < ApplicationController
     student_course_id = @group.contexts_for_user(@current_user).first.id
     # If they are a student and they do not have an appointment, we should enter find appointment mode.
     # Otherwise the appointment group will not be visible to student.
-    needs_appointment = (!params[:event_id] && student_course_id &&
-                         !@group.appointments_participants.pluck(:user_id).include?(@current_user.id) &&
-                         !@group.users_with_reservations_through_group.include?(@current_user.id))
+    needs_appointment = !params[:event_id] && student_course_id &&
+                        !@group.appointments_participants.pluck(:user_id).include?(@current_user.id) &&
+                        !@group.users_with_reservations_through_group.include?(@current_user.id)
     anchor = if needs_appointment
                # start at the appointment group; enter find-appointment mode for a relevant course
                args[:view_start] = @group.start_at.strftime("%Y-%m-%d")

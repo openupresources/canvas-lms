@@ -37,7 +37,7 @@ module TatlTael
 
       def comment_for(path)
         {
-          path: path,
+          path:,
           message: auto_correct ? config[:auto_correct][:message] : config[:message],
           severity: config[:severity],
           position: 0
@@ -63,7 +63,7 @@ module TatlTael
 
         return false unless lines
 
-        if first_line_exception?(lines.first)
+        while first_line_exception?(lines.first)
           lines.shift
         end
 
@@ -174,7 +174,7 @@ module TatlTael
         end
       end
 
-      ENDING_BLOCK_COMMENT_REGEX = %r{^(\s+)?(\*+/)(\s+)?$}.freeze
+      ENDING_BLOCK_COMMENT_REGEX = %r{^(\s+)?(\*+/)(\s+)?$}
       def ending_block_comment_only?(line, _ext)
         line =~ ENDING_BLOCK_COMMENT_REGEX
       end
@@ -230,7 +230,7 @@ module TatlTael
 
       def existing_copyright_header?(path_from_root)
         lines = head(path_from_root, copyright_line_count + COPYRIGHT_LINES_BUFFER)
-        return unless lines
+        return false unless lines
 
         lines.any? { |line| line.include?(config[:copyright_ending_token]) }
       end

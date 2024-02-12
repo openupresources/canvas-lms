@@ -18,6 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class EnrollmentState < ActiveRecord::Base
+  PENDING_STATES = %w[pending_active pending_invited creation_pending].freeze
   # a 1-1 table with enrollments
   # that was really only a separate table because enrollments had a billion columns already
   # and the data here was going to have a lot of churn too
@@ -103,7 +104,7 @@ class EnrollmentState < ActiveRecord::Base
   end
 
   def pending?
-    %w[pending_active pending_invited creation_pending].include?(state)
+    PENDING_STATES.include?(state)
   end
 
   def recalculate_state
@@ -132,8 +133,11 @@ class EnrollmentState < ActiveRecord::Base
       self.user_needs_touch = true
       unless skip_touch_user
         self.class.connection.after_transaction_commit do
-          enrollment.user.touch unless User.skip_touch_for_type?(:enrollments)
-          enrollment.user.clear_cache_key(:enrollments)
+          user = enrollment.user
+          user.reload unless user.canonical?
+
+          user.touch unless User.skip_touch_for_type?(:enrollments)
+          user.clear_cache_key(:enrollments)
         end
       end
     end
@@ -162,9 +166,20 @@ class EnrollmentState < ActiveRecord::Base
         # Not strictly within any range so no translation needed
         self.state = wf_state
       elsif global_start_at < now
-        # we've past the end date so no matter what the state was, we're "completed" now
+        if enrollment.temporary_enrollment?
+          ending_enrollment_state = enrollment.temporary_enrollment_pairing&.ending_enrollment_state
+
+          case ending_enrollment_state
+          when "completed", "inactive"
+            self.state = ending_enrollment_state
+          when "deleted", nil
+            enrollment.destroy
+          end
+        else
+          # we've past the end date so no matter what the state was, we're "completed" now
+          self.state = "completed"
+        end
         self.state_started_at = ranges.filter_map(&:last).min
-        self.state = "completed"
       elsif enrollment.fake_student? # rubocop:disable Lint/DuplicateBranch
         # Allow student view students to use the course before the term starts
         self.state = wf_state
@@ -214,7 +229,7 @@ class EnrollmentState < ActiveRecord::Base
   end
 
   def self.process_states_in_ranges(start_at, end_at, enrollment_scope = Enrollment.all)
-    Enrollment.find_ids_in_ranges(start_at: start_at, end_at: end_at, batch_size: 250) do |min_id, max_id|
+    Enrollment.find_ids_in_ranges(start_at:, end_at:, batch_size: 250) do |min_id, max_id|
       process_states_for(enrollments_needing_calculation(enrollment_scope).where(id: min_id..max_id))
     end
   end
@@ -254,18 +269,18 @@ class EnrollmentState < ActiveRecord::Base
 
   INVALIDATEABLE_STATES = %w[pending_invited pending_active invited active completed inactive].freeze # don't worry about creation_pending or rejected, etc
   def self.invalidate_states(enrollment_scope)
-    EnrollmentState.where(enrollment_id: enrollment_scope, state: INVALIDATEABLE_STATES)
+    EnrollmentState.where(enrollment_id: enrollment_scope, state: INVALIDATEABLE_STATES).in_batches(of: 10_000)
                    .update_all(["lock_version = COALESCE(lock_version, 0) + 1, state_is_current = ?", false])
   end
 
   def self.invalidate_states_and_access(enrollment_scope)
-    EnrollmentState.where(enrollment_id: enrollment_scope, state: INVALIDATEABLE_STATES)
+    EnrollmentState.where(enrollment_id: enrollment_scope, state: INVALIDATEABLE_STATES).in_batches(of: 10_000)
                    .update_all(["lock_version = COALESCE(lock_version, 0) + 1, state_is_current = ?, access_is_current = ?", false, false])
   end
 
   def self.force_recalculation(enrollment_ids, strand: nil)
     if enrollment_ids.any?
-      EnrollmentState.where(enrollment_id: enrollment_ids)
+      EnrollmentState.where(enrollment_id: enrollment_ids).in_batches(of: 10_000)
                      .update_all(["lock_version = COALESCE(lock_version, 0) + 1, state_is_current = ?", false])
       args = strand ? { n_strand: strand } : {}
       EnrollmentState.delay_if_production(**args).process_states_for_ids(enrollment_ids)
@@ -273,7 +288,7 @@ class EnrollmentState < ActiveRecord::Base
   end
 
   def self.invalidate_access(enrollment_scope, states_to_update)
-    EnrollmentState.where(enrollment_id: enrollment_scope, state: states_to_update)
+    EnrollmentState.where(enrollment_id: enrollment_scope, state: states_to_update).in_batches(of: 10_000)
                    .update_all(["lock_version = COALESCE(lock_version, 0) + 1, access_is_current = ?", false])
   end
 
@@ -334,7 +349,8 @@ class EnrollmentState < ActiveRecord::Base
   # called every ~5 minutes by a periodic delayed job
   def self.recalculate_expired_states
     while (enrollments = Enrollment.joins(:enrollment_state).where("enrollment_states.state_valid_until IS NOT NULL AND
-           enrollment_states.state_valid_until < ?", Time.now.utc).limit(250).to_a) && enrollments.any?
+           enrollment_states.state_valid_until < ?",
+                                                                   Time.now.utc).limit(250).to_a) && enrollments.any?
       process_states_for(enrollments)
     end
   end

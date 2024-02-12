@@ -31,9 +31,9 @@ describe "international sms" do
 
     it "shows a disclaimer for international numbers", priority: "1" do
       # All selections except those in this array should include the text messaging rate disclaimer
-      no_disclaimer = Array[
-          "Select Country or Region",
-          "United States"
+      no_disclaimer = [
+        "Select Country or Region",
+        "United States"
       ]
 
       get "/profile/settings"
@@ -48,10 +48,10 @@ describe "international sms" do
 
         if no_disclaimer.any? { |w| country.text.include? w }
           # no text messaging rate disclaimer displayed
-          expect(find(".intl_rates_may_apply")).to have_attribute("style", "display: none\;")
+          expect(find(".intl_rates_may_apply")).to have_attribute("style", "display: none;")
         else
           # display text messaging rate disclaimer
-          expect(find(".intl_rates_may_apply")).to have_attribute("style", "display: inline\;")
+          expect(find(".intl_rates_may_apply")).to have_attribute("style", "display: inline;")
         end
       end
     end

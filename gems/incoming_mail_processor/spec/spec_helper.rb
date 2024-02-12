@@ -24,12 +24,12 @@
 #
 # See http://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 
-require "byebug"
+require "debug"
 require "timecop"
 require "incoming_mail_processor/mailbox_spec_helper"
 require "incoming_mail_processor"
 
-Dir.glob(File.expand_path(File.join(__FILE__, "..", "support", "*"))).sort.each { |file| require file }
+Dir.glob(File.expand_path(File.join(__FILE__, "..", "support", "*"))).each { |file| require file }
 
 RSpec.configure do |config|
   config.run_all_when_everything_filtered = true

@@ -30,12 +30,12 @@ class AccessToken < ActiveRecord::Base
   attr_reader :full_token
   attr_reader :plaintext_refresh_token
 
-  belongs_to :developer_key, counter_cache: :access_token_count
+  belongs_to :developer_key
   belongs_to :user, inverse_of: :access_tokens
   belongs_to :real_user, inverse_of: :masquerade_tokens, class_name: "User"
   has_one :account, through: :developer_key
 
-  serialize :scopes, Array
+  serialize :scopes, type: Array
 
   validates :purpose, length: { maximum: maximum_string_length }
   validate :must_only_include_valid_scopes, unless: :deleted?
@@ -44,7 +44,7 @@ class AccessToken < ActiveRecord::Base
 
   before_validation -> { self.developer_key ||= DeveloperKey.default }
 
-  resolves_root_account through: ->(instance) { instance.developer_key.root_account_id }
+  resolves_root_account through: :developer_key
 
   has_a_broadcast_policy
 
@@ -74,6 +74,7 @@ class AccessToken < ActiveRecord::Base
 
   before_create :generate_token
   before_create :generate_refresh_token
+  after_create :queue_developer_key_token_count_increment
 
   alias_method :destroy_permanently!, :destroy
   def destroy
@@ -90,7 +91,7 @@ class AccessToken < ActiveRecord::Base
     token = access_token || not_deleted.where(token_key => hashed_tokens).first
     if token && token.send(token_key) != hashed_tokens.first
       # we found the token but, its hashed using an old key. save the updated hash
-      token.send("#{token_key}=", hashed_tokens.first)
+      token.send(:"#{token_key}=", hashed_tokens.first)
       token.save!
     end
     token = nil unless token&.usable?(token_key)
@@ -114,7 +115,11 @@ class AccessToken < ActiveRecord::Base
   end
 
   def self.visible_tokens(tokens)
-    tokens.reject { |token| token.developer_key&.internal_service }
+    tokens.uniq.reject { |token| token.developer_key&.internal_service }
+  end
+
+  def self.site_admin?(token_string)
+    !!authenticate(token_string)&.site_admin?
   end
 
   def usable?(token_key = :crypted_token)
@@ -137,14 +142,45 @@ class AccessToken < ActiveRecord::Base
     developer_key.authorized_for_account?(target_account)
   end
 
-  def record_last_used_threshold
-    Setting.get("access_token_last_used_threshold", 10.minutes).to_i
+  def site_admin?
+    return false unless global_developer_key_id.present?
+
+    Shard.shard_for(global_developer_key_id).default?
   end
 
-  def used!
-    if !last_used_at || last_used_at < record_last_used_threshold.seconds.ago
-      self.last_used_at = Time.now.utc
-      save
+  def used!(at: nil)
+    return if last_used_at && last_used_at >= 10.minutes.ago
+
+    at ||= Time.now.utc
+
+    if Rails.env.production? && !shard.in_current_region? && !Delayed::Job.in_delayed_job?
+      # just choose a random shard in the current region to ensure the job
+      # is queued in the current region
+      Shard.in_current_region.first&.activate do
+        delay(singleton: "update_access_token_last_user/#{global_id}",
+              on_conflict: :loose).used!(at:)
+        return
+      end
+    end
+
+    if changed?
+      self.last_used_at = at
+      save!
+      return
+    end
+
+    # only update if nobody else has touched last_used_at, to avoid multiple
+    # writes for the same interval
+    prior_last_used_at = last_used_at
+    self.last_used_at = at
+
+    shard.activate do
+      # not only use optimistic locking, but also don't update if someone else
+      # is already in the process of updating it
+      updated = AccessToken.where(id: AccessToken.where(id: self, last_used_at: prior_last_used_at)
+                                                 .lock("FOR UPDATE SKIP LOCKED"))
+                           .update_all(last_used_at: at, updated_at: at)
+      changes_applied if updated == 1
     end
   end
 
@@ -225,8 +261,8 @@ class AccessToken < ActiveRecord::Base
       # build up the scope matching regexp from the route path
       path = path.gsub(%r{:[^/)]+}, "[^/]+") # handle dynamic segments /courses/:course_id -> /courses/[^/]+
       path = path.gsub(%r{\*[^/)]+}, ".+") # handle glob segments /files/*path -> /files/.+
-      path = path.gsub(/\(/, "(?:").gsub(/\)/, "|)") # handle optional segments /files(/[^/]+) -> /files(?:/[^/]+|)
-      path = "#{path}(?:\\\.[^/]+|)" # handle format segments /files(.:format) -> /files(?:\.[^/]+|)
+      path = path.gsub("(", "(?:").gsub(")", "|)") # handle optional segments /files(/[^/]+) -> /files(?:/[^/]+|)
+      path = "#{path}(?:\\.[^/]+|)" # handle format segments /files(.:format) -> /files(?:\.[^/]+|)
       Regexp.new("^#{path}$")
     end
   end
@@ -263,5 +299,25 @@ class AccessToken < ActiveRecord::Base
 
   def manually_created?
     developer_key_id == DeveloperKey.default.id
+  end
+
+  def self.invalidate_mobile_tokens!(account)
+    return unless account.root_account?
+
+    developer_key_ids = DeveloperKey.mobile_app_keys.map do |app_key|
+      app_key.respond_to?(:global_id) ? app_key.global_id : app_key.id
+    end
+    user_ids = User.active.joins(:pseudonyms).where(pseudonyms: { account_id: account }).ids
+    tokens = active.where(developer_key_id: developer_key_ids, user_id: user_ids)
+
+    now = Time.zone.now
+    tokens.in_batches(of: 10_000).update_all(updated_at: now, permanent_expires_at: now)
+  end
+
+  def queue_developer_key_token_count_increment
+    developer_key&.shard&.activate do
+      strand = "developer_key_token_count_increment_#{developer_key.global_id}"
+      DeveloperKey.delay_if_production(strand:).increment_counter(:access_token_count, developer_key.id)
+    end
   end
 end

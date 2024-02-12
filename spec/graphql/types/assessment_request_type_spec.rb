@@ -38,11 +38,15 @@ describe Types::AssessmentRequestType do
 
   it "requires permission" do
     user2 = User.create!
-    expect(submission_type.resolve("assignedAssessments { _id }", current_user: user2)).to eq nil
+    expect(submission_type.resolve("assignedAssessments { _id }", current_user: user2)).to be_nil
   end
 
   it "works for workflowState" do
     expect(submission_type.resolve("assignedAssessments { workflowState }").first).to eq @assessment_request.workflow_state
+  end
+
+  it "works for available?" do
+    expect(submission_type.resolve("assignedAssessments { available }").first).to eq @assessment_request.available?
   end
 
   it "works for user" do
@@ -67,7 +71,7 @@ describe Types::AssessmentRequestType do
     end
 
     it "anonymousId should be null" do
-      expect(submission_type.resolve("assignedAssessments { anonymousId }").first).to eq nil
+      expect(submission_type.resolve("assignedAssessments { anonymousId }").first).to be_nil
     end
   end
 
@@ -79,7 +83,7 @@ describe Types::AssessmentRequestType do
     end
 
     it "anonymizedUser should be null" do
-      expect(submission_type.resolve("assignedAssessments { anonymizedUser { _id } }").first).to eq nil
+      expect(submission_type.resolve("assignedAssessments { anonymizedUser { _id } }").first).to be_nil
     end
 
     it "anonymousId should match the anonymous id of the asset" do

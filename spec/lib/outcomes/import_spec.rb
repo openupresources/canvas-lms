@@ -46,8 +46,8 @@ RSpec.describe Outcomes::Import do
   end
 
   let(:context) { root_account }
-  let(:parent1) { outcome_group_model(context: context, vendor_guid: "parent1") }
-  let(:parent2) { outcome_group_model(context: context, vendor_guid: "parent2") }
+  let(:parent1) { outcome_group_model(context:, vendor_guid: "parent1") }
+  let(:parent2) { outcome_group_model(context:, vendor_guid: "parent2") }
   let(:group_attributes) do
     {
       title: "i'm a group",
@@ -93,7 +93,7 @@ RSpec.describe Outcomes::Import do
   end
 
   describe "#import_group" do
-    let_once(:existing_group) { outcome_group_model(context: context, vendor_guid: group_vendor_guid) }
+    let_once(:existing_group) { outcome_group_model(context:, vendor_guid: group_vendor_guid) }
 
     context "with magic vendor_guid" do
       let(:magic_guid) do
@@ -110,7 +110,7 @@ RSpec.describe Outcomes::Import do
       it '"imports" group if matching group not in correct context' do
         existing_group.update! context: other_context
         importer.import_group(**group_attributes, vendor_guid: magic_guid)
-        imported = LearningOutcomeGroup.where(context: context, vendor_guid: magic_guid)
+        imported = LearningOutcomeGroup.where(context:, vendor_guid: magic_guid)
         expect(imported.length).to eq(1)
         expect(imported.first.id).not_to eq(existing_group.id)
       end
@@ -124,7 +124,7 @@ RSpec.describe Outcomes::Import do
           description: "more updates",
           vendor_guid: magic_guid
         )
-        imported = LearningOutcomeGroup.where(context: context, vendor_guid: magic_guid)
+        imported = LearningOutcomeGroup.where(context:, vendor_guid: magic_guid)
         expect(imported.length).to eq(1)
         expect(imported.first.description).to eq("more updates")
       end
@@ -158,12 +158,12 @@ RSpec.describe Outcomes::Import do
       it "creates new group if matching group not in correct context" do
         existing_group.update! context: other_context
         importer.import_group(group_attributes)
-        new_group = LearningOutcomeGroup.find_by!(context: context, vendor_guid: group_vendor_guid)
+        new_group = LearningOutcomeGroup.find_by!(context:, vendor_guid: group_vendor_guid)
         expect(new_group.id).not_to eq existing_group.id
       end
 
       it "given two groups with the same guid, update an active group before resurrecting a deleted group" do
-        deleted_group = outcome_group_model(context: context, vendor_guid: group_vendor_guid, workflow_state: "deleted")
+        deleted_group = outcome_group_model(context:, vendor_guid: group_vendor_guid, workflow_state: "deleted")
         importer.import_group(group_attributes)
         deleted_group.reload
         existing_group.reload
@@ -294,7 +294,7 @@ RSpec.describe Outcomes::Import do
 
   describe "#import_outcome" do
     let_once(:existing_outcome) do
-      outcome_model(context: context, vendor_guid: outcome_vendor_guid, display_name: "", calculation_method: "highest")
+      outcome_model(context:, vendor_guid: outcome_vendor_guid, display_name: "", calculation_method: "highest")
     end
 
     context "with magic vendor_guid" do
@@ -334,6 +334,17 @@ RSpec.describe Outcomes::Import do
         expect(existing_outcome.reload.calculation_method).to eq "decaying_average"
       end
 
+      it "defaults to standard_decaying_average if no calculation_method is given and new Decaying Average FF is ON" do
+        context.root_account.enable_feature!(:outcomes_new_decaying_average_calculation)
+        expect(existing_outcome.reload.calculation_method).to eq "highest"
+        importer.import_outcome(
+          **outcome_attributes,
+          calculation_method: nil,
+          calculation_int: nil
+        )
+        expect(existing_outcome.reload.calculation_method).to eq "standard_decaying_average"
+      end
+
       context "importing outcome into visible context" do
         let(:importer) { klass.new(course) }
 
@@ -350,8 +361,12 @@ RSpec.describe Outcomes::Import do
           existing_outcome.update! vendor_guid: nil
           expect do
             importer.import_outcome(
-              **existing_outcome.slice(:title, :description, :display_name,
-                                       :workflow_state, :calculation_method, :calculation_int).symbolize_keys,
+              **existing_outcome.slice(:title,
+                                       :description,
+                                       :display_name,
+                                       :workflow_state,
+                                       :calculation_method,
+                                       :calculation_int).symbolize_keys,
               vendor_guid: magic_guid
             )
             existing_outcome.reload
@@ -382,11 +397,11 @@ RSpec.describe Outcomes::Import do
 
       it "imports if outcome in visible context and unchanged" do
         ratings = [{ points: 5, description: "ok" }, { points: 1, description: "ohno" }]
-        importer.import_outcome(**outcome_attributes, ratings: ratings)
+        importer.import_outcome(**outcome_attributes, ratings:)
         expect(existing_outcome.reload.title).to eq "i'm an outcome"
 
         course_importer = klass.new(course)
-        course_importer.import_outcome(**outcome_attributes, ratings: ratings)
+        course_importer.import_outcome(**outcome_attributes, ratings:)
         expect(LearningOutcomeGroup.for_context(course).first.child_outcome_links.count).to eq(1)
       end
 
@@ -398,7 +413,7 @@ RSpec.describe Outcomes::Import do
       end
 
       it "given two outcomes with the same guid, update an active outcome rather than a deleted outcome" do
-        new_outcome = outcome_model(context: context, vendor_guid: outcome_vendor_guid, display_name: "", calculation_method: "highest")
+        new_outcome = outcome_model(context:, vendor_guid: outcome_vendor_guid, display_name: "", calculation_method: "highest")
         existing_outcome.update! workflow_state: "deleted"
         importer.import_outcome(**outcome_attributes)
         new_outcome.reload

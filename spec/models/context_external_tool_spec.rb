@@ -16,7 +16,6 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-#
 
 describe ContextExternalTool do
   before(:once) do
@@ -34,7 +33,7 @@ describe ContextExternalTool do
         shared_secret: "secret",
         name: "test tool",
         url: "http://www.tool.com/launch",
-        developer_key: developer_key,
+        developer_key:,
         lti_version: "1.3",
         root_account: @root_account
       )
@@ -62,7 +61,7 @@ describe ContextExternalTool do
         name: "Requires Permission",
         consumer_key: "key",
         shared_secret: "secret",
-        domain: "requires.permision.com",
+        domain: "requires.permission.com",
         settings: {
           global_navigation: {
             "required_permissions" => required_permission,
@@ -88,13 +87,13 @@ describe ContextExternalTool do
     context "when the placement does not require a specific permission" do
       let(:launch_type) { "course_navigation" }
 
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
 
       context "and the context is blank" do
         let(:launch_type) { "course_navigation" }
         let(:context) { nil }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
     end
 
@@ -104,14 +103,14 @@ describe ContextExternalTool do
         let(:launch_type) { "assignment_selection" }
         let(:context) { nil }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "and the user has the needed permission in the context" do
         let(:required_permission) { "view_group_pages" }
         let(:launch_type) { "assignment_selection" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context 'and the placement is "global_navigation"' do
@@ -119,7 +118,7 @@ describe ContextExternalTool do
           let(:required_permission) { "view_group_pages" }
           let(:launch_type) { "global_navigation" }
 
-          it { is_expected.to eq true }
+          it { is_expected.to be true }
         end
       end
     end
@@ -135,7 +134,9 @@ describe ContextExternalTool do
 
     let(:granted_permissions) do
       ContextExternalTool.global_navigation_granted_permissions(root_account: @root_account,
-                                                                user: global_nav_user, context: global_nav_context, session: nil)
+                                                                user: global_nav_user,
+                                                                context: global_nav_context,
+                                                                session: nil)
     end
     let(:global_nav_user) { nil }
     let(:global_nav_context) { nil }
@@ -147,7 +148,7 @@ describe ContextExternalTool do
         name: "Requires Permission",
         consumer_key: "key",
         shared_secret: "secret",
-        domain: "requires.permision.com",
+        domain: "requires.permission.com",
         settings: {
           global_navigation: {
             "required_permissions" => required_permission,
@@ -163,7 +164,7 @@ describe ContextExternalTool do
         name: "No Requires Permission",
         consumer_key: "key",
         shared_secret: "secret",
-        domain: "no.requires.permision.com",
+        domain: "no.requires.permission.com",
         settings: {
           global_navigation: {
             text: "Global Navigation (no permission)",
@@ -185,7 +186,7 @@ describe ContextExternalTool do
         it { is_expected.to match_array [no_permission_required_tool, permission_required_tool] }
       end
 
-      context "when the current user does not have the required permission" do\
+      context "when the current user does not have the required permission" do
         it { is_expected.to match_array [no_permission_required_tool] }
       end
     end
@@ -206,7 +207,7 @@ describe ContextExternalTool do
         shared_secret: "secret",
         name: "test tool",
         url: "http://www.tool.com/launch",
-        developer_key: developer_key
+        developer_key:
       )
     end
 
@@ -214,11 +215,11 @@ describe ContextExternalTool do
       expect(tool.login_or_launch_url).to eq tool.url
     end
 
-    context "when a content_tag_uri is specified" do
-      let(:content_tag_uri) { "https://www.test.com/tool-launch" }
+    context "when a preferred_launch_url is specified" do
+      let(:preferred_launch_url) { "https://www.test.com/tool-launch" }
 
-      it "returns the content tag uri" do
-        expect(tool.login_or_launch_url(content_tag_uri: content_tag_uri)).to eq content_tag_uri
+      it "returns the preferred_launch_url" do
+        expect(tool.login_or_launch_url(preferred_launch_url:)).to eq preferred_launch_url
       end
     end
 
@@ -246,13 +247,522 @@ describe ContextExternalTool do
 
       before do
         tool.lti_version = "1.3"
-        developer_key.update!(oidc_initiation_url: oidc_initiation_url)
+        developer_key.update!(oidc_initiation_url:)
       end
 
       it "returns the oidc login url" do
         expect(tool.login_or_launch_url).to eq oidc_initiation_url
       end
+
+      context "when the tool configuration has oidc_initiation_urls" do
+        before do
+          tool.settings["oidc_initiation_urls"] = {
+            "us-west-2" => "http://www.test.com/oidc/login/oregon",
+            "eu-west-1" => "http://www.test.com/oidc/login/ireland"
+          }
+        end
+
+        it "returns the region-specific oidc login url" do
+          allow(Shard.current.database_server).to receive(:config).and_return({ region: "eu-west-1" })
+          expect(tool.login_or_launch_url).to eq "http://www.test.com/oidc/login/ireland"
+        end
+
+        it "falls back to the default oidc login url if there is none for the current region" do
+          allow(Shard.current.database_server).to receive(:config).and_return({ region: "us-east-1" })
+          expect(tool.login_or_launch_url).to eq "http://www.test.com/oidc/login"
+        end
+
+        context "when the developer key and active shard are different from the tool shard" do
+          specs_require_sharding
+
+          it "uses the tool shard for region" do
+            shard1_tool = @shard1.activate do
+              opts = {
+                lti_version: 1.3,
+                developer_key:,
+                settings: {
+                  "oidc_initiation_urls" => {
+                    "us-west-2" => "http://www.test.com/oidc/login/oregon-tool2",
+                    "eu-west-1" => "http://www.test.com/oidc/login/ireland-tool2"
+                  }
+                }
+              }
+              external_tool_model(context: account_model, opts:)
+            end
+
+            @shard2.activate do
+              possible_shards = [developer_key.shard, shard1_tool.shard, Shard.current]
+              expect(possible_shards.map(&:id).uniq.length).to eq(3)
+              allow(shard1_tool.shard.database_server).to receive(:config).and_return({ region: "eu-west-1" })
+              allow(Shard.current.database_server).to receive(:config).and_return({ region: "us-west-2" })
+              expect(shard1_tool.login_or_launch_url).to eq "http://www.test.com/oidc/login/ireland-tool2"
+            end
+          end
+        end
+      end
     end
+  end
+
+  describe "#launch_url" do
+    let_once(:tool) do
+      ContextExternalTool.create!(
+        context: @course,
+        consumer_key: "key",
+        shared_secret: "secret",
+        name: "test tool",
+        url: "http://www.tool.com/launch"
+      )
+    end
+
+    it "returns the launch url" do
+      expect(tool.launch_url).to eq tool.url
+    end
+
+    context "when a preferred_launch_url is specified" do
+      let(:preferred_launch_url) { "https://www.test.com/tool-launch" }
+
+      it "returns the preferred_launch_url" do
+        expect(tool.launch_url(preferred_launch_url:)).to eq preferred_launch_url
+      end
+    end
+
+    context "when the extension url is present" do
+      let(:placement_url) { "http://www.test.com/editor_button" }
+
+      before do
+        tool.editor_button = {
+          "url" => placement_url,
+          "text" => "LTI 1.3 twoa",
+          "enabled" => true,
+          "icon_url" => "https://static.thenounproject.com/png/131630-200.png",
+          "message_type" => "LtiDeepLinkingRequest",
+          "canvas_icon_class" => "icon-lti"
+        }
+      end
+
+      it "returns the extension url" do
+        expect(tool.launch_url(extension_type: :editor_button)).to eq placement_url
+      end
+    end
+
+    context "with a lti_1_3 tool" do
+      before do
+        tool.lti_version = "1.3"
+      end
+
+      context "when the extension target_link_uri is present" do
+        let(:placement_url) { "http://www.test.com/editor_button" }
+
+        before do
+          tool.editor_button = {
+            "target_link_uri" => placement_url,
+            "text" => "LTI 1.3 twoa",
+            "enabled" => true,
+            "icon_url" => "https://static.thenounproject.com/png/131630-200.png",
+            "message_type" => "LtiDeepLinkingRequest",
+            "canvas_icon_class" => "icon-lti"
+          }
+        end
+
+        it "returns the extension target_link_uri" do
+          expect(tool.launch_url(extension_type: :editor_button)).to eq placement_url
+        end
+      end
+
+      it "returns the launch url" do
+        expect(tool.launch_url).to eq tool.url
+      end
+    end
+
+    context "with environment-specific url overrides" do
+      let(:override_url) { "http://www.test-beta.net/launch" }
+
+      before do
+        allow(tool).to receive(:url_with_environment_overrides).and_return(override_url)
+      end
+
+      it "returns the override url" do
+        expect(tool.launch_url).to eq override_url
+      end
+
+      context "when the extension url is present" do
+        let(:placement_url) { "http://www.test.com/editor_button" }
+        let(:override_url) { "http://www.test-beta.net/editor_button" }
+
+        before do
+          tool.editor_button = {
+            "url" => placement_url,
+            "text" => "LTI 1.3 twoa",
+            "enabled" => true,
+            "icon_url" => "https://static.thenounproject.com/png/131630-200.png",
+            "message_type" => "LtiDeepLinkingRequest",
+            "canvas_icon_class" => "icon-lti"
+          }
+        end
+
+        it "returns the extension url" do
+          expect(tool.launch_url(extension_type: :editor_button)).to eq override_url
+        end
+      end
+    end
+  end
+
+  describe "#url_with_environment_overrides" do
+    subject { tool.url_with_environment_overrides(url, include_launch_url:) }
+
+    let(:url) { "http://www.tool.com/launch" }
+    let(:include_launch_url) { false }
+
+    let_once(:tool) do
+      ContextExternalTool.create!(
+        context: @course,
+        consumer_key: "key",
+        shared_secret: "secret",
+        name: "test tool",
+        url:
+      )
+    end
+
+    before do
+      allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
+      allow(tool).to receive(:use_environment_overrides?).and_return(true)
+    end
+
+    context "when prechecks do not pass" do
+      before do
+        allow(tool).to receive(:use_environment_overrides?).and_return(false)
+      end
+
+      it "does not override url" do
+        expect(subject).to eq url
+      end
+    end
+
+    context "when launch_url override is configured" do
+      let(:override_url) { "http://www.test.com/override" }
+      let(:include_launch_url) { true }
+
+      before do
+        tool.settings[:environments] = {
+          launch_url: override_url
+        }
+      end
+
+      it "returns the launch_url override" do
+        expect(subject).to eq override_url
+      end
+
+      context "with base_url query string" do
+        let(:url) { super() + "?hello=world" }
+
+        it "includes the query string in returned url" do
+          expect(subject).to eq override_url + "?hello=world"
+        end
+      end
+
+      context "with launch_url query string" do
+        let(:override_url) { super() + "?hello=world" }
+
+        it "includes the query string in returned url" do
+          expect(subject).to eq override_url
+        end
+      end
+
+      context "with query strings on both urls" do
+        let(:url) { super() + "?hello=world&test=this" }
+        let(:override_url) { super() + "?hello=there" }
+
+        it "merges both query strings in returned url" do
+          expect(subject).to eq override_url + "&test=this"
+        end
+      end
+    end
+
+    context "when env_launch_url override is configured" do
+      let(:override_url) { "http://www.test.com/override" }
+      let(:beta_url) { "#{override_url}/beta" }
+      let(:include_launch_url) { true }
+
+      before do
+        tool.settings[:environments] = {
+          launch_url: override_url,
+          beta_launch_url: beta_url
+        }
+      end
+
+      it "prefers env_launch_url over launch_url" do
+        expect(subject).to eq beta_url
+      end
+    end
+
+    context "when domain override is configured" do
+      let(:override_url) { "http://www.test-change.net/launch" }
+      let(:override_domain) { "www.test-change.net" }
+
+      before do
+        tool.settings[:environments] = {
+          domain: override_domain
+        }
+      end
+
+      it "replaces the domain of launch_url with override" do
+        expect(subject).to eq override_url
+      end
+
+      context "when domain includes protocol" do
+        let(:override_domain) { "http://www.test-change.net" }
+
+        it "replaces the domain with override" do
+          expect(subject).to eq override_url
+        end
+      end
+
+      context "when domain includes trailing slash" do
+        let(:override_domain) { "www.test-change.net/" }
+
+        it "replaces the domain with override" do
+          expect(subject).to eq override_url
+        end
+      end
+    end
+
+    context "when env_domain override is configured" do
+      let(:override_url) { "http://www.test-change.beta.net/launch" }
+      let(:override_domain) { "www.test-change.net" }
+      let(:beta_domain) { "www.test-change.beta.net" }
+
+      before do
+        tool.settings[:environments] = {
+          domain: override_domain,
+          beta_domain:
+        }
+      end
+
+      it "replaces the domain of launch_url with override" do
+        expect(subject).to eq override_url
+      end
+    end
+
+    context "when both domain and launch_url override are configured" do
+      let(:override_url) { "http://www.test-change.beta.net/launch" }
+      let(:override_domain) { "www.test-change.net" }
+
+      before do
+        tool.settings[:environments] = {
+          domain: override_domain,
+          launch_url: override_url
+        }
+      end
+
+      it "prefers domain override" do
+        expect(subject).to eq "http://www.test-change.net/launch"
+      end
+
+      context "when include_launch_url is true" do
+        let(:include_launch_url) { true }
+
+        it "prefers url override over domain" do
+          expect(subject).to eq override_url
+        end
+      end
+    end
+
+    # TODO: implement this behavior, both old and new don't account for it yet
+    # context "when domain contains port" do
+    #   let(:override_url) { "http://www.test-change.net:3001/launch" }
+    #   let(:override_domain) { "www.test-change.net:3001" }
+    #   let(:domain_with_port) { "localhost:3000" }
+    #   let(:url) { "http://#{domain_with_port}/launch" }
+
+    #   before do
+    #     tool.domain = domain_with_port
+    #     tool.url = url
+    #     tool.settings[:environments] = {
+    #       domain: override_domain
+    #     }
+    #     tool.save!
+    #   end
+
+    #   it "accounts for port when replacing" do
+    #     expect(subject).to eq override_url
+    #   end
+    # end
+  end
+
+  describe "#domain_with_environment_overrides" do
+    subject { tool.domain_with_environment_overrides }
+
+    let(:domain) { "example.com" }
+    let(:override_domain) { "beta.example.com" }
+
+    let_once(:tool) do
+      ContextExternalTool.create!(
+        context: @course,
+        consumer_key: "key",
+        shared_secret: "secret",
+        name: "test tool",
+        domain:
+      )
+    end
+
+    before do
+      tool.settings[:environments] = { domain: override_domain }
+      allow(tool).to receive(:use_environment_overrides?).and_return(true)
+    end
+
+    context "when prechecks do not pass" do
+      before do
+        allow(tool).to receive(:use_environment_overrides?).and_return(false)
+      end
+
+      it "returns base domain" do
+        expect(subject).to eq domain
+      end
+    end
+
+    context "when there is no environment override for domain" do
+      before do
+        tool.settings[:environments] = { launch_url: "https://example.com/test-launch" }
+      end
+
+      it "returns base domain" do
+        expect(subject).to eq domain
+      end
+    end
+
+    it "returns override domain" do
+      expect(subject).to eq override_domain
+    end
+  end
+
+  describe "#environment_overrides_for" do
+    subject { tool.environment_overrides_for(key) }
+
+    let(:key) { nil }
+    let(:domain) { "test.example.com" }
+    let(:beta_domain) { "beta.example.com" }
+    let(:launch_url) { "https://example.com/test-launch" }
+    let(:beta_launch_url) { "https://example.com/beta-launch" }
+
+    let_once(:tool) do
+      ContextExternalTool.create!(
+        context: @course,
+        consumer_key: "key",
+        shared_secret: "secret",
+        name: "test tool",
+        domain: "example.com"
+      )
+    end
+
+    before do
+      tool.settings[:environments] = {}
+      allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
+    end
+
+    context "when key isn't valid" do
+      let(:key) { :wrong }
+
+      it "returns nil" do
+        expect(subject).to be_nil
+      end
+    end
+
+    context "when tool doesn't have override for key" do
+      let(:key) { "domain" }
+
+      it "returns nil" do
+        expect(subject).to be_nil
+      end
+    end
+
+    context "domain override" do
+      let(:key) { :domain }
+
+      before do
+        tool.settings[:environments][:domain] = domain
+      end
+
+      it "returns base domain override" do
+        expect(subject).to eq domain
+      end
+
+      context "with env-specific override" do
+        before do
+          tool.settings[:environments][:beta_domain] = beta_domain
+        end
+
+        it "returns env-specific domain" do
+          expect(subject).to eq beta_domain
+        end
+      end
+    end
+
+    context "launch_url override" do
+      let(:key) { :launch_url }
+
+      before do
+        tool.settings[:environments][:launch_url] = launch_url
+      end
+
+      it "returns base launch_url override" do
+        expect(subject).to eq launch_url
+      end
+
+      context "with env-specific override" do
+        before do
+          tool.settings[:environments][:beta_launch_url] = beta_launch_url
+        end
+
+        it "returns env-specific launch_url" do
+          expect(subject).to eq beta_launch_url
+        end
+      end
+    end
+  end
+
+  describe "#use_environment_overrides?" do
+    subject { tool.use_environment_overrides? }
+
+    let_once(:tool) do
+      ContextExternalTool.create!(
+        context: @course,
+        consumer_key: "key",
+        shared_secret: "secret",
+        name: "test tool",
+        domain: "example.com"
+      )
+    end
+
+    before do
+      tool.settings[:environments] = { domain: "beta.example.com" }
+      allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
+    end
+
+    context "in standard Canvas" do
+      before do
+        allow(ApplicationController).to receive(:test_cluster?).and_return(false)
+      end
+
+      it { is_expected.to be false }
+    end
+
+    context "with a lti_1_3 tool" do
+      before do
+        tool.lti_version = "1.3"
+      end
+
+      it { is_expected.to be false }
+    end
+
+    context "when tool does not have overrides configured" do
+      before do
+        tool.settings.delete :environments
+      end
+
+      it { is_expected.to be false }
+    end
+
+    it { is_expected.to be true }
   end
 
   describe "#deployment_id" do
@@ -278,10 +788,11 @@ describe ContextExternalTool do
   end
 
   describe "#matches_host?" do
-    subject { tool.matches_host?(given_url) }
+    subject { tool.matches_host?(given_url, use_environment_overrides:) }
 
     let(:tool) { external_tool_model }
     let(:given_url) { "https://www.given-url.com/test?foo=bar" }
+    let(:use_environment_overrides) { false }
 
     context "when the tool has a url and no domain" do
       let(:url) { "https://app.test.com/foo" }
@@ -289,24 +800,46 @@ describe ContextExternalTool do
       before do
         tool.update!(
           domain: nil,
-          url: url
+          url:
         )
       end
 
       context "and the tool url host does not match that of the given url host" do
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "and the tool url host matches that of the given url host" do
         let(:url) { "https://www.given-url.com/foo?foo=bar" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "and the tool url host matches except for case" do
         let(:url) { "https://www.GiveN-url.cOm/foo?foo=bar" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
+      end
+
+      context "and use_environment_overrides is true" do
+        let(:use_environment_overrides) { true }
+        let(:override_url) { "https://beta.app.test.com/foo" }
+
+        before do
+          allow(tool).to receive(:use_environment_overrides?).and_return(true)
+
+          tool.settings[:environments] = { launch_url: override_url }
+          tool.save!
+        end
+
+        context "and the override url host does not match the given url host" do
+          it { is_expected.to be false }
+        end
+
+        context "and the override url host matches the given url host" do
+          let(:given_url) { "https://beta.app.test.com/foo?foo=bar" }
+
+          it { is_expected.to be true }
+        end
       end
     end
 
@@ -316,44 +849,53 @@ describe ContextExternalTool do
       before do
         tool.update!(
           url: nil,
-          domain: domain
+          domain:
         )
       end
 
       context "and the tool domain host does not match that of the given url host" do
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
 
         context "and the tool url and given url are both nil" do
           let(:given_url) { nil }
 
-          it { is_expected.to eq false }
+          it { is_expected.to be false }
         end
       end
 
       context "and the tool domain host matches that of the given url host" do
         let(:domain) { "www.given-url.com" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "and the tool domain matches except for case" do
         let(:domain) { "www.gIvEn-URL.cOm" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "and the tool domain contains the protocol" do
         let(:domain) { "https://www.given-url.com" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "and the domain and given URL contain a port" do
         let(:domain) { "localhost:3001" }
         let(:given_url) { "http://localhost:3001/link_location" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
+    end
+  end
+
+  describe "#matches_tool_domain?" do
+    it "escapes the tool domain" do
+      tool = external_tool_model(opts: { domain: "foo.bar.com" })
+      tool.save
+      expect(tool.matches_tool_domain?("https://waz.fooxbar.com")).to be false
+      expect(tool.matches_tool_domain?("https://waz.foo.bar.com")).to be true
     end
   end
 
@@ -376,8 +918,8 @@ describe ContextExternalTool do
       end
       let(:tool) do
         ContextExternalTool.create!(
-          settings: settings,
-          context: context,
+          settings:,
+          context:,
           name: "first tool",
           consumer_key: "key",
           shared_secret: "secret",
@@ -388,47 +930,47 @@ describe ContextExternalTool do
       context "when url is not set" do
         let(:domain) { "instructure.com" }
 
-        before { tool.update!(url: nil, domain: domain) }
+        before { tool.update!(url: nil, domain:) }
 
         context "when no other tools are installed in the context" do
           it "does not count as duplicate" do
-            expect(tool.duplicated_in_context?).to eq false
+            expect(tool.duplicated_in_context?).to be false
           end
         end
 
         context "when a tool with matching domain is found" do
-          it { is_expected.to eq true }
+          it { is_expected.to be true }
         end
 
         context "when a tool with matching domain is found in different context" do
           before { second_tool.update!(context: course_model) }
 
-          it { is_expected.to eq false }
+          it { is_expected.to be false }
         end
 
         context "when a tool with matching domain is not found" do
           before { second_tool.domain = "different-domain.com" }
 
-          it { is_expected.to eq false }
+          it { is_expected.to be false }
         end
       end
 
       context "when no other tools are installed in the context" do
         it "does not count as duplicate" do
-          expect(tool.duplicated_in_context?).to eq false
+          expect(tool.duplicated_in_context?).to be false
         end
       end
 
       context "when a tool with matching settings and different URL is found" do
         before { second_tool.url << "/different/url" }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "when a tool with different settings and matching URL is found" do
         before { second_tool.settings[:different_key] = "different value" }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "when a tool with different settings and different URL is found" do
@@ -437,11 +979,11 @@ describe ContextExternalTool do
           second_tool.settings[:different_key] = "different value"
         end
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "when a tool with matching settings and matching URL is found" do
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
     end
 
@@ -485,7 +1027,7 @@ describe ContextExternalTool do
       expect(Lti::ContextToolFinder).to receive(:all_tools_scope_union)
         .with(course, base_scope: anything)
         .and_return(Lti::ScopeUnion.new([ContextExternalTool.all]))
-      expect(tool.duplicated_in_context?).to eq(true)
+      expect(tool.duplicated_in_context?).to be(true)
     end
   end
 
@@ -493,7 +1035,7 @@ describe ContextExternalTool do
     it "calculates an identity hash" do
       tool = external_tool_model
       expect { tool.calculate_identity_hash }.not_to raise_error
-      expect(tool.calculate_identity_hash).to be_kind_of(String)
+      expect(tool.calculate_identity_hash).to be_a(String)
     end
 
     it "reordering settings creates the same identity_hash" do
@@ -553,21 +1095,21 @@ describe ContextExternalTool do
 
     it "must return false when the content_migration key is missing from the settings hash" do
       tool.settings.delete("content_migration")
-      expect(tool.content_migration_configured?).to eq false
+      expect(tool.content_migration_configured?).to be false
     end
 
     it "must return false when the content_migration key is present in the settings hash but the export_start_url sub key is missing" do
       tool.settings["content_migration"].delete("export_start_url")
-      expect(tool.content_migration_configured?).to eq false
+      expect(tool.content_migration_configured?).to be false
     end
 
     it "must return false when the content_migration key is present in the settings hash but the import_start_url sub key is missing" do
       tool.settings["content_migration"].delete("import_start_url")
-      expect(tool.content_migration_configured?).to eq false
+      expect(tool.content_migration_configured?).to be false
     end
 
     it "must return true when the content_migration key and all relevant sub-keys are present" do
-      expect(tool.content_migration_configured?).to eq true
+      expect(tool.content_migration_configured?).to be true
     end
   end
 
@@ -602,7 +1144,7 @@ describe ContextExternalTool do
       course_with_teacher(active_all: true)
       @tool = @course.context_external_tools.new(name: "a", consumer_key: "12345", shared_secret: "secret", url: "http://www.example.com")
       Lti::ResourcePlacement::PLACEMENTS.each do |type|
-        @tool.send "#{type}=", {
+        @tool.send :"#{type}=", {
           url: nav_url,
           text: "Example",
           icon_url: "http://www.example.com/image.ico",
@@ -634,7 +1176,7 @@ describe ContextExternalTool do
         text: "Example"
       }
       @tool.save!
-      expect(@tool.has_placement?(:course_navigation)).to eq false
+      expect(@tool.has_placement?(:course_navigation)).to be false
     end
 
     it "does not validate with no domain or url setting" do
@@ -657,7 +1199,7 @@ describe ContextExternalTool do
       enabled: "true"
     }
     @tool.save!
-    expect(@tool.has_placement?(:course_navigation)).to eq true
+    expect(@tool.has_placement?(:course_navigation)).to be true
   end
 
   it "allows accept_media_types setting exclusively for file_menu extension" do
@@ -679,7 +1221,7 @@ describe ContextExternalTool do
       enabled: "false"
     }
     @tool.save!
-    expect(@tool.has_placement?(:course_navigation)).to eq false
+    expect(@tool.has_placement?(:course_navigation)).to be false
   end
 
   describe "validate_urls" do
@@ -687,7 +1229,7 @@ describe ContextExternalTool do
 
     let(:tool) do
       course.context_external_tools.build(
-        name: "a", url: url, consumer_key: "12345", shared_secret: "secret", settings: settings
+        name: "a", url:, consumer_key: "12345", shared_secret: "secret", settings:
       )
     end
     let(:settings) { {} }
@@ -721,18 +1263,18 @@ describe ContextExternalTool do
     let(:tool) { external_tool_model(opts: tool_opts) }
     let(:tool_opts) { {} }
 
-    it { is_expected.to eq true }
+    it { is_expected.to be true }
 
     context 'when "workflow_state" is "deleted"' do
       let(:tool_opts) { { workflow_state: "deleted" } }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context 'when "workflow_state" is "disabled"' do
       let(:tool_opts) { { workflow_state: "disabled" } }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
   end
 
@@ -741,7 +1283,7 @@ describe ContextExternalTool do
 
     let_once(:tool) { external_tool_model }
 
-    it { is_expected.to eq false }
+    it { is_expected.to be false }
 
     context "when the tool uses LTI 1.3" do
       before do
@@ -749,7 +1291,7 @@ describe ContextExternalTool do
         tool.save!
       end
 
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
     end
   end
 
@@ -797,7 +1339,7 @@ describe ContextExternalTool do
       end
 
       context "and an LTI 1.1 tool has a conflicting URL" do
-        before { tool } # intitialized already, but included for clarity
+        before { tool } # initialized already, but included for clarity
 
         it { is_expected.to eq lti_1_3_tool }
 
@@ -828,7 +1370,7 @@ describe ContextExternalTool do
       context "when the content tag argument is blank" do
         let(:arguments) { [nil, tool.context] }
 
-        it { is_expected.to eq nil }
+        it { is_expected.to be_nil }
       end
     end
   end
@@ -874,9 +1416,9 @@ describe ContextExternalTool do
       @tool = @course.context_external_tools.create!(name: "a", domain: "google.com", consumer_key: "12345", shared_secret: "secret")
       @tool2 = @course.context_external_tools.create!(name: "a", domain: "www.google.com", consumer_key: "12345", shared_secret: "secret")
       @found_tool = ContextExternalTool.find_external_tool("http://mgoogle.com/is/cool", Course.find(@course.id))
-      expect(@found_tool).to eql(nil)
+      expect(@found_tool).to be_nil
       @found_tool = ContextExternalTool.find_external_tool("http://sgoogle.com/is/cool", Course.find(@course.id))
-      expect(@found_tool).to eql(nil)
+      expect(@found_tool).to be_nil
     end
 
     it "does not match on the closest matching domain" do
@@ -1055,8 +1597,16 @@ describe ContextExternalTool do
 
       it "does not return preferred tool if url doesn't match" do
         c1 = @course
-        preferred = c1.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret")
+        preferred = c1.account.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret")
         expect(ContextExternalTool.find_external_tool("http://example.com", c1, preferred.id)).to be_nil
+      end
+
+      it "finds preferred tool if url doesn't match but url's domain is a subdomain of the tool domain" do
+        c1 = @course
+        preferred = c1.account.context_external_tools.create!(name: "a", url: "http://www.google.com", domain: "example.com", consumer_key: "12345", shared_secret: "secret")
+        # If we didn't favor the preferred tool, we would return this tool because it's in a closer context
+        c1.context_external_tools.create!(name: "a", url: "http://www.google.com", domain: "example.com", consumer_key: "12345", shared_secret: "secret")
+        expect(ContextExternalTool.find_external_tool("http://subdomain.example.com", c1, preferred.id)).to eq(preferred)
       end
 
       it "returns the preferred tool if the url is nil" do
@@ -1120,7 +1670,9 @@ describe ContextExternalTool do
       end
 
       context "and there is a difference in LTI version" do
-        subject { ContextExternalTool.find_external_tool(requested_url, context) }
+        def find_tool(url, **opts)
+          ContextExternalTool.find_external_tool(url, context, **opts)
+        end
 
         before do
           # Creation order is important. Be default Canvas uses
@@ -1133,28 +1685,36 @@ describe ContextExternalTool do
 
         let(:context) { @course }
         let(:domain) { "www.test.com" }
-        let(:opts) { { url: url, domain: domain } }
-        let(:requested_url) { "" }
+        let(:opts) { { url:, domain: } }
         let(:url) { "https://www.test.com/foo?bar=1" }
-        let(:lti_1_1_tool) { external_tool_model(context: context, opts: opts) }
-        let(:lti_1_3_tool) { external_tool_1_3_model(context: context, opts: opts) }
+        let(:lti_1_1_tool) { external_tool_model(context:, opts:) }
+        let(:lti_1_3_tool) { external_tool_1_3_model(context:, opts:) }
 
-        context "with an exact URL match" do
-          let(:requested_url) { url }
-
-          it { is_expected.to eq lti_1_3_tool }
+        it "prefers LTI 1.3 tools when there is an exact URL match" do
+          expect(find_tool(url)).to eq lti_1_3_tool
         end
 
-        context "with a partial URL match" do
-          let(:requested_url) { "#{url}&extra_param=1" }
-
-          it { is_expected.to eq lti_1_3_tool }
+        it "prefers LTI 1.3 tools when there is an partial URL match" do
+          expect(find_tool("#{url}&extra_param=1")).to eq lti_1_3_tool
         end
 
-        context "whith a domain match" do
-          let(:requested_url) { "https://www.test.com/another_endpoint" }
+        it "prefers LTI 1.3 tools when there is an domain match" do
+          expect(find_tool("https://www.test.com/another_endpoint")).to eq lti_1_3_tool
+        end
 
-          it { is_expected.to eq lti_1_3_tool }
+        context "when prefer_1_1: true is passed in" do
+          it "prefers LTI 1.1 tools when there is an exact URL match" do
+            expect(find_tool(url, prefer_1_1: true)).to eq lti_1_1_tool
+          end
+
+          it "prefers LTI 1.1 tools when there is an partial URL match" do
+            expect(find_tool("#{url}&extra_param=1", prefer_1_1: true)).to eq lti_1_1_tool
+          end
+
+          it "prefers LTI 1.1 tools when there is an domain match" do
+            expect(find_tool("https://www.test.com/another_endpoint", prefer_1_1: true)).to \
+              eq lti_1_1_tool
+          end
         end
       end
     end
@@ -1164,7 +1724,7 @@ describe ContextExternalTool do
       let(:tool_params) do
         {
           name: "a",
-          url: url,
+          url:,
           consumer_key: "12345",
           shared_secret: "secret",
         }
@@ -1194,7 +1754,7 @@ describe ContextExternalTool do
     context "with duplicate tools" do
       let(:url) { "http://example.com/launch" }
       let(:tool) do
-        t = @course.context_external_tools.create!(name: "test", domain: "example.com", url: url, consumer_key: "12345", shared_secret: "secret")
+        t = @course.context_external_tools.create!(name: "test", domain: "example.com", url:, consumer_key: "12345", shared_secret: "secret")
         t.global_navigation = {
           url: "http://www.example.com",
           text: "Example URL"
@@ -1257,12 +1817,12 @@ describe ContextExternalTool do
     describe "when only_1_3 is passed in" do
       let(:url) { "http://example.com/launch" }
       let(:tool) do
-        @course.context_external_tools.create!(name: "test", domain: "example.com", url: url, consumer_key: "12345", shared_secret: "secret")
+        @course.context_external_tools.create!(name: "test", domain: "example.com", url:, consumer_key: "12345", shared_secret: "secret")
       end
 
       context "when the matching tool is 1.1" do
         it "returns nil" do
-          expect(ContextExternalTool.find_external_tool(url, @course, only_1_3: true)).to eq nil
+          expect(ContextExternalTool.find_external_tool(url, @course, only_1_3: true)).to be_nil
         end
       end
 
@@ -1278,11 +1838,121 @@ describe ContextExternalTool do
         end
       end
     end
+
+    context "with env-specific override urls" do
+      subject { ContextExternalTool.find_external_tool(given_url, @course) }
+
+      let(:given_url) { "http://example.beta.com/launch?foo=bar" }
+      let(:tool) do
+        t = @course.context_external_tools.create!(name: "test", domain: "example.com", url: "http://example.com/launch", consumer_key: "12345", shared_secret: "secret")
+        t.global_navigation = {
+          url: "http://www.example.com",
+          text: "Example URL"
+        }
+        t.save!
+        t
+      end
+
+      shared_examples_for "matches tool with overrides" do
+        context "in production environment" do
+          it "does not match" do
+            expect(subject).to be_nil
+          end
+        end
+
+        context "in nonprod environment" do
+          before do
+            allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
+          end
+
+          it "matches on override" do
+            expect(subject).to eq tool
+          end
+        end
+      end
+
+      context "when tool has override domain" do
+        before do
+          tool.settings[:environments] = {
+            domain: "example.beta.com"
+          }
+          tool.save!
+        end
+
+        it_behaves_like "matches tool with overrides"
+      end
+
+      context "when tool has override url" do
+        before do
+          tool.settings[:environments] = {
+            launch_url: "http://example.beta.com/launch"
+          }
+          tool.save!
+        end
+
+        it_behaves_like "matches tool with overrides"
+      end
+
+      context "when tool has override url with query parameters" do
+        before do
+          tool.settings[:environments] = {
+            launch_url: "http://example.beta.com/launch?foo=bar"
+          }
+          tool.save!
+        end
+
+        it_behaves_like "matches tool with overrides"
+      end
+    end
+
+    context "when closest matching tool is from a different developer key" do
+      let(:url) { "http://test.com" }
+      let(:tool_params) do
+        {
+          name: "a",
+          url:,
+          consumer_key: "12345",
+          shared_secret: "secret",
+          developer_key: original_key
+        }
+      end
+      let(:original_key) { DeveloperKey.create! }
+      let(:other_key) { DeveloperKey.create! }
+      let(:original_tool) { @course.context_external_tools.create!(tool_params) }
+      let(:matching_tool) { @course.root_account.context_external_tools.create!(tool_params) }
+      let(:closest_tool) { @course.context_external_tools.create!(tool_params.merge(developer_key: other_key)) }
+
+      before do
+        original_tool.destroy!
+        matching_tool
+        closest_tool
+      end
+
+      context "and the flag is disabled" do
+        before do
+          @course.root_account.disable_feature!(:lti_find_external_tool_prefer_original_client_id)
+        end
+
+        it "returns the closest matching tool" do
+          expect(ContextExternalTool.find_external_tool(url, @course, original_tool.id)).to eq closest_tool
+        end
+      end
+
+      context "and the flag is enabled" do
+        before do
+          @course.root_account.enable_feature!(:lti_find_external_tool_prefer_original_client_id)
+        end
+
+        it "prefers tool from the same developer key" do
+          expect(ContextExternalTool.find_external_tool(url, @course, original_tool.id)).to eq matching_tool
+        end
+      end
+    end
   end
 
   describe "find_and_order_tools" do
     subject do
-      ContextExternalTool.find_and_order_tools(@course, preferred_tool_id, exclude_tool_id, preferred_client_id).to_a
+      ContextExternalTool.find_and_order_tools(context: @course, preferred_tool_id:, exclude_tool_id:, preferred_client_id:, original_client_id:).to_a
     end
 
     let(:tool1) { external_tool_model(context: @course, opts: { name: "tool1" }) }
@@ -1292,11 +1962,20 @@ describe ContextExternalTool do
     let(:preferred_tool_id) { nil }
     let(:exclude_tool_id) { nil }
     let(:preferred_client_id) { nil }
+    let(:original_client_id) { nil }
     let(:key) { DeveloperKey.create! }
 
     before do
       # initialize tools
       tools
+    end
+
+    context "when preferred_tool_id contains a sql injection" do
+      let(:preferred_tool_id) { "123\npsql syntax error" }
+
+      it "does not raise an error" do
+        expect { subject }.not_to raise_error
+      end
     end
 
     context "when tool is deleted" do
@@ -1400,6 +2079,17 @@ describe ContextExternalTool do
       it "sorts 1.1 tools to the back" do
         expect(subject.last).to eq tool2
       end
+
+      context "when prefer_1_1 is true" do
+        subject do
+          ContextExternalTool.find_and_order_tools(context: @course, preferred_tool_id:, exclude_tool_id:, preferred_client_id:, prefer_1_1: true).to_a
+        end
+
+        it "sorts 1.1 tools to the front and 1.3 tools to the back" do
+          expect(subject.first).to eq tool1
+          expect(subject.last).to eq tool3
+        end
+      end
     end
 
     context "with duplicate tools" do
@@ -1421,6 +2111,47 @@ describe ContextExternalTool do
 
       it "sorts tool with that id to the front" do
         expect(subject.first).to eq tool2
+      end
+    end
+
+    context "when closest matching tool is from a different developer key" do
+      let(:preferred_tool_id) { tool3.id }
+      let(:original_client_id) { key.id }
+
+      before do
+        # preferred tool is gone,
+        tool3.developer_key = key
+        tool3.save!
+        tool3.destroy!
+
+        # the tool we actually want is farther up in context chain
+        tool1.context = @course.account
+        tool1.developer_key = key
+        tool1.save!
+
+        # the tool that matches first is from the wrong dev key
+        tool2.developer_key = DeveloperKey.create!
+        tool2.save!
+      end
+
+      context "and flag is enabled" do
+        before do
+          @course.root_account.enable_feature!(:lti_find_external_tool_prefer_original_client_id)
+        end
+
+        it "prefers tool from the same developer key" do
+          expect(subject.first).to eq tool1
+        end
+      end
+
+      context "and flag is disabled" do
+        before do
+          @course.root_account.disable_feature!(:lti_find_external_tool_prefer_original_client_id)
+        end
+
+        it "prefers tool from closer context" do
+          expect(subject.first).to eq tool2
+        end
       end
     end
 
@@ -1483,14 +2214,68 @@ describe ContextExternalTool do
   end
 
   describe "#extension_setting" do
-    it "returns the top level extension setting if no placement is given" do
+    let(:tool) do
       tool = @course.context_external_tools.new(name: "bob",
                                                 consumer_key: "bob",
                                                 shared_secret: "bob")
       tool.url = "http://www.example.com/basic_lti"
       tool.settings[:windowTarget] = "_blank"
       tool.save!
+      tool
+    end
+
+    it "returns the top level extension setting if no placement is given" do
       expect(tool.extension_setting(nil, :windowTarget)).to eq "_blank"
+    end
+
+    context "with environment-specific overrides" do
+      let(:override_url) { "http://www.example.com/icon/override" }
+      let(:launch_url) { "http://www.example.com/launch/course_navigation" }
+
+      before do
+        allow(tool).to receive(:url_with_environment_overrides).and_return(override_url)
+        tool.course_navigation = {
+          url: launch_url,
+          icon_url: "http://www.example.com/icon/course_navigation"
+        }
+      end
+
+      it "returns override for icon_url" do
+        expect(tool.extension_setting(:course_navigation, :icon_url)).to eq override_url
+      end
+
+      it "returns actual url for other properties" do
+        expect(tool.extension_setting(:course_navigation, :url)).to eq launch_url
+      end
+    end
+  end
+
+  describe "#icon_url" do
+    let(:icon_url) { "http://wwww.example.com/icon/lti" }
+    let(:tool) do
+      tool = @course.context_external_tools.new(name: "bob",
+                                                consumer_key: "bob",
+                                                shared_secret: "bob")
+      tool.url = "http://www.example.com/basic_lti"
+      tool.settings[:icon_url] = icon_url
+      tool.save!
+      tool
+    end
+
+    it "returns settings.icon_url" do
+      expect(tool.icon_url).to eq tool.settings[:icon_url]
+    end
+
+    context "with environment-specific overrides" do
+      let(:override_url) { "http://www.example.com/icon/override" }
+
+      before do
+        allow(tool).to receive(:url_with_environment_overrides).and_return(override_url)
+      end
+
+      it "returns override for icon_url" do
+        expect(tool.icon_url).to eq override_url
+      end
     end
   end
 
@@ -1502,7 +2287,7 @@ describe ContextExternalTool do
       expect(tool.custom_fields.keys.length).to eq 2
       expect(tool.custom_fields["a"]).to eq "1"
       expect(tool.custom_fields["bT^@!#n_40"]).to eq "123"
-      expect(tool.custom_fields["c"]).to eq nil
+      expect(tool.custom_fields["c"]).to be_nil
     end
 
     it "returns custom_fields_string as a text-formatted field" do
@@ -1515,7 +2300,7 @@ describe ContextExternalTool do
       course_with_teacher(active_all: true)
       @tool = @course.context_external_tools.new(name: "a", consumer_key: "12345", shared_secret: "secret", custom_fields: { "a" => "1", "b" => "2" }, url: "http://www.example.com")
       Lti::ResourcePlacement::PLACEMENTS.each do |type|
-        @tool.send "#{type}=", {
+        @tool.send :"#{type}=", {
           text: "Example",
           url: "http://www.example.com",
           icon_url: "http://www.example.com/image.ico",
@@ -1564,7 +2349,7 @@ describe ContextExternalTool do
       expect(ContextExternalTool.where(context: @course).placements("resource_selection").to_a).to eql([tool3])
     end
 
-    it "doesn't return not selectable tools placements for moudle_item" do
+    it "doesn't return not selectable tools placements for module_item" do
       tool1 = @course.context_external_tools.create!(name: "First Tool", url: "http://www.example.com", consumer_key: "key", shared_secret: "secret")
       tool2 = @course.context_external_tools.new(name: "Another Tool", consumer_key: "key", shared_secret: "secret")
       tool2.settings[:editor_button] = { url: "http://www.example.com", icon_url: "http://www.example.com", selection_width: 100, selection_height: 100 }.with_indifferent_access
@@ -1867,15 +2652,15 @@ describe ContextExternalTool do
     it "falls back to tool defaults" do
       tool.editor_button = { url: "http://www.example.com" }
       tool.save
-      expect(tool.editor_button).not_to eq nil
+      expect(tool.editor_button).not_to be_nil
       expect(tool.editor_button(:url)).to eq "http://www.example.com"
       expect(tool.editor_button(:icon_url)).to eq "http://www.example.com/favicon.ico"
       expect(tool.editor_button(:selection_width)).to eq 100
     end
 
     it "returns nil if the tool is not enabled" do
-      expect(tool.resource_selection).to eq nil
-      expect(tool.resource_selection(:url)).to eq nil
+      expect(tool.resource_selection).to be_nil
+      expect(tool.resource_selection(:url)).to be_nil
     end
 
     it "gets properties for each tool extension" do
@@ -1885,11 +2670,17 @@ describe ContextExternalTool do
       tool.resource_selection = { enabled: true }
       tool.editor_button = { enabled: true }
       tool.save
-      expect(tool.course_navigation).not_to eq nil
-      expect(tool.account_navigation).not_to eq nil
-      expect(tool.user_navigation).not_to eq nil
-      expect(tool.resource_selection).not_to eq nil
-      expect(tool.editor_button).not_to eq nil
+      expect(tool.course_navigation).not_to be_nil
+      expect(tool.account_navigation).not_to be_nil
+      expect(tool.user_navigation).not_to be_nil
+      expect(tool.resource_selection).not_to be_nil
+      expect(tool.editor_button).not_to be_nil
+    end
+
+    it "gets and keeps launch_height setting from extension" do
+      tool.course_navigation = { enabled: true, launch_height: 200 }
+      tool.save
+      expect(tool.course_navigation[:launch_height]).to be 200
     end
 
     context "placement enabled setting" do
@@ -2038,7 +2829,7 @@ describe ContextExternalTool do
   end
 
   describe "#extension_default_value" do
-    it "returns resource_selection when the type is 'resource_slection'" do
+    it "returns resource_selection when the type is 'resource_selection'" do
       expect(subject.extension_default_value(:resource_selection, :message_type)).to eq "resource_selection"
     end
   end
@@ -2101,7 +2892,7 @@ describe ContextExternalTool do
       tool.account_navigation = { url: "#{prod_base_url}/launch?my_var=1", enabled: true }
       tool.change_domain! new_host
       expect(URI.parse(tool.account_navigation[:url]).host).to eq new_host
-      expect(tool.account_navigation[:enabled]).to eq(true)
+      expect(tool.account_navigation[:enabled]).to be(true)
     end
   end
 
@@ -2114,22 +2905,22 @@ describe ContextExternalTool do
     end
 
     it "handles spaces in front of url" do
-      url = ContextExternalTool.standardize_url(" http://sub_underscore.google.com?a=1&b=2")
+      url = ContextExternalTool.standardize_url(" http://sub_underscore.google.com?a=1&b=2").to_s
       expect(url).to eql("http://sub_underscore.google.com/?a=1&b=2")
     end
 
     it "handles tabs in front of url" do
-      url = ContextExternalTool.standardize_url("\thttp://sub_underscore.google.com?a=1&b=2")
+      url = ContextExternalTool.standardize_url("\thttp://sub_underscore.google.com?a=1&b=2").to_s
       expect(url).to eql("http://sub_underscore.google.com/?a=1&b=2")
     end
 
     it "handles unicode whitespace" do
-      url = ContextExternalTool.standardize_url("\u00A0http://sub_underscore.go\u2005ogle.com?a=1\u2002&b=2")
+      url = ContextExternalTool.standardize_url("\u00A0http://sub_underscore.go\u2005ogle.com?a=1\u2002&b=2").to_s
       expect(url).to eql("http://sub_underscore.google.com/?a=1&b=2")
     end
 
     it "handles underscores in the domain" do
-      url = ContextExternalTool.standardize_url("http://sub_underscore.google.com?a=1&b=2")
+      url = ContextExternalTool.standardize_url("http://sub_underscore.google.com?a=1&b=2").to_s
       expect(url).to eql("http://sub_underscore.google.com/?a=1&b=2")
     end
   end
@@ -2318,7 +3109,7 @@ describe ContextExternalTool do
     end
 
     it "creates lti_context_id for asset" do
-      expect(@course.lti_context_id).to eq nil
+      expect(@course.lti_context_id).to be_nil
       @tool = @course.context_external_tools.create!(name: "a", domain: "google.com", consumer_key: "12345", shared_secret: "secret")
       context_id = @tool.opaque_identifier_for(@course)
       @course.reload
@@ -2335,7 +3126,7 @@ describe ContextExternalTool do
     end
 
     it "uses the global_asset_id for new assets that are stored in the db" do
-      expect(@course.lti_context_id).to eq nil
+      expect(@course.lti_context_id).to be_nil
       @tool = @course.context_external_tools.create!(name: "a", domain: "google.com", consumer_key: "12345", shared_secret: "secret")
       context_id = Lti::Asset.global_context_id_for(@course)
       @tool.opaque_identifier_for(@course)
@@ -2448,31 +3239,31 @@ describe ContextExternalTool do
     describe "#has_placement?" do
       it "returns true for module item if it has selectable, and a url" do
         tool = @course.context_external_tools.create!(name: "a", url: "http://google.com", consumer_key: "12345", shared_secret: "secret")
-        expect(tool.has_placement?(:link_selection)).to eq true
+        expect(tool.has_placement?(:link_selection)).to be true
       end
 
       it "returns true for module item if it has selectable, and a domain" do
         tool = @course.context_external_tools.create!(name: "a", domain: "http://google.com", consumer_key: "12345", shared_secret: "secret")
-        expect(tool.has_placement?(:link_selection)).to eq true
+        expect(tool.has_placement?(:link_selection)).to be true
       end
 
       it "does not assume default placements for LTI 1.3 tools" do
         tool = @course.context_external_tools.create!(
           name: "a", domain: "http://google.com", consumer_key: "12345", shared_secret: "secret", lti_version: "1.3"
         )
-        expect(tool.has_placement?(:link_selection)).to eq false
+        expect(tool.has_placement?(:link_selection)).to be false
       end
 
       it "returns false for module item if it is not selectable" do
         tool = @course.context_external_tools.create!(name: "a", not_selectable: true, url: "http://google.com", consumer_key: "12345", shared_secret: "secret")
-        expect(tool.has_placement?(:link_selection)).to eq false
+        expect(tool.has_placement?(:link_selection)).to be false
       end
 
       it "returns false for module item if it has selectable, and no domain or url" do
         tool = @course.context_external_tools.new(name: "a", consumer_key: "12345", shared_secret: "secret")
         tool.settings[:resource_selection] = { url: "http://www.example.com", icon_url: "http://www.example.com", selection_width: 100, selection_height: 100 }.with_indifferent_access
         tool.save!
-        expect(tool.has_placement?(:link_selection)).to eq false
+        expect(tool.has_placement?(:link_selection)).to be false
       end
 
       it "returns true for module item if it is not selectable but has the explicit link_selection placement" do
@@ -2482,11 +3273,11 @@ describe ContextExternalTool do
           text: "Example"
         }
         tool.save!
-        expect(tool.has_placement?(:link_selection)).to eq true
+        expect(tool.has_placement?(:link_selection)).to be true
       end
     end
 
-    describe ".find_tool_for_assignment" do
+    describe ".from_assignment" do
       let(:tool) do
         @course.context_external_tools.create(
           name: "a",
@@ -2500,13 +3291,13 @@ describe ContextExternalTool do
         a = @course.assignments.create!(title: "test",
                                         submission_types: "external_tool",
                                         external_tool_tag_attributes: { url: tool.url })
-        expect(described_class.tool_for_assignment(a)).to eq tool
+        expect(described_class.from_assignment(a)).to eq tool
       end
 
       it "returns nil if there is no content tag" do
         a = @course.assignments.create!(title: "test",
                                         submission_types: "external_tool")
-        expect(described_class.tool_for_assignment(a)).to be_nil
+        expect(described_class.from_assignment(a)).to be_nil
       end
     end
 
@@ -2648,13 +3439,13 @@ describe ContextExternalTool do
     it "includes a boolean false for use_tray" do
       tool.editor_button = { use_tray: "false" }
       json = ContextExternalTool.editor_button_json([tool], @course, user_with_pseudonym)
-      expect(json[0][:use_tray]).to eq false
+      expect(json[0][:use_tray]).to be false
     end
 
     it "includes a boolean true for use_tray" do
       tool.editor_button = { use_tray: "true" }
       json = ContextExternalTool.editor_button_json([tool], @course, user_with_pseudonym)
-      expect(json[0][:use_tray]).to eq true
+      expect(json[0][:use_tray]).to be true
     end
 
     describe "includes the description" do
@@ -2677,7 +3468,7 @@ describe ContextExternalTool do
   describe "is_rce_favorite" do
     def tool_in_context(context)
       ContextExternalTool.create!(
-        context: context,
+        context:,
         consumer_key: "key",
         shared_secret: "secret",
         name: "test tool",
@@ -2688,21 +3479,21 @@ describe ContextExternalTool do
 
     it "can be an rce favorite if it has an editor_button placement" do
       tool = tool_in_context(@root_account)
-      expect(tool.can_be_rce_favorite?).to eq true
+      expect(tool.can_be_rce_favorite?).to be true
     end
 
     it "cannot be an rce favorite if no editor_button placement" do
       tool = tool_in_context(@root_account)
       tool.editor_button = nil
       tool.save!
-      expect(tool.can_be_rce_favorite?).to eq false
+      expect(tool.can_be_rce_favorite?).to be false
     end
 
     it "does not set tools as an rce favorite for any context by default" do
       sub_account = @root_account.sub_accounts.create!
       tool = tool_in_context(@root_account)
-      expect(tool.is_rce_favorite_in_context?(@root_account)).to eq false
-      expect(tool.is_rce_favorite_in_context?(sub_account)).to eq false
+      expect(tool.is_rce_favorite_in_context?(@root_account)).to be false
+      expect(tool.is_rce_favorite_in_context?(sub_account)).to be false
     end
 
     it "inherits from the old is_rce_favorite column if the accounts have not be seen up yet" do
@@ -2710,8 +3501,8 @@ describe ContextExternalTool do
       tool = tool_in_context(@root_account)
       tool.is_rce_favorite = true
       tool.save!
-      expect(tool.is_rce_favorite_in_context?(@root_account)).to eq true
-      expect(tool.is_rce_favorite_in_context?(sub_account)).to eq true
+      expect(tool.is_rce_favorite_in_context?(@root_account)).to be true
+      expect(tool.is_rce_favorite_in_context?(sub_account)).to be true
     end
 
     it "inherits from root account configuration if not set on sub-account" do
@@ -2719,8 +3510,8 @@ describe ContextExternalTool do
       tool = tool_in_context(@root_account)
       @root_account.settings[:rce_favorite_tool_ids] = { value: [tool.global_id] }
       @root_account.save!
-      expect(tool.is_rce_favorite_in_context?(@root_account)).to eq true
-      expect(tool.is_rce_favorite_in_context?(sub_account)).to eq true
+      expect(tool.is_rce_favorite_in_context?(@root_account)).to be true
+      expect(tool.is_rce_favorite_in_context?(sub_account)).to be true
     end
 
     it "overrides with sub-account configuration if specified" do
@@ -2730,8 +3521,8 @@ describe ContextExternalTool do
       @root_account.save!
       sub_account.settings[:rce_favorite_tool_ids] = { value: [] }
       sub_account.save!
-      expect(tool.is_rce_favorite_in_context?(@root_account)).to eq true
-      expect(tool.is_rce_favorite_in_context?(sub_account)).to eq false
+      expect(tool.is_rce_favorite_in_context?(@root_account)).to be true
+      expect(tool.is_rce_favorite_in_context?(sub_account)).to be false
     end
 
     it "can set sub-account tools as favorites" do
@@ -2739,12 +3530,14 @@ describe ContextExternalTool do
       tool = tool_in_context(sub_account)
       sub_account.settings[:rce_favorite_tool_ids] = { value: [tool.global_id] }
       sub_account.save!
-      expect(tool.is_rce_favorite_in_context?(sub_account)).to eq true
+      expect(tool.is_rce_favorite_in_context?(sub_account)).to be true
     end
   end
 
   describe "upgrading from 1.1 to 1.3" do
-    let(:old_tool) { external_tool_model(opts: { url: "https://special.url" }) }
+    let(:domain) { "special.url" }
+    let(:url) { "https://special.url" }
+    let(:old_tool) { external_tool_model(opts: { url:, domain: }) }
     let(:tool) do
       t = old_tool.dup
       t.lti_version = "1.3"
@@ -2754,50 +3547,125 @@ describe ContextExternalTool do
 
     context "prechecks" do
       it "ignores 1.1 tools" do
-        expect(old_tool).not_to receive(:prepare_for_ags)
-        old_tool.prepare_for_ags_if_needed!
+        expect(old_tool).not_to receive(:migrate_content_to_1_3)
+        old_tool.migrate_content_to_1_3_if_needed!
       end
 
       it "ignores 1.3 tools without matching 1.1 tool" do
         other_tool = external_tool_model(opts: { url: "http://other.url" })
-        expect(other_tool).not_to receive(:prepare_for_ags)
-        other_tool.prepare_for_ags_if_needed!
+        expect(other_tool).not_to receive(:migrate_content_to_1_3)
+        other_tool.migrate_content_to_1_3_if_needed!
       end
 
       it "starts process when needed" do
-        expect(tool).to receive(:prepare_for_ags)
-        tool.prepare_for_ags_if_needed!
+        expect(tool).to receive(:migrate_content_to_1_3)
+        tool.migrate_content_to_1_3_if_needed!
+      end
+
+      it "finds the correct 1.1 tool even if there are similar 1.3 tools" do
+        expect(tool).to receive(:migrate_content_to_1_3).with(old_tool.id)
+        t = tool.dup
+        t.url += "/1_3/launch"
+        t.save!
+
+        tool.migrate_content_to_1_3_if_needed!
       end
     end
 
-    context "#related_assignments" do
-      let(:course) { course_model(account: account) }
-      let(:account) { account_model }
+    describe "#migrate_content_to_1_3" do
+      subject { tool.migrate_content_to_1_3(old_tool.id) }
 
-      shared_examples_for "finds related assignments" do
+      let(:course) { course_model(account:) }
+      let(:account) { account_model }
+      let(:direct_assignment) do
+        a = assignment_model(context: course, title: "direct", submission_types: "external_tool")
+        a.external_tool_tag = ContentTag.create!(context: a, content: old_tool)
+        a.save!
+        a
+      end
+      let(:indirect_assignment) do
+        a = assignment_model(context: course, title: "indirect", submission_types: "external_tool")
+        a.external_tool_tag = ContentTag.create!(context: a, content: old_tool)
+        a.save!
+        a
+      end
+      let(:old_tool) { external_tool_model(context: course, opts: { url: "https://special.url" }) }
+      let(:tool) do
+        t = old_tool.dup
+        t.lti_version = "1.3"
+        t.developer_key = DeveloperKey.create!
+        t.save!
+        t
+      end
+
+      it "calls assignment#migrate_to_1_3_if_needed!" do
+        expect(direct_assignment.line_items.count).to eq 0
+        expect(indirect_assignment.line_items.count).to eq 0
+        subject
+        expect(direct_assignment.line_items.count).to eq 1
+        expect(indirect_assignment.line_items.count).to eq 1
+      end
+
+      shared_examples_for "finds related content" do
         before do
-          # assignments that should never get returned
-          diff_context = assignment_model(context: course_model)
-          ContentTag.create!(context: diff_context, content: old_tool)
-          diff_account = assignment_model(context: course_model(account: account_model))
-          ContentTag.create!(context: diff_account, content: old_tool)
+          # content that should never get returned
+          ## assignments
+          diff_context = assignment_model(context: course_model, title: "diff context", submission_types: "external_tool")
+          diff_context.external_tool_tag = ContentTag.create!(context: diff_context, content: old_tool)
+          diff_context.save!
+
+          diff_account = assignment_model(context: course_model(account: account_model), title: "diff account", submission_types: "external_tool")
+          diff_account.external_tool_tag = ContentTag.create!(context: diff_account, content: old_tool)
+          diff_account.save!
+
           invalid_url = assignment_model(context: course)
-          ContentTag.create!(context: invalid_url, url: "https://invalid.url")
+          invalid_url.external_tool_tag = ContentTag.create!(context: invalid_url, url: "https://invalid.url")
+          invalid_url.save!
+
           other_tool = external_tool_model(opts: { url: "https://different.url" })
-          diff_url = assignment_model(context: course)
-          ContentTag.create!(context: diff_url, url: other_tool.url)
+          diff_url = assignment_model(context: course, submission_types: "external_tool", title: "diff url")
+          diff_url = ContentTag.create!(context: diff_url, url: other_tool.url)
+          diff_url.save!
+
+          ## module items
+          ContentTag.create!(context: course_model, content: old_tool)
+          ContentTag.create!(context: course_model(account: account_model), content: old_tool)
+          ContentTag.create!(context: course, url: "https://invalid.url")
+          ContentTag.create!(context: course, url: other_tool.url)
+
+          allow(tool).to receive(:prepare_content_for_migration)
         end
 
         it "finds assignments using tool id" do
           direct = assignment_model(context: course, title: "direct")
           ContentTag.create!(context: direct, content: old_tool)
-          expect(tool.related_assignments(old_tool.id)).to eq([direct])
+          subject
+          expect(tool).to have_received(:prepare_content_for_migration).with(direct)
         end
 
         it "finds assignments using tool url" do
           indirect = assignment_model(context: course, title: "indirect")
           ContentTag.create!(context: indirect, url: old_tool.url)
-          expect(tool.related_assignments(old_tool.id)).to eq([indirect])
+          subject
+          expect(tool).to have_received(:prepare_content_for_migration).with(indirect)
+        end
+
+        it "finds both direct and indirect assignments" do
+          direct = assignment_model(context: course, title: "direct")
+          ContentTag.create!(context: direct, content: old_tool)
+          indirect = assignment_model(context: course, title: "indirect")
+          ContentTag.create!(context: indirect, url: old_tool.url)
+          subject
+          expect(tool).to have_received(:prepare_content_for_migration).with(direct)
+          expect(tool).to have_received(:prepare_content_for_migration).with(indirect)
+        end
+
+        it "finds both direct and indirect module items" do
+          direct = ContentTag.create!(context: course, content: old_tool, tag_type: "context_module")
+          indirect = ContentTag.create!(context: course, url: old_tool.url, tag_type: "context_module")
+          subject
+          expect(tool).to have_received(:prepare_content_for_migration).with(direct)
+          expect(tool).to have_received(:prepare_content_for_migration).with(indirect)
         end
       end
 
@@ -2810,7 +3678,7 @@ describe ContextExternalTool do
           t
         end
 
-        it_behaves_like "finds related assignments"
+        it_behaves_like "finds related content"
       end
 
       context "when installed in an account" do
@@ -2822,7 +3690,44 @@ describe ContextExternalTool do
           t
         end
 
-        it_behaves_like "finds related assignments"
+        it_behaves_like "finds related content"
+      end
+
+      context "with assignments that error" do
+        let(:valid_assignment) do
+          a = assignment_model(context: course, title: "valid", submission_types: "external_tool")
+          a.external_tool_tag = ContentTag.create!(context: a, content: old_tool)
+          a
+        end
+        let(:invalid_assignment) do
+          a = assignment_model(context: course, title: "invalid", submission_types: "external_tool", points_possible: nil)
+          a.external_tool_tag = ContentTag.create!(context: a, content: old_tool)
+          a
+        end
+        let(:scope) { double("scope") }
+
+        before do
+          valid_assignment
+          invalid_assignment
+          allow(Sentry).to receive(:capture_message).and_return(nil)
+          allow(Sentry).to receive(:with_scope).and_yield(scope)
+          allow(scope).to receive(:set_tags)
+          allow(scope).to receive(:set_context)
+        end
+
+        it "sends errors to sentry" do
+          subject
+          expect(Sentry).to have_received(:capture_message)
+          expect(scope).to have_received(:set_tags).with(content_id: invalid_assignment.global_id)
+          expect(scope).to have_received(:set_tags).with(tool_id: tool.global_id)
+          expect(scope).to have_received(:set_tags).with(exception_class: "ActiveRecord::RecordInvalid")
+          expect(scope).to have_received(:set_tags).with(content_type: "Assignment")
+        end
+
+        it "completes the batch" do
+          subject
+          expect(valid_assignment.reload.line_items.count).to eq 1
+        end
       end
     end
   end
@@ -2832,17 +3737,17 @@ describe ContextExternalTool do
 
     it "can be 1.1" do
       tool.lti_version = "1.1"
-      expect(tool.save).to eq true
+      expect(tool.save).to be true
     end
 
     it "can be 1.3" do
       tool.lti_version = "1.3"
-      expect(tool.save).to eq true
+      expect(tool.save).to be true
     end
 
     it "can't be any other value" do
       tool.lti_version = "2.0"
-      expect(tool.save).to eq false
+      expect(tool.save).to be false
     end
 
     it "defaults to 1.1" do
@@ -2865,7 +3770,7 @@ describe ContextExternalTool do
       let(:allowlist) { [".docker", "localhost"] }
 
       before do
-        allow(DynamicSettings).to receive(:find).and_return({ "internal_tool_domain_allowlist" => YAML.dump(allowlist) })
+        allow(DynamicSettings).to receive(:find).and_return(DynamicSettings::FallbackProxy.new({ "internal_tool_domain_allowlist" => YAML.dump(allowlist) }))
       end
 
       it "returns correct config value" do
@@ -2890,7 +3795,7 @@ describe ContextExternalTool do
         tool.update!(developer_key_id: nil)
       end
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when developer key is not internal_service" do
@@ -2898,37 +3803,37 @@ describe ContextExternalTool do
         tool.developer_key.update!(internal_service: false)
       end
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when launch url is nil" do
       let(:launch_url) { nil }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when launch url is malformed" do
       let(:launch_url) { "in valid" }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when launch url domain does not match allowlist" do
       let(:launch_url) { "https://example.com/launch" }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when launch url contains but does not end with domain in allowlist" do
       let(:launch_url) { "https://instructure.com.l33thaxxors.net" }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when launch_url exactly matches domain in allowlist" do
       let(:launch_url) { "http://localhost/launch" }
 
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
     end
 
     context "with a correctly configured 1.1 tool" do
@@ -2936,11 +3841,11 @@ describe ContextExternalTool do
         tool.update!(lti_version: "1.1")
       end
 
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
     end
 
     context "with a correctly configured 1.3 tool" do
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
     end
   end
 
@@ -2995,6 +3900,71 @@ describe ContextExternalTool do
       sk2 = external_tool_model(opts: { name: "A" }).sort_key
       sk3 = external_tool_model(opts: { name: "a" }).sort_key
       expect([sk1, sk2, sk3].sort).to eq([sk1, sk3, sk2])
+    end
+  end
+
+  describe "associated_1_1_tool" do
+    specs_require_cache(:redis_cache_store)
+
+    subject { lti_1_3_tool.associated_1_1_tool(context, requested_url) }
+
+    let(:context) { @course }
+    let(:domain) { "test.com" }
+    let(:opts) { { url:, domain: } }
+    let(:requested_url) { nil }
+    let(:url) { "https://test.com/foo?bar=1" }
+    let!(:lti_1_1_tool) { external_tool_model(context:, opts:) }
+    let!(:lti_1_3_tool) { external_tool_1_3_model(context:, opts:) }
+
+    it { is_expected.to eq lti_1_1_tool }
+
+    it "caches the result" do
+      expect(subject).to eq lti_1_1_tool
+
+      allow(ContextExternalTool).to receive(:find_external_tool)
+      lti_1_3_tool.associated_1_1_tool(context)
+      expect(ContextExternalTool).not_to have_received(:find_external_tool)
+    end
+
+    it "finds deleted 1.1 tools" do
+      lti_1_1_tool.destroy
+      expect(subject).to eq(lti_1_1_tool)
+    end
+
+    it "finds nil and doesn't error on tools with invalid URL & Domains" do
+      lti_1_1_tool.update_column(:url, "http://url path>/invalidurl}")
+      lti_1_1_tool.update_column(:domain, "url path>/invalidurl}")
+
+      expect { subject }.not_to raise_error
+      expect(subject).to be_nil
+    end
+
+    it "finds tools in a higher level context" do
+      lti_1_1_tool.update!(context: context.account)
+      expect(subject).to eq(lti_1_1_tool)
+    end
+
+    it "ignores duplicate tools" do
+      lti_1_1_tool.dup.save!
+      expect(subject).to eq(lti_1_1_tool)
+    end
+
+    context "the request is to a subdomain of the tools' domain" do
+      let(:requested_url) { "https://morespecific.test.com/foo?bar=1" }
+
+      it { is_expected.to eq(lti_1_1_tool) }
+
+      context "there's another 1.1 tool with that subdomain" do
+        let(:specific_opts) do
+          {
+            url: "https://morespecific.test.com/foo?bar=1",
+            domain: "https://morespecific.test.com"
+          }
+        end
+        let!(:specific_1_1_tool) { external_tool_model(context:, opts: specific_opts) }
+
+        it { is_expected.to eq(specific_1_1_tool) }
+      end
     end
   end
 end

@@ -23,7 +23,7 @@ module Turnitin
       assignment = submission.assignment
       user = submission.user
       tool = assignment.external_tool_tag.content
-      tool ||= ContextExternalTool.find_external_tool(assignment.external_tool_tag.url, assignment.context)
+      tool ||= ContextExternalTool.from_assignment(assignment)
       tii_client = TiiClient.new(
         user,
         assignment,
@@ -47,10 +47,8 @@ module Turnitin
           filename = content_disposition.match(/filename=("?)(.+)\1/)[2]
           filename.tr!("/", "-")
           path = File.join(dirname, filename)
-          File.open(path, "wb") do |f|
-            f.write(response.body)
-          end
-          attachment.uploaded_data = Rack::Test::UploadedFile.new(path, response.headers["content-type"], true)
+          File.binwrite(path, response.body)
+          attachment.uploaded_data = Canvas::UploadedFile.new(path, response.headers["content-type"])
           attachment.display_name = filename
           attachment.user ||= user
           attachment.save!

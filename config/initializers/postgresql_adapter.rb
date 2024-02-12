@@ -23,10 +23,47 @@ class QuotedValue < String
 end
 
 module PostgreSQLAdapterExtensions
-  def receive_timeout_wrapper(&block)
+  # when changing this, you need to re-apply the latest migration creating the guard_excessive_updates function
+  DEFAULT_MAX_UPDATE_LIMIT = 1000
+
+  def initialize(*)
+    super
+    @max_update_limit = DEFAULT_MAX_UPDATE_LIMIT
+  end
+
+  def configure_connection
+    super
+
+    conn = (Rails.version < "7.1") ? @connection : @raw_connection
+    conn.set_notice_receiver do |result|
+      severity = result.result_error_field(PG::PG_DIAG_SEVERITY_NONLOCALIZED)
+      rails_severity = case severity
+                       when "WARNING", "NOTICE"
+                         :warn
+                       when "DEBUG"
+                         :debug
+                       when "INFO", "LOG"
+                         :info
+                       else
+                         :error
+                       end
+      logger.send(rails_severity, "PG notice: " + result.result_error_message.strip)
+
+      primary_message = result.result_error_field(PG::PG_DIAG_MESSAGE_PRIMARY)
+      detail_message = result.result_error_field(PG::PG_DIAG_MESSAGE_DETAIL)
+      formatted_message = if detail_message
+                            primary_message + "\n" + detail_message
+                          else
+                            primary_message
+                          end
+      Sentry.capture_message(formatted_message, level: rails_severity)
+    end
+  end
+
+  def receive_timeout_wrapper(&)
     return yield unless @config[:receive_timeout]
 
-    Timeout.timeout(@config[:receive_timeout], PG::ConnectionBad, "receive timeout", &block)
+    Timeout.timeout(@config[:receive_timeout], PG::ConnectionBad, "receive timeout", &)
   end
 
   %I[begin_db_transaction create_savepoint active?].each do |method|
@@ -39,7 +76,8 @@ module PostgreSQLAdapterExtensions
 
   def explain(arel, binds = [], analyze: false)
     sql = "EXPLAIN #{"ANALYZE " if analyze}#{to_sql(arel, binds)}"
-    ActiveRecord::ConnectionAdapters::PostgreSQL::ExplainPrettyPrinter.new.pp(exec_query(sql, "EXPLAIN", binds))
+    ActiveRecord::ConnectionAdapters::PostgreSQL::ExplainPrettyPrinter.new
+                                                                      .pp(exec_query(sql, "EXPLAIN", binds))
   end
 
   def readonly?
@@ -156,7 +194,7 @@ module PostgreSQLAdapterExtensions
       desc_order_columns = inddef.scan(/(\w+) DESC/).flatten
       orders = desc_order_columns.any? ? desc_order_columns.index_with { :desc } : {}
 
-      ActiveRecord::ConnectionAdapters::IndexDefinition.new(table_name, index_name, unique, column_names, orders: orders)
+      ActiveRecord::ConnectionAdapters::IndexDefinition.new(table_name, index_name, unique, column_names, orders:)
     end
   end
 
@@ -193,6 +231,60 @@ module PostgreSQLAdapterExtensions
     return if if_exists && !column_exists?(table_name, column_name)
 
     super
+  end
+
+  def create_table(table_name, id: :primary_key, primary_key: nil, force: nil, **options)
+    super
+
+    add_guard_excessive_updates(table_name)
+  end
+
+  def add_guard_excessive_updates(table_name)
+    # Don't try to install this on rails-internal tables; they need to be created for
+    # internal_metadata to exist and this guard isn't really useful there either
+    return if ["schema_migrations", "internal_metadata"].include?(table_name)
+    # If the function doesn't exist yet it will be backfilled
+    return unless ((Rails.version < "7.1") ? ::ActiveRecord::InternalMetadata : ::ActiveRecord::InternalMetadata.new(self))[:guard_dangerous_changes_installed]
+
+    ["UPDATE", "DELETE"].each do |operation|
+      trigger_name = "guard_excessive_#{operation.downcase}s"
+      already_installed_sql = <<~SQL.squish
+        SELECT count(*) FROM pg_trigger
+          WHERE tgrelid = '#{quote_table_name(table_name)}'::regclass
+            AND tgname = '#{trigger_name}'
+      SQL
+      next if select_value(already_installed_sql).to_i.positive?
+
+      execute(<<~SQL.squish)
+        CREATE TRIGGER #{trigger_name}
+          AFTER #{operation}
+          ON #{quote_table_name(table_name)}
+          REFERENCING OLD TABLE AS oldtbl
+          FOR EACH STATEMENT
+          EXECUTE PROCEDURE #{quote_table_name("guard_excessive_updates")}();
+      SQL
+    end
+  end
+
+  def with_max_update_limit(limit)
+    return yield if limit == @max_update_limit
+
+    old_limit = @max_update_limit
+    @max_update_limit = limit
+
+    if transaction_open?
+      execute("SET LOCAL inst.max_update_limit = #{limit}")
+      ret = yield
+      execute("SET LOCAL inst.max_update_limit = DEFAULT")
+    else
+      transaction do
+        execute("SET LOCAL inst.max_update_limit = #{limit}")
+        ret = yield
+      end
+    end
+    ret
+  ensure
+    @max_update_limit = old_limit if old_limit
   end
 
   def quote(*args)
@@ -235,13 +327,11 @@ module PostgreSQLAdapterExtensions
       WHERE
         collprovider='i' AND
         NOT collisdeterministic AND
-        collcollate LIKE '%-u-kn-true'
+        collname LIKE '%-u-kn-true'
     SQL
   end
 
   def create_icu_collations
-    original_locale = I18n.locale
-
     collation = "und-u-kn-true"
     unless icu_collations.find { |_schema, extant_collation| extant_collation == collation }
       update("CREATE COLLATION public.#{quote_column_name(collation)} (LOCALE=#{quote(collation)}, PROVIDER='icu', DETERMINISTIC=false)")
@@ -250,17 +340,17 @@ module PostgreSQLAdapterExtensions
     I18n.available_locales.each do |locale|
       next if locale.to_s.include?("-x-")
 
-      I18n.locale = locale
-      next if Canvas::ICU.collator.rules.empty?
+      I18n.with_locale(locale) do
+        next if Canvas::ICU.collator.rules.empty?
 
-      collation = "#{locale}-u-kn-true"
-      next if icu_collations.find { |_schema, extant_collation| extant_collation == collation }
+        collation = "#{locale}-u-kn-true"
+        next if icu_collations.find { |_schema, extant_collation| extant_collation == collation }
 
-      update("CREATE COLLATION public.#{quote_column_name(collation)} (LOCALE=#{quote(collation)}, PROVIDER='icu', DETERMINISTIC=false)")
+        update("CREATE COLLATION public.#{quote_column_name(collation)} (LOCALE=#{quote(collation)}, PROVIDER='icu', DETERMINISTIC=false)")
+      end
     end
   ensure
     @collations = nil
-    I18n.locale = original_locale
   end
 
   class AbortExceptionMatcher
@@ -283,6 +373,27 @@ module PostgreSQLAdapterExtensions
   rescue AbortExceptionMatcher
     @connection.cancel
     raise
+  end
+
+  BLOCKED_INSPECT_IVS = %i[
+    @transaction_manager
+    @query_cache
+    @logger
+    @instrumenter
+    @pool
+    @visitor
+    @statements
+    @type_map
+    @schema_cache
+    @type_map_for_results
+  ].freeze
+
+  private_constant :BLOCKED_INSPECT_IVS
+
+  def inspect
+    "#{to_s[0...-1]} " \
+      "#{(instance_variables - BLOCKED_INSPECT_IVS).map { |iv| "#{iv}=#{instance_variable_get(iv).inspect}" }.join(", ")}" \
+      ">"
   end
 end
 
@@ -363,12 +474,17 @@ module ReferenceDefinitionExtensions
 end
 
 module SchemaStatementsExtensions
+  # TODO: move this to activerecord-pg-extensions
+  def valid_column_definition_options
+    super + [:delay_validation]
+  end
+
   def add_column_for_alter(table_name, column_name, type, **options)
     td = create_table_definition(table_name)
     cd = td.new_column_definition(column_name, type, **options)
     schema = schema_creation
     schema.set_table_context(table_name)
-    schema.accept(AddColumnDefinition.new(cd))
+    schema.accept(ActiveRecord::ConnectionAdapters::AddColumnDefinition.new(cd))
   end
 end
 

@@ -18,14 +18,14 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import tz from '@canvas/timezone'
-import htmlEscape from 'html-escape'
+import * as tz from '../index'
+import htmlEscape from '@instructure/html-escape'
 import * as dateFunctions from '../date-functions'
 import {changeTimezone} from '../changeTimezone'
-import DatetimeField from './InstrumentedDatetimeField'
+import DatetimeField from './DatetimeField'
 import renderDatepickerTime from '../react/components/render-datepicker-time'
-import '@canvas/keycodes'
-import 'jqueryui/datepicker'
+import '@canvas/jquery-keycodes'
+import 'jqueryui-unpatched/datepicker'
 
 const I18n = useI18nScope('instructure_date_and_time')
 
@@ -123,7 +123,7 @@ $.fn.datepicker = function (options) {
       let numericHr = parseInt(hr || '0', 10)
       const numericMin = parseInt(min || '0', 10)
 
-      if (tz.hasMeridian()) {
+      if (tz.hasMeridiem()) {
         let isPM = numericHr > 12 // definitely PM if the hour value is past noon
         numericHr %= 12
 
@@ -307,7 +307,7 @@ $.fn.timepicker = function () {
         $picker.data('attached_to', $(this)[0])
         const windowHeight = $(window).height()
         const windowWidth = $(window).width()
-        const scrollTop = $.windowScrollTop()
+        const scrollTop = window.scrollY
         if (offset.top + height - scrollTop + pickerHeight > windowHeight) {
           $picker.css({
             top: offset.top - pickerHeight,

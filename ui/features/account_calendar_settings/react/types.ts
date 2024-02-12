@@ -16,6 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import type {FetchLinkHeader} from '@canvas/do-fetch-api-effect/types'
+
 export type Collection = {
   [id: number]: Account
 }
@@ -32,14 +34,32 @@ export type AccountData = {
 export type Account = {
   id: number
   name: string
-  heading: string | undefined
+  heading?: string
+  label?: string
   parent_account_id: number | null
   sub_account_count: number
   children: any[]
   visible: boolean
+  auto_subscribe?: boolean
 }
 
 export type VisibilityChange = {
   id: number
   visible: boolean
+}
+
+export type SubscriptionChange = {
+  id: number
+  auto_subscribe: boolean
+}
+
+export type ExpandedAccounts = number[]
+
+export type FetchAccountDataResponse = {
+  json: AccountData[]
+  link: FetchLinkHeader
+}
+
+export type UpdateAccountDataResponse = {
+  json: {message: string}
 }

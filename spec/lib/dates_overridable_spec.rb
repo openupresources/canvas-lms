@@ -27,7 +27,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "#teacher_due_date_for_display" do
     it "returns nil when differentiated with no due dates" do
-      student_in_course(course: course)
+      student_in_course(course:)
       overridable.update!(due_at: nil, only_visible_to_overrides: true)
       override.update!(set_type: "ADHOC")
       override.assignment_override_students.create(user: @student)
@@ -38,7 +38,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "overridden_for" do
     before do
-      student_in_course(course: course)
+      student_in_course(course:)
     end
 
     context "when there are overrides" do
@@ -71,7 +71,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "assignment overrides_for" do
     before do
-      student_in_course(course: course)
+      student_in_course(course:)
     end
 
     context "with adhoc" do
@@ -79,6 +79,19 @@ shared_examples_for "an object whose dates are overridable" do
         override.override_due_at(7.days.from_now)
         override.set_type = "ADHOC"
         override.save!
+      end
+
+      it "works with an ADHOC context module override" do
+        Account.site_admin.enable_feature!(:differentiated_modules)
+        module1 = @course.context_modules.create!(name: "Module 1")
+        overridable.context_module_tags.create! context_module: module1, context: @course, tag_type: "context_module"
+
+        module_override = module1.assignment_overrides.create!
+        override_student = module_override.assignment_override_students.build
+        override_student.user = @student
+        override_student.save!
+
+        expect(overridable.overrides_for(@student, ensure_set_not_empty: true).size).to eq 1
       end
 
       it "returns adhoc overrides when active students enrolled in adhoc set" do
@@ -232,14 +245,14 @@ shared_examples_for "an object whose dates are overridable" do
       before { override }
 
       it "returns true" do
-        expect(overridable.reload.has_active_overrides?).to eq true
+        expect(overridable.reload.has_active_overrides?).to be true
       end
     end
 
     context "when it has deleted overrides" do
       it "returns false" do
         override.destroy
-        expect(overridable.reload.has_active_overrides?).to eq false
+        expect(overridable.reload.has_active_overrides?).to be false
       end
     end
   end
@@ -274,7 +287,7 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "as a student" do
       it "only returns active overrides" do
-        course_with_student({ course: course, active_all: true })
+        course_with_student({ course:, active_all: true })
         override.delete
         expect(overridable.all_dates_visible_to(@student).size).to eq 1
       end
@@ -282,8 +295,8 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "as an observer with students" do
       before do
-        course_with_student({ course: course, active_all: true })
-        course_with_observer({ course: course, active_all: true })
+        course_with_student({ course:, active_all: true })
+        course_with_observer({ course:, active_all: true })
         course.enroll_user(@observer, "ObserverEnrollment", { associated_user_id: @student.id })
       end
 
@@ -302,7 +315,7 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "as an observer without students" do
       before do
-        course_with_observer({ course: course, active_all: true })
+        course_with_observer({ course:, active_all: true })
         course.enroll_user(@observer, "ObserverEnrollment")
         override.delete
       end
@@ -373,6 +386,52 @@ shared_examples_for "an object whose dates are overridable" do
     end
   end
 
+  describe "all_assignment_overrides" do
+    before do
+      Account.site_admin.enable_feature!(:differentiated_modules)
+      student_in_course(course:)
+      override.override_due_at(7.days.from_now)
+      override.set_type = "ADHOC"
+      override.save!
+
+      @module1 = @course.context_modules.create!(name: "Module 1")
+      @tag1 = overridable.context_module_tags.create! context_module: @module1, context: @course, tag_type: "context_module"
+
+      @module_override = @module1.assignment_overrides.create!
+      override_student = @module_override.assignment_override_students.build
+      override_student.user = @student
+      override_student.save!
+    end
+
+    it "includes context module overrides" do
+      expect(overridable.all_assignment_overrides).to include(@module_override)
+    end
+
+    it "includes unpublished context module overrides" do
+      @module1.workflow_state = "unpublished"
+      @module1.save!
+      expect(overridable.all_assignment_overrides).to include(@module_override)
+    end
+
+    it "includes an assignment's quiz's context module overrides" do
+      if overridable_type == :quiz
+        overridable.assignment = Assignment.new
+        expect(overridable.assignment.all_assignment_overrides).to include(@module_override)
+      end
+      expect(overridable.all_assignment_overrides).to include(@module_override)
+    end
+
+    it "does not include deleted content tags" do
+      @tag1.destroy
+      expect(overridable.all_assignment_overrides).not_to include(@module_override)
+    end
+
+    it "does not include context module overrides without the flag" do
+      Account.site_admin.disable_feature!(:differentiated_modules)
+      expect(overridable.all_assignment_overrides).not_to include(@module_override)
+    end
+  end
+
   describe "due_date_hash" do
     it "returns the due at, lock_at, unlock_at, all day, and all day fields" do
       due = 5.days.from_now
@@ -384,8 +443,8 @@ shared_examples_for "an object whose dates are overridable" do
       expect(a.due_date_hash[:due_at]).to eq due
       expect(a.due_date_hash[:lock_at]).to eq due
       expect(a.due_date_hash[:unlock_at]).to eq due
-      expect(a.due_date_hash[:all_day]).to eq false
-      expect(a.due_date_hash[:all_day_date]).to eq nil
+      expect(a.due_date_hash[:all_day]).to be false
+      expect(a.due_date_hash[:all_day_date]).to be_nil
     end
   end
 
@@ -408,7 +467,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "multiple_due_dates?" do
     before do
-      course_with_student(course: course)
+      course_with_student(course:)
       course.course_sections.create!
       override.set = course.active_course_sections.second
       override.override_due_at(2.days.ago)
@@ -418,13 +477,13 @@ shared_examples_for "an object whose dates are overridable" do
     context "when the object has been overridden" do
       context "and it has multiple due dates" do
         it "returns true" do
-          expect(overridable.overridden_for(@teacher).multiple_due_dates?).to eq true
+          expect(overridable.overridden_for(@teacher).multiple_due_dates?).to be true
         end
       end
 
       context "and it has one due date" do
         it "returns false" do
-          expect(overridable.overridden_for(@student).multiple_due_dates?).to eq false
+          expect(overridable.overridden_for(@student).multiple_due_dates?).to be false
         end
       end
     end
@@ -437,14 +496,14 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "when the object has been overridden for a guest" do
       it "returns false" do
-        expect(overridable.overridden_for(nil).multiple_due_dates?).to eq false
+        expect(overridable.overridden_for(nil).multiple_due_dates?).to be false
       end
     end
   end
 
   describe "overridden_for?" do
     before do
-      course_with_student(course: course)
+      course_with_student(course:)
     end
 
     context "when overridden for the user" do
@@ -474,7 +533,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "differentiated_assignments_applies?" do
     before do
-      course_with_student(course: course)
+      course_with_student(course:)
     end
 
     it "returns false when there is no assignment" do

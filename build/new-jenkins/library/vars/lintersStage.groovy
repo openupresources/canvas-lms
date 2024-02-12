@@ -49,8 +49,8 @@ def tearDownNode() {
 def codeStage(stages) {
   { ->
     def codeEnvVars = [
-      "PRIVATE_PLUGINS=${configuration.getString('canvas-lms-private-plugins')}",
-      "SKIP_ESLINT=${configuration.getBoolean('skip-eslint', 'false')}",
+      "PRIVATE_PLUGINS=${commitMessageFlag('canvas-lms-private-plugins') as String}",
+      "SKIP_ESLINT=${commitMessageFlag('skip-eslint') as Boolean}",
     ]
 
     callableWithDelegate(queueTestStage())(stages,
@@ -82,7 +82,7 @@ def masterBouncerStage(stages) {
 def bundleStage(stages, buildConfig) {
   { ->
     def bundleEnvVars = [
-      "PLUGINS_LIST=${configuration.plugins().join(' ')}"
+      "PLUGINS_LIST=${commitMessageFlag('canvas-lms-plugins') as String}"
     ]
 
     callableWithDelegate(queueTestStage())(stages,
@@ -97,7 +97,7 @@ def bundleStage(stages, buildConfig) {
 def yarnStage(stages, buildConfig) {
   { ->
     def yarnEnvVars = [
-      "PLUGINS_LIST=${configuration.plugins().join(' ')}"
+      "PLUGINS_LIST=${commitMessageFlag('canvas-lms-plugins') as String}"
     ]
 
     callableWithDelegate(queueTestStage())(stages,
@@ -129,7 +129,7 @@ def queueTestStage() {
       .queue(stages) {
         sh(opts.command)
 
-        if (configuration.getBoolean('force-failure-linters', 'false')) {
+        if (commitMessageFlag('force-failure-linters') as Boolean) {
           error 'lintersStage: force failing due to flag'
         }
       }

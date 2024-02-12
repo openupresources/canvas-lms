@@ -78,11 +78,11 @@ describe Pseudonym do
 
   it "finds the correct pseudonym for logins" do
     user = User.create!
-    p1 = Pseudonym.create!(unique_id: "Cody@instructure.com", user: user)
-    Pseudonym.create!(unique_id: "codY@instructure.com", user: user) { |p| p.workflow_state = "deleted" }
+    p1 = Pseudonym.create!(unique_id: "Cody@instructure.com", user:)
+    Pseudonym.create!(unique_id: "codY@instructure.com", user:) { |p| p.workflow_state = "deleted" }
     expect(Pseudonym.active.by_unique_id("cody@instructure.com").first).to eq p1
     account = Account.create!
-    p3 = Pseudonym.create!(unique_id: "cOdy@instructure.com", account: account, user: user)
+    p3 = Pseudonym.create!(unique_id: "cOdy@instructure.com", account:, user:)
     expect(Pseudonym.active.by_unique_id("cody@instructure.com").sort).to eq [p1, p3]
   end
 
@@ -111,18 +111,18 @@ describe Pseudonym do
     user_model
     account1 = account_model
     account_model
-    expect(@user.user_account_associations.length).to eql(0)
+    expect(@user.user_account_associations.length).to be(0)
 
     pseudonym_model(user: @user, account: account1)
     @user.reload
-    expect(@user.user_account_associations.length).to eql(1)
+    expect(@user.user_account_associations.length).to be(1)
     expect(@user.user_account_associations.first.account).to eql(account1)
 
     account2 = account_model
     @pseudonym.account = account2
     @pseudonym.save
     @user.reload
-    expect(@user.user_account_associations.length).to eql(1)
+    expect(@user.user_account_associations.length).to be(1)
     expect(@user.user_account_associations.first.account).to eql(account2)
 
     @pseudonym.destroy
@@ -133,7 +133,7 @@ describe Pseudonym do
   describe "#destroy" do
     it "allows deleting pseudonyms" do
       user_with_pseudonym(active_all: true)
-      expect(@pseudonym.destroy).to eql(true)
+      expect(@pseudonym.destroy).to be(true)
       expect(@pseudonym).to be_deleted
     end
 
@@ -159,7 +159,7 @@ describe Pseudonym do
     @pseudonym.sis_user_id = "something_cool"
     @pseudonym.save!
     @pseudonym.account.authentication_providers.create!(auth_type: "ldap")
-    expect(@pseudonym.destroy).to eql(true)
+    expect(@pseudonym.destroy).to be(true)
     expect(@pseudonym).to be_deleted
   end
 
@@ -190,9 +190,9 @@ describe Pseudonym do
     end
 
     it "gracefully handles unreachable LDAP servers" do
-      expect_any_instance_of(Net::LDAP).to receive(:bind_as).and_raise(Net::LDAP::LdapError, "no connection to server")
+      expect_any_instance_of(Net::LDAP).to receive(:bind_as).and_raise(Net::LDAP::Error, "no connection to server")
       expect(Canvas::Errors).to receive(:capture) do |ex, data, level|
-        expect(ex.class).to eq(Net::LDAP::LdapError)
+        expect(ex.class).to eq(Net::LDAP::Error)
         expect(data[:account]).to eq(@pseudonym.account)
         expect(level).to eq(:warn)
       end.and_call_original
@@ -225,7 +225,7 @@ describe Pseudonym do
     it "doesn't even check LDAP for a Canvas pseudonym" do
       @pseudonym.update_attribute(:authentication_provider, @pseudonym.account.canvas_authentication_provider)
       expect_any_instantiation_of(@aac).not_to receive(:ldap_bind_result)
-      expect(@pseudonym.ldap_bind_result("stuff")).to eq nil
+      expect(@pseudonym.ldap_bind_result("stuff")).to be_nil
     end
   end
 
@@ -306,7 +306,7 @@ describe Pseudonym do
       account.authentication_providers.create!(auth_type: "ldap")
       u = User.create!
       u.register
-      pseudonym = u.pseudonyms.create!(unique_id: "jt", account: account) { |p| p.sis_user_id = "jt" }
+      pseudonym = u.pseudonyms.create!(unique_id: "jt", account:) { |p| p.sis_user_id = "jt" }
       pseudonym.instance_variable_set(:@ldap_result, { mail: ["jt@instructure.com"] })
 
       pseudonym.add_ldap_channel
@@ -335,7 +335,7 @@ describe Pseudonym do
       ap = account.authentication_providers.create!(auth_type: "ldap")
       u = User.create!
       u.register
-      pseudonym = u.pseudonyms.create!(unique_id: "jt", account: account) { |p| p.sis_user_id = "jt" }
+      pseudonym = u.pseudonyms.create!(unique_id: "jt", account:) { |p| p.sis_user_id = "jt" }
       pseudonym.instance_variable_set(:@ldap_result, { mail: ["jt@instructure.com"] })
 
       pseudonym.infer_auth_provider(ap)
@@ -391,7 +391,7 @@ describe Pseudonym do
       it "won't attempt silly queries" do
         wat = " " * 3000
         unique_id = "asdf#{wat}asdf"
-        creds = { unique_id: unique_id, password: "foobar" }
+        creds = { unique_id:, password: "foobar" }
         expect(Pseudonym.authenticate(creds, [Account.default.id])).to eq(:impossible_credentials)
       end
     end
@@ -406,15 +406,14 @@ describe Pseudonym do
     end
 
     before do
-      allow(Canvas.redis).to receive(:redis_enabled?).and_return(true)
-      allow(Canvas.redis).to receive(:ttl).and_return(1.day)
+      allow(Canvas.redis).to receive_messages(redis_enabled?: true, ttl: 1.day)
     end
 
     it "checks cas ticket expiration" do
-      expect(Canvas.redis).to receive(:get).with(redis_key).and_return(nil)
+      expect(Canvas.redis).to receive(:get).with(redis_key, failsafe: nil).and_return(nil)
       expect(@pseudonym.cas_ticket_expired?(cas_ticket)).to be_falsey
 
-      expect(Canvas.redis).to receive(:get).with(redis_key).and_return(true)
+      expect(Canvas.redis).to receive(:get).with(redis_key, failsafe: nil).and_return(true)
       expect(@pseudonym.cas_ticket_expired?(cas_ticket)).to be_truthy
     end
 
@@ -747,7 +746,8 @@ describe Pseudonym do
     it "finds a valid pseudonym" do
       expect(Pseudonym.find_all_by_arbitrary_credentials(
                { unique_id: "a", password: "abcdefgh" },
-               [Account.default.id], "127.0.0.1"
+               [Account.default.id],
+               "127.0.0.1"
              )).to eq [p]
     end
 
@@ -756,14 +756,15 @@ describe Pseudonym do
       expect(Pseudonym).to receive(:associated_shards).and_raise("an error")
       expect(Pseudonym.find_all_by_arbitrary_credentials(
                { unique_id: "a", password: "abcdefgh" },
-               [Account.default.id], "127.0.0.1"
+               [Account.default.id],
+               "127.0.0.1"
              )).to eq [p]
     end
 
     it "throws an error if your credentials are absurd" do
       wat = " " * 3000
       unique_id = "asdf#{wat}asdf"
-      creds = { unique_id: unique_id, password: "foobar" }
+      creds = { unique_id:, password: "foobar" }
       expect { Pseudonym.find_all_by_arbitrary_credentials(creds, [Account.default.id], "127.0.0.1") }.to raise_error(ImpossibleCredentialsError)
     end
 
@@ -771,7 +772,8 @@ describe Pseudonym do
       p.update!(workflow_state: "deleted")
       expect(Pseudonym.find_all_by_arbitrary_credentials(
                { unique_id: "a", password: "abcdefgh" },
-               [Account.default.id], "127.0.0.1"
+               [Account.default.id],
+               "127.0.0.1"
              )).to eq []
     end
 
@@ -779,7 +781,8 @@ describe Pseudonym do
       p.update!(workflow_state: "suspended")
       expect(Pseudonym.find_all_by_arbitrary_credentials(
                { unique_id: "a", password: "abcdefgh" },
-               [Account.default.id], "127.0.0.1"
+               [Account.default.id],
+               "127.0.0.1"
              )).to eq []
     end
   end

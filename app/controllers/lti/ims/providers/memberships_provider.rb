@@ -43,16 +43,16 @@ module Lti::IMS::Providers
       # in case response serialization should ever need it. E.g. in NRPS v1, pagination
       # links went in the response body.
       {
-        memberships: memberships,
-        context: context,
-        assignment: assignment,
-        api_metadata: api_metadata,
-        controller: controller,
-        tool: tool,
+        memberships:,
+        context:,
+        assignment:,
+        api_metadata:,
+        controller:,
+        tool:,
         opts: {
-          rlid: rlid,
-          role: role,
-          limit: limit
+          rlid:,
+          role:,
+          limit:
         }.compact
       }
     end
@@ -221,7 +221,7 @@ module Lti::IMS::Providers
 
     def pagination_args
       # Set a default page size to use if no page size is given in the request
-      pagination_args = { default_per_page: MAX_PAGE_SIZE }
+      pagination_args = { default_per_page: MAX_PAGE_SIZE, max_per_page: MAX_PAGE_SIZE }
 
       # Treat LTI's `limit` param as override of std `per_page` API pagination param. Is no LTI override for `page`.
       if limit > 0

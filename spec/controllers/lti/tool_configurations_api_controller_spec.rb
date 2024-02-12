@@ -20,13 +20,13 @@
 
 require_relative "../../lti_1_3_spec_helper"
 
-RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
+RSpec.describe Lti::ToolConfigurationsApiController do
   subject { response }
 
   include_context "lti_1_3_spec_helper"
 
   let_once(:sub_account) { account_model(root_account: account) }
-  let_once(:admin) { account_admin_user(account: account) }
+  let_once(:admin) { account_admin_user(account:) }
   let_once(:student) do
     student_in_course
     @student
@@ -56,8 +56,8 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
       account_id: sub_account.id,
       developer_key_id: dev_key_id,
       tool_configuration: {
-        privacy_level: privacy_level,
-        settings: settings
+        privacy_level:,
+        settings:
       }
     }.compact
   end
@@ -112,7 +112,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
           settings_url: url,
           disabled_placements: ["course_navigation", "account_navigation"],
           custom_fields: "foo=bar\r\nkey=value",
-          privacy_level: privacy_level
+          privacy_level:
         }
       }
     end
@@ -192,8 +192,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
 
       context 'when the response is "not found"' do
         before do
-          allow(stubbed_response).to receive(:message).and_return("Not found")
-          allow(stubbed_response).to receive(:code).and_return("404")
+          allow(stubbed_response).to receive_messages(message: "Not found", code: "404")
           make_request
         end
 
@@ -202,8 +201,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
 
       context 'when the response is "unauthorized"' do
         before do
-          allow(stubbed_response).to receive(:message).and_return("Unauthorized")
-          allow(stubbed_response).to receive(:code).and_return("401")
+          allow(stubbed_response).to receive_messages(message: "Unauthorized", code: "401")
           make_request
         end
 
@@ -212,8 +210,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
 
       context 'when the response is "internal server error"' do
         before do
-          allow(stubbed_response).to receive(:message).and_return("Internal server error")
-          allow(stubbed_response).to receive(:code).and_return("500")
+          allow(stubbed_response).to receive_messages(message: "Internal server error", code: "500")
           make_request
         end
 
@@ -379,7 +376,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
   end
 
   describe "#create" do
-    subject { post :create, params: params }
+    subject { post :create, params: }
 
     let(:dev_key_id) { nil }
 
@@ -398,11 +395,11 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
     end
 
     it_behaves_like "an endpoint that accepts a settings_url" do
-      let(:make_request) { post :create, params: params }
+      let(:make_request) { post :create, params: }
     end
 
     it_behaves_like "an endpoint that validates public_jwk and public_jwk_url" do
-      let(:make_request) { post :create, params: params }
+      let(:make_request) { post :create, params: }
     end
 
     it_behaves_like "an endpoint that accepts developer key parameters" do
@@ -415,13 +412,13 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
       let(:dev_key_params) { super().merge(redirect_uris: nil) }
 
       it "returns a 400" do
-        expect(post(:create, params: params)).to have_http_status :bad_request
+        expect(post(:create, params:)).to have_http_status :bad_request
       end
     end
   end
 
   describe "#update" do
-    subject { put :update, params: params }
+    subject { put :update, params: }
 
     let(:target_link_uri) { new_url }
 
@@ -458,7 +455,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
 
         before do
           installed_tool
-          put :update, params: params
+          put(:update, params:)
           run_jobs
         end
 
@@ -479,7 +476,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
     end
 
     it_behaves_like "an endpoint that validates public_jwk and public_jwk_url" do
-      let(:make_request) { put :update, params: params }
+      let(:make_request) { put :update, params: }
     end
 
     it_behaves_like "an action that requires manage developer keys"
@@ -497,7 +494,7 @@ RSpec.describe Lti::ToolConfigurationsApiController, type: :controller do
     before do
       tool_configuration
       account.developer_key_account_bindings
-             .find_by(developer_key: developer_key)
+             .find_by(developer_key:)
              .update!(workflow_state: "on")
     end
 

@@ -27,7 +27,7 @@ describe Api::V1::Group do
   describe "group_json" do
     before :once do
       context = course_model
-      @group = Group.create(name: "group1", context: context)
+      @group = Group.create(name: "group1", context:)
       @group.add_user(@user)
       @user.enrollments.first.deactivate
     end
@@ -42,12 +42,12 @@ describe Api::V1::Group do
       expect(user_json["name"]).to eq(@user.name)
     end
 
-    it "caps the numer of users that will be returned" do
+    it "caps the number of users that will be returned" do
       other_user = user_model
       @group.add_user(other_user)
       json = group_json(@group, @user, nil, include_inactive_users: true, include: ["users"])
       expect(json["users"].length).to eq 2
-      Setting.set("group_json_user_cap", "1")
+      stub_const("Api::V1::Group::GROUP_MEMBER_LIMIT", 1)
       json = group_json(@group, @user, nil, include_inactive_users: true, include: ["users"])
       expect(json["users"].length).to eq 1
     end
@@ -71,7 +71,7 @@ describe Api::V1::Group do
   describe "group_membership_json" do
     before :once do
       context = course_model
-      @group = Group.create(name: "group1", context: context)
+      @group = Group.create(name: "group1", context:)
       @group.add_user(@user)
       @user.enrollments.first.deactivate
     end

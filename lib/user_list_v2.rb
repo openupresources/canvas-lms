@@ -97,7 +97,7 @@ class UserListV2
 
     all_shards = Set.new(all_account_ids.map { |id| Shard.shard_for(id) }.uniq)
     # however it doesn't seem like it makes much sense to all hit the global_lookups if we're looking on at most 2-3 shards
-    return if all_shards.count <= Setting.get("global_lookups_shard_threshold", "3").to_i
+    return if all_shards.count <= 3
 
     restricted_shards = Set.new
     restricted_shards << @root_account.shard
@@ -115,15 +115,19 @@ class UserListV2
         user_id = Shard.relative_id_for(user_id, Shard.current, original_shard)
         account_id = Shard.relative_id_for(account_id, Shard.current, original_shard)
       end
-      @all_results << { address: address, user_id: user_id, user_token: User.token(user_id, user_uuid),
-                        user_name: user_name, account_id: account_id, account_name: account_name }
+      @all_results << { address:,
+                        user_id:,
+                        user_token: User.token(user_id, user_uuid),
+                        user_name:,
+                        account_id:,
+                        account_name: }
     end
   end
 
   def resolve_duplicates_and_missing
     grouped_results = @all_results.group_by { |r| @lowercase ? r[:address].downcase : r[:address] }
 
-    grouped_results.each do |_a, results|
+    grouped_results.each_value do |results|
       if results.count == 1
         @resolved_results << results.first
       elsif results.uniq { |r| Shard.global_id_for(r[:user_id]) }.count == 1

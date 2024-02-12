@@ -27,8 +27,8 @@ describe "assignment group that can't manage assignments" do
   it "does not display the manage cog menu" do
     @domain_root_account = Account.default
     course_factory
-    account_admin_user_with_role_changes(role_changes: { manage_course: true,
-                                                         manage_assignments: false })
+    account_admin_user_with_role_changes(role_changes: { manage_courses_admin: true,
+                                                         manage_assignments_edit: false })
     user_session(@user)
     @course.require_assignment_group
     @assignment_group = @course.assignment_groups.first
@@ -57,11 +57,27 @@ describe "assignment groups" do
     @course.assignments.create(name: "test", assignment_group: @assignment_group)
   end
 
+  # EVAL-3711 Remove this test when instui_nav feature flag is removed
   it "creates a new assignment group", priority: "1" do
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
 
     f("#addGroup").click
+    wait_for_ajaximations
+
+    replace_content(f("#ag_new_name"), "Second AG")
+    fj(".create_group:visible").click
+    wait_for_ajaximations
+
+    expect(ff(".assignment_group .ig-header h2").map(&:text)).to include("Second AG")
+  end
+
+  it "creates a new assignment group with the instui nav feature flag on", priority: "1" do
+    @course.root_account.enable_feature!(:instui_nav)
+    get "/courses/#{@course.id}/assignments"
+    wait_for_ajaximations
+
+    f("[data-testid='new_group_button']").click
     wait_for_ajaximations
 
     replace_content(f("#ag_new_name"), "Second AG")
@@ -110,9 +126,9 @@ describe "assignment groups" do
   it "edits group details", priority: "1" do
     assignment_group = @course.assignment_groups.create!(name: "first test group")
     4.times do
-      @course.assignments.create(title: "other assignment", assignment_group: assignment_group)
+      @course.assignments.create(title: "other assignment", assignment_group:)
     end
-    assignment = @course.assignments.create(title: "assignment with rubric", assignment_group: assignment_group)
+    assignment = @course.assignments.create(title: "assignment with rubric", assignment_group:)
 
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations

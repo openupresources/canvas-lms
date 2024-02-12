@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -33,8 +34,6 @@ import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
 const I18n = useI18nScope('course_paces_search')
 
-const {Item: FlexItem} = Flex as any
-
 interface StoreProps {
   readonly searchTerm: string
   readonly currentSortBy: SortableColumn
@@ -52,14 +51,14 @@ export interface PassedProps {
 
 type ComponentProps = StoreProps & DispatchProps & PassedProps
 
-export const Search: React.FC<ComponentProps> = ({
+export const Search = ({
   searchTerm,
   fetchPaceContexts,
   setSearchTerm,
   contextType,
   currentOrderType,
   currentSortBy,
-}) => {
+}: ComponentProps) => {
   const handleClear = e => {
     e.stopPropagation()
     setSearchTerm('')
@@ -125,7 +124,7 @@ export const Search: React.FC<ComponentProps> = ({
         autoComplete="off"
       >
         <Flex>
-          <FlexItem shouldGrow={true}>
+          <Flex.Item shouldGrow={true}>
             <TextInput
               renderLabel={<ScreenReaderContent>{placeholderText()}</ScreenReaderContent>}
               placeholder={placeholderText()}
@@ -137,8 +136,8 @@ export const Search: React.FC<ComponentProps> = ({
               renderAfterInput={renderClearButton()}
               data-testid="search-input"
             />
-          </FlexItem>
-          <FlexItem>
+          </Flex.Item>
+          <Flex.Item>
             <Button
               color="primary"
               margin="0 0 0 small"
@@ -147,7 +146,7 @@ export const Search: React.FC<ComponentProps> = ({
             >
               {I18n.t('Search')}
             </Button>
-          </FlexItem>
+          </Flex.Item>
         </Flex>
       </form>
     </View>

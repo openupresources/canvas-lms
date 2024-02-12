@@ -21,37 +21,34 @@
 describe AuthenticationProvidersController do
   let!(:account) { Account.create! }
 
+  let_once(:saml_hash) do
+    {
+      "auth_type" => "saml",
+      "idp_entity_id" => "http://example.com/saml1",
+      "log_in_url" => "http://example.com/saml1/sli",
+      "log_out_url" => "http://example.com/saml1/slo",
+      "certificate_fingerprint" => "111222",
+      "identifier_format" => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+    }
+  end
+  let_once(:cas_hash) { { "auth_type" => "cas", "auth_base" => "127.0.0.1" } }
+  let_once(:ldap_hash) do
+    {
+      "auth_type" => "ldap",
+      "auth_host" => "127.0.0.1",
+      "auth_filter" => "filter1",
+      "auth_username" => "username1",
+      "auth_password" => "password1"
+    }
+  end
+  let_once(:microsoft_hash) { { "auth_type" => "microsoft" } }
+
   before do
-    admin = account_admin_user(account: account)
+    admin = account_admin_user(account:)
     user_session(admin)
   end
 
   describe "GET #index" do
-    let(:saml_hash) do
-      {
-        "auth_type" => "saml",
-        "idp_entity_id" => "http://example.com/saml1",
-        "log_in_url" => "http://example.com/saml1/sli",
-        "log_out_url" => "http://example.com/saml1/slo",
-        "certificate_fingerprint" => "111222",
-        "identifier_format" => "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
-      }
-    end
-
-    let(:cas_hash) { { "auth_type" => "cas", "auth_base" => "127.0.0.1" } }
-
-    let(:ldap_hash) do
-      {
-        "auth_type" => "ldap",
-        "auth_host" => "127.0.0.1",
-        "auth_filter" => "filter1",
-        "auth_username" => "username1",
-        "auth_password" => "password1"
-      }
-    end
-
-    let(:microsoft_hash) { { "auth_type" => "microsoft" } }
-
     context "with no aacs" do
       it "renders ok" do
         get "index", params: { account_id: account.id }
@@ -76,11 +73,59 @@ describe AuthenticationProvidersController do
     end
   end
 
+  describe "refresh_saml_metadata" do
+    it "requires root manage account settings permission" do
+      user_session(user_with_pseudonym(account:))
+      provider = account.authentication_providers.create!(saml_hash)
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }
+      expect(response).to have_http_status :unauthorized
+    end
+
+    it "renders not_found if provider doesn't exist" do
+      provider = account.authentication_providers.create!(saml_hash)
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id + 1 }
+      expect(response).to have_http_status :not_found
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id + 1 }, format: :json
+      expect(response).to have_http_status :not_found
+    end
+
+    it "errors on unsupported auth type" do
+      provider = account.authentication_providers.create!(microsoft_hash)
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }
+      expect(flash[:error]).to match("Unsupported authentication type")
+      expect(response).to be_redirect
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }, format: :json
+      expect(response).to have_http_status :bad_request
+      expect(response.body).to match("Unsupported authentication type")
+    end
+
+    it "errors on empty metadata_uri field" do
+      provider = account.authentication_providers.create!(saml_hash)
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }
+      expect(flash[:error]).to match("IdP metadata URI cannot be blank")
+      expect(response).to be_redirect
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }, format: :json
+      expect(response).to have_http_status :bad_request
+      expect(response.body).to match("A valid metadata URI is required")
+    end
+
+    it "calls the metadata refresher" do
+      allow_any_instance_of(AuthenticationProvider::SAML).to receive(:download_metadata).and_return("metadata")
+      provider = account.authentication_providers.create!(saml_hash.merge(metadata_uri: "http://example.com/metadata"))
+      expect(AuthenticationProvider::SAML::MetadataRefresher).to receive(:refresh_providers).twice.with(providers: [provider])
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }
+      expect(flash[:notice]).to match("Metadata refresh has been initiated. Please check back")
+      expect(response).to be_redirect
+      get "refresh_saml_metadata", params: { account_id: account.id, authentication_provider_id: provider.id }, format: :json
+      expect(response).to have_http_status :ok
+    end
+  end
+
   describe "start_debugging" do
     it "complains about unsupported auth type" do
       enable_cache do
         put "start_debugging", params: { account_id: account.id, authentication_provider_id: account.canvas_authentication_provider.id }, format: :json
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
         expect(response.body).to match("Unsupported authentication type")
         expect(account.canvas_authentication_provider).to_not be_debugging
       end
@@ -184,7 +229,7 @@ describe AuthenticationProvidersController do
       account.authentication_providers.create!(linkedin)
 
       post "create", format: :json, params: { account_id: account.id }.merge(linkedin)
-      expect(response.code).to eq "422"
+      expect(response).to have_http_status :unprocessable_entity
     end
 
     it "allows multiple non-singleton types" do
@@ -240,8 +285,8 @@ describe AuthenticationProvidersController do
         expect(response).to be_redirect
 
         ap = account.authentication_providers.active.last
-        expect(ap.mfa_required).to eq(true)
-        expect(ap.skip_internal_mfa).to eq(false)
+        expect(ap.mfa_required).to be(true)
+        expect(ap.skip_internal_mfa).to be(false)
       end
 
       it "handles bypass" do
@@ -249,8 +294,8 @@ describe AuthenticationProvidersController do
         expect(response).to be_redirect
 
         ap = account.authentication_providers.active.last
-        expect(ap.mfa_required).to eq(false)
-        expect(ap.skip_internal_mfa).to eq(true)
+        expect(ap.mfa_required).to be(false)
+        expect(ap.skip_internal_mfa).to be(true)
       end
 
       it "handles default" do
@@ -258,8 +303,8 @@ describe AuthenticationProvidersController do
         expect(response).to be_redirect
 
         ap = account.authentication_providers.active.last
-        expect(ap.mfa_required).to eq(false)
-        expect(ap.skip_internal_mfa).to eq(false)
+        expect(ap.mfa_required).to be(false)
+        expect(ap.skip_internal_mfa).to be(false)
       end
     end
   end

@@ -22,17 +22,50 @@ analytics_2:
       to ON. For full details, please see the *New Analytics user group* in the Canvas
       Community.
   after_state_change_proc: analytics_2_after_state_change_hook
-  beta: true
+  beta: false
 admin_analytics:
-  state: hidden
+  state: allowed
   applies_to: Account
   display_name: Admin Analytics
   description:
-    wrapper: <a href="https://community.canvaslms.com/t5/New-Analytics-Users/gh-p/analytics">\1</a>
-    admin_analytics_description: Enabling displays Admin Analytics to show overviews of
-      courses and students. Learn more and give feedback by joining the
-      *New Analytics user group* in the Canvas community.
+    wrapper: <a href="https://community.canvaslms.com/t5/Admin-Analytics-Hub/gh-p/admin_analytics">\1</a>
+    admin_analytics_description: Enables Analytics at the account-level. Admin Analytics dashboards provide
+     details on Canvas usage, Canvas course success, and student engagement.
+      Learn more in the *Admin Analytics Hub* in the Canvas community.
   after_state_change_proc: analytics_2_after_state_change_hook
+  root_opt_in: true
+  beta: false
+k20_course_readiness_alpha_testing:
+  state: hidden
+  applies_to: Account
+  display_name: K20 - Course Readiness Alpha Testing
+  description:
+    k20_course_readiness_alpha_testing_description: This flag is for institutions participating in Advanced Analytics Alpha testing. This flag enables the Course Readiness dashboard for these institutions.
+  root_opt_in: true
+  beta: true
+k20_course_readiness:
+  state: hidden
+  applies_to: Account
+  display_name: Advanced Analytics - Course Readiness Closed Alpha
+  description:
+    k20_course_readiness_description: Enables the Advanced Analytics Course Readiness Dashboard for Alpha testers.
+  root_opt_in: true
+  beta: true
+k20_beta:
+  state: hidden
+  applies_to: Account
+  display_name: Advanced Analytics - Course Readiness and Students in Need of Attention
+  description:
+    k20_beta_description: Enables the Course Readiness and Students in Need of Attention dashboards for closed beta customers.
+  root_opt_in: true
+  beta: true
+admin_analytics_view_permission:
+  state: hidden
+  applies_to: Account
+  display_name: Admin Analytics - View admin analytics permission
+  description:
+    admin_analytics_view_permission_description: Makes the new Admin Analytics permission visible.
+  root_opt_in: true
   beta: true
 anonymous_instructor_annotations:
   type: setting
@@ -56,12 +89,6 @@ common_cartridge_page_conversion:
   description: If enabled, Common Cartridge importers will convert HTML files into
     Pages
   applies_to: Course
-commons_favorites:
-  state: hidden
-  applies_to: RootAccount
-  display_name: Import Commons Favorites
-  description: If Commons is installed, allows importing favorited content items from
-    within Canvas.
 compact_live_event_payloads:
   state: allowed
   applies_to: RootAccount
@@ -177,14 +204,6 @@ high_contrast:
       High Contrast enhances the color contrast of the UI (text, buttons, etc.), making those items more
       distinct and easier to identify. Note: Institution branding will be disabled.
   applies_to: User
-high_contrast_course_colors:
-  state: allowed
-  display_name: High Contrast Course Colors
-  description:
-    high_contrast_course_colors_description: |-
-      High Contrast Course Colors darkens system provided and color picker course colors
-      (not manually defined ones) to improve contrast ratio
-  applies_to: SiteAdmin
 include_byte_order_mark_in_gradebook_exports:
   type: setting
   state: allowed
@@ -424,11 +443,6 @@ scheduled_page_publication:
   state: hidden
   display_name: Scheduled page publication
   description: Allows course pages to be published on a schedule
-copy_blueprint_settings:
-  applies_to: RootAccount
-  state: hidden
-  display_name: Copy Blueprint Course settings
-  description: Allows Blueprint Course settings to be exported and copied to another Blueprint Course
 send_usage_metrics:
   state: hidden
   display_name: Send usage metrics
@@ -446,3 +460,10 @@ new_quiz_public_api:
       state: allowed_on
     development:
       state: allowed_on
+site_admin_service_auth:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Site admin service authentication
+  description: When enabled, site admin account UI will allow associating
+    a service User with a DeveloperKey and using that key/user with the
+    client_credentials grant type

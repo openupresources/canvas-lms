@@ -30,6 +30,7 @@ module Canvadocs
       opts[:url] = attachment.public_url(expires_in: 7.days)
       opts[:locale] = I18n.locale || I18n.default_locale
       opts[:send_usage_metrics] = user.account.feature_enabled?(:send_usage_metrics) if user
+      opts[:is_launch_token] = Account.site_admin.feature_enabled?(:enhanced_docviewer_url_security)
 
       Canvas.timeout_protection("canvadocs", raise_on_timeout: true) do
         session = canvadocs_api.session(document_id, opts)
@@ -104,15 +105,13 @@ module Canvadocs
     private :canvadocs_permissions
 
     def canvadocs_default_options_for_user(user, read_only)
-      opts = {
+      {
         annotation_context: canvadocs_annotation_context,
         permissions: canvadocs_permissions(user, read_only),
         user_id: canvadocs_user_id(user),
         user_name: canvadocs_user_name(user),
         user_filter: canvadocs_user_id(user),
       }
-      opts[:user_crocodoc_id] = user.crocodoc_id if user.crocodoc_id
-      opts
     end
     private :canvadocs_default_options_for_user
   end

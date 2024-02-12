@@ -69,6 +69,12 @@ class CommunicationChannel < ActiveRecord::Base
 
   RETIRE_THRESHOLD = 1
 
+  MAX_CCS_PER_USER = 100
+
+  RESEND_PASSWORD_RESET_TIME = 30.minutes
+  MAX_SHARDS_FOR_BOUNCES = 50
+  MERGE_CANDIDATE_SEARCH_LIMIT = 10
+
   # Generally, "TYPE_PERSONAL_EMAIL" should be treated exactly the same
   # as TYPE_EMAIL.  It is just kept distinct for the purposes of customers
   # querying records in Canvas Data.
@@ -80,8 +86,7 @@ class CommunicationChannel < ActiveRecord::Base
   end
 
   def under_user_cc_limit
-    max_ccs = Setting.get("max_ccs_per_user", "100").to_i
-    if user.communication_channels.limit(max_ccs + 1).count > max_ccs
+    if user.communication_channels.limit(MAX_CCS_PER_USER + 1).count > MAX_CCS_PER_USER
       errors.add(:user_id, "user communication_channels limit exceeded")
     end
   end
@@ -256,7 +261,7 @@ class CommunicationChannel < ActiveRecord::Base
       # and try to check the validity OUTSIDE the save path
       # (cc.valid?) this needs to switch to the shard where we'll
       # be writing to make sure we're checking uniqueness in the right place
-      scope = self.class.by_path(path).where(user_id: user_id, path_type: path_type, workflow_state: ["unconfirmed", "active"])
+      scope = self.class.by_path(path).where(user_id:, path_type:, workflow_state: ["unconfirmed", "active"])
       unless new_record?
         scope = scope.where("id<>?", id)
       end
@@ -317,8 +322,8 @@ class CommunicationChannel < ActiveRecord::Base
     return if Rails.cache.read(["recent_password_reset", global_id].cache_key) == true
 
     @request_password = true
-    Rails.cache.write(["recent_password_reset", global_id].cache_key, true, expires_in: Setting.get("resend_password_reset_time", 5).to_f.minutes)
-    set_confirmation_code(true, Setting.get("password_reset_token_expiration_minutes", "120").to_i.minutes.from_now)
+    Rails.cache.write(["recent_password_reset", global_id].cache_key, true, expires_in: RESEND_PASSWORD_RESET_TIME)
+    set_confirmation_code(true, 2.hours.from_now)
     save!
     @request_password = false
   end
@@ -353,24 +358,53 @@ class CommunicationChannel < ActiveRecord::Base
     Mailer.deliver(Mailer.create_message(m))
   end
 
+  def otp_impaired?
+    return false unless path_type == TYPE_SMS
+
+    # strip off the leading +
+    raw_number = e164_path[1...]
+    # Imperfect
+    country = CommunicationChannel.country_codes.find do |code, _, _|
+      raw_number.start_with?(code)
+    end || ["unknown"]
+
+    Setting.get("otp_impaired_country_codes", "").split(",").include?(country.first)
+  end
+
   def send_otp!(code, account = nil)
     message = t :body, "Your Canvas verification code is %{verification_code}", verification_code: code
-    if Setting.get("mfa_via_sms", true) == "true" && e164_path && account&.feature_enabled?(:notification_service)
-      InstStatsd::Statsd.increment("message.deliver.sms.one_time_password",
-                                   short_stat: "message.deliver",
-                                   tags: { path_type: "sms", notification_name: "one_time_password" })
-      InstStatsd::Statsd.increment("message.deliver.sms.#{account.global_id}",
-                                   short_stat: "message.deliver_per_account",
-                                   tags: { path_type: "sms", root_account_id: account.global_id })
-      Services::NotificationService.process(
-        "otp:#{global_id}",
-        message,
-        "sms",
-        e164_path,
-        true
-      )
+
+    case path_type
+    when TYPE_SMS
+      if Setting.get("mfa_via_sms", true) == "true" && e164_path && account&.feature_enabled?(:notification_service)
+        InstStatsd::Statsd.increment("message.deliver.sms.one_time_password",
+                                     short_stat: "message.deliver",
+                                     tags: { path_type: "sms", notification_name: "one_time_password" })
+        InstStatsd::Statsd.increment("message.deliver.sms.#{account.global_id}",
+                                     short_stat: "message.deliver_per_account",
+                                     tags: { path_type: "sms", root_account_id: account.global_id })
+        Services::NotificationService.process(
+          "otp:#{global_id}",
+          message,
+          "sms",
+          e164_path,
+          true
+        )
+      else
+        delay_if_production(priority: Delayed::HIGH_PRIORITY).send_otp_via_sms_gateway!(message)
+      end
+    when TYPE_EMAIL
+      m = messages.temp_record
+      m.to = path
+      m.context = account || Account.default
+      m.user = user
+      m.notification = Notification.new(name: "2fa", category: "Registration")
+      m.data = { verification_code: code }
+      m.parse!("email")
+      m.subject = "Canvas Verification Code"
+      Mailer.deliver(Mailer.create_message(m))
     else
-      delay_if_production(priority: Delayed::HIGH_PRIORITY).send_otp_via_sms_gateway!(message)
+      raise "OTP not supported for #{path_type}"
     end
   end
 
@@ -431,7 +465,7 @@ class CommunicationChannel < ActiveRecord::Base
   def consider_building_pseudonym
     if build_pseudonym_on_confirm && active?
       self.build_pseudonym_on_confirm = false
-      pseudonym = Account.default.pseudonyms.build(unique_id: path, user: user)
+      pseudonym = Account.default.pseudonyms.build(unique_id: path, user:)
       existing_pseudonym = Account.default.pseudonyms.active.where(user_id: user).take
       if existing_pseudonym
         pseudonym.password_salt = existing_pseudonym.password_salt
@@ -503,9 +537,8 @@ class CommunicationChannel < ActiveRecord::Base
     Shard.with_each_shard(shards) do
       scope = scope.shard(Shard.current).where("user_id<>?", user_id)
 
-      limit = Setting.get("merge_candidate_search_limit", "100").to_i
-      ccs = scope.preload(:user).limit(limit + 1).to_a
-      return [] if ccs.count > limit # just bail if things are getting out of hand
+      ccs = scope.preload(:user).limit(MERGE_CANDIDATE_SEARCH_LIMIT + 1).to_a
+      return [] if ccs.count > MERGE_CANDIDATE_SEARCH_LIMIT # just bail if things are getting out of hand
 
       ccs.map(&:user).select do |u|
         result = merge_candidates.fetch(u.global_id) do
@@ -556,7 +589,7 @@ class CommunicationChannel < ActiveRecord::Base
     # if there is a bounce on a channel that is associated to more than a few
     # shards there is no reason to bother updating the channel with the bounce
     # information, because its not a real user.
-    return if !permanent_bounce && CommunicationChannel.associated_shards(path).count > Setting.get("comm_channel_shard_count_too_high", "50").to_i
+    return if !permanent_bounce && CommunicationChannel.associated_shards(path).count > MAX_SHARDS_FOR_BOUNCES
 
     Shard.with_each_shard(CommunicationChannel.associated_shards(path)) do
       cc_scope = CommunicationChannel.unretired.email.by_path(path).where("bounce_count<?", RETIRE_THRESHOLD)
@@ -565,7 +598,7 @@ class CommunicationChannel < ActiveRecord::Base
       # try to capture only the newly created communication channels for this path,
       # or the ones that have NOT been bounced in the last hour, to make sure
       # we aren't doing un-helpful overwork.
-      debounce_window = Setting.get("comm_channel_bounce_debounce_window_in_min", "60").to_i
+      debounce_window = 1.hour
       bounce_field = if suppression_bounce
                        "last_suppression_bounce_at"
                      elsif permanent_bounce
@@ -573,7 +606,7 @@ class CommunicationChannel < ActiveRecord::Base
                      else
                        "last_transient_bounce_at"
                      end
-      bouncable_scope = cc_scope.where("#{bounce_field} IS NULL OR updated_at < ?", debounce_window.minutes.ago)
+      bouncable_scope = cc_scope.where("#{bounce_field} IS NULL OR updated_at < ?", debounce_window.ago)
       bouncable_scope.find_in_batches do |batch|
         update = if suppression_bounce
                    { last_suppression_bounce_at: timestamp, updated_at: Time.zone.now }

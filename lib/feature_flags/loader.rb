@@ -54,7 +54,7 @@ module FeatureFlags
         definition[field] = wrap_translate_text(definition[field])
       end
       definition[:state] = ensure_state_if_boolean(definition[:state]) if definition.key? :state
-      definition[:environments]&.each do |_env_name, env|
+      definition[:environments]&.each_value do |env|
         env[:state] = ensure_state_if_boolean(env[:state]) if env.key? :state
       end
       Feature.register({ name => definition })
@@ -62,13 +62,11 @@ module FeatureFlags
 
     def self.load_yaml_files
       result = {}
-      (Dir.glob(Rails.root.join("config/feature_flags/*.yml")) +
-        Dir.glob(Rails.root.join("gems/plugins/*/config/feature_flags/*.yml"))).sort.each do |path|
+      (Rails.root.glob("config/feature_flags/*.yml") +
+        Rails.root.glob("gems/plugins/*/config/feature_flags/*.yml")).sort.each do |path|
         result.merge!(YAML.load_file(path))
       end
-      result.each do |_name, definition|
-        definition.deep_symbolize_keys!
-      end
+      result.each_value(&:deep_symbolize_keys!)
       result
     end
 

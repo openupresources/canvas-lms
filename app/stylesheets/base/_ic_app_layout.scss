@@ -54,7 +54,7 @@ body:not(.ic-no-flex-layout):not(.embedded) .ic-app-main-content {
     outline-offset: -2px;
     outline-style: solid;
   }
-  padding: $ic-sp * 2;
+  padding: $ic-sp * 3 $ic-sp * 4 $ic-sp * 4 $ic-sp * 4;
   @include mobile-only {
     & {
       padding-#{direction(left)}: $ic-sp;
@@ -322,6 +322,11 @@ body:not(.course-menu-expanded) {
   & .nav-icon {
     padding: 0 3px;
   }
+}
+
+.instui-topnav-container {
+  margin: 0 $ic-sp * 2;
+  min-height: $ic-breadcrumbs-height;
 }
 
 .ic-app-nav-toggle-and-crumbs {

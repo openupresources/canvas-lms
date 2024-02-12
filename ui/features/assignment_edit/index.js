@@ -18,25 +18,22 @@
 
 // manage groups is for the add_group_category dialog
 import ready from '@instructure/ready'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
-import EditHeaderView from './backbone/views/EditHeaderView.coffee'
-import EditView from './backbone/views/EditView.coffee'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import EditHeaderView from './backbone/views/EditHeaderView'
+import EditView from './backbone/views/EditView'
 import SectionCollection from '@canvas/sections/backbone/collections/SectionCollection'
 import DueDateList from '@canvas/due-dates/backbone/models/DueDateList'
 import DueDateOverride from '@canvas/due-dates'
-import AssignmentGroupSelector from '@canvas/assignments/backbone/views/AssignmentGroupSelector.coffee'
-import GradingTypeSelector from '@canvas/assignments/backbone/views/GradingTypeSelector.coffee'
-import GroupCategorySelector from '@canvas/groups/backbone/views/GroupCategorySelector.coffee'
-import PeerReviewsSelector from '@canvas/assignments/backbone/views/PeerReviewsSelector.coffee'
+import AssignmentGroupSelector from '@canvas/assignments/backbone/views/AssignmentGroupSelector'
+import GradingTypeSelector from '@canvas/assignments/backbone/views/GradingTypeSelector'
+import GroupCategorySelector from '@canvas/groups/backbone/views/GroupCategorySelector'
+import PeerReviewsSelector from '@canvas/assignments/backbone/views/PeerReviewsSelector'
 import '@canvas/grading-standards'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
 import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
-import {addDeepLinkingListener} from '@canvas/deep-linking/DeepLinking'
-import handleResponse from './deepLinking'
 
 ready(() => {
   monitorLtiMessages()
-  addDeepLinkingListener(handleResponse)
 
   const lockManager = new LockManager()
   lockManager.init({itemType: 'assignment', page: 'edit'})
@@ -44,7 +41,7 @@ ready(() => {
 
   ENV.ASSIGNMENT.assignment_overrides = ENV.ASSIGNMENT_OVERRIDES
 
-  const userIsAdmin = ENV.current_user_roles.includes('admin')
+  const userIsAdmin = ENV.current_user_is_admin
 
   const assignment = new Assignment(ENV.ASSIGNMENT)
   assignment.urlRoot = ENV.URL_ROOT

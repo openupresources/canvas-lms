@@ -20,7 +20,7 @@
 
 require "erubi"
 require "optparse"
-require_relative "./docker_utils"
+require_relative "docker_utils"
 
 class DockerfileWriter
   attr_reader :env, :compose_files, :in_file, :out_file, :out_file_suffix
@@ -78,9 +78,7 @@ class DockerfileWriter
     contents = eval(Erubi::Engine.new(File.read(in_file), { bufval: "SuffixedStringWriter.new(self)" }).src + ";_buf.contents") # rubocop:disable Security/Eval
 
     contents.each do |k, v|
-      File.open(k.empty? ? out_file : "#{out_file}.#{k}", "w") do |f|
-        f.write "#{v.strip!}\n"
-      end
+      File.write(k.empty? ? out_file : "#{out_file}.#{k}", "#{v.strip!}\n")
     end
   end
 
@@ -91,7 +89,7 @@ class DockerfileWriter
 
       path.sub("/usr/src/app/", "")
     end
-    paths.sort_by { |path| [path[0] == "/" ? 1 : 0, path] }
+    paths.sort_by { |path| [(path[0] == "/") ? 1 : 0, path] }
   end
 
   def docker_compose_config

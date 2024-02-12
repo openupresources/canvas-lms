@@ -27,21 +27,27 @@ cp ui/shared/apollo/fragmentTypes.json ui/shared/apollo/fragmentTypes.json.old
 bin/rails graphql:schema RAILS_ENV=test
 
 if ! diff ui/shared/apollo/fragmentTypes.json ui/shared/apollo/fragmentTypes.json.old; then
-    message="ui/shared/apollo/fragmentTypes.json needs to be kept up-to-date. Run bundle exec rake graphql:schema and push the changes.\\n"
-    gergich comment "{\"path\":\"ui/shared/apollo/fragmentTypes.json\",\"position\":1,\"severity\":\"error\",\"message\":\"$message\"}"
-  fi
+  message="ui/shared/apollo/fragmentTypes.json needs to be kept up-to-date. Run bundle exec rake graphql:schema and push the changes.\\n"
+  gergich comment "{\"path\":\"ui/shared/apollo/fragmentTypes.json\",\"position\":1,\"severity\":\"error\",\"message\":\"$message\"}"
+fi
 
 gergich capture custom:./build/gergich/xsslint:Gergich::XSSLint 'node script/xsslint.js'
 gergich capture i18nliner 'bin/rails i18n:check'
 # purposely don't run under bundler; they shell out and use bundler as necessary
 ruby script/brakeman
 
-IFS=',' read -ra PRIVATE_PLUGINS_ARR <<< "$PRIVATE_PLUGINS"
+read -ra PRIVATE_PLUGINS_ARR <<< "$PRIVATE_PLUGINS"
 
 if [[ ! "${PRIVATE_PLUGINS[*]}" =~ "$GERRIT_PROJECT" ]]; then
   ruby script/tatl_tael
 fi
 
+if ! git diff HEAD~1 --exit-code -GENV -- 'packages/canvas-rce/**/*.js' 'packages/canvas-rce/**/*.jsx' 'packages/canvas-rce/**/*.ts' 'packages/canvas-rce/**/*.tsx'; then
+  message="It looks like you added a reference to a Canvas ENV key inside the RCE. Instead, you should pass this value via a prop the RCEWrapper.\\n"
+  gergich comment "{\"path\":\"/COMMIT_MSG\",\"position\":1,\"severity\":\"error\",\"message\":\"$message\"}"
+fi
+
+node ui-build/webpack/generatePluginBundles.js
 ruby script/tsc & TSC_PID=$!
 ruby script/stylelint
 ruby script/rlint --no-fail-on-offense

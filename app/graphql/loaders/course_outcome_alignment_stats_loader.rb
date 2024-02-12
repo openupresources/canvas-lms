@@ -20,10 +20,13 @@
 
 class Loaders::CourseOutcomeAlignmentStatsLoader < GraphQL::Batch::Loader
   include OutcomesFeaturesHelper
+  include OutcomesServiceAlignmentsHelper
+
+  SUPPORTED_OS_ALIGNMENTS = %w[quizzes.quiz quizzes.item].freeze
 
   def perform(courses)
     courses.each do |course|
-      unless course_valid?(course) && outcome_alignment_summary_enabled?(course)
+      unless course_valid?(course) && improved_outcomes_management_enabled?(course)
         fulfill(course, nil) unless fulfilled?(course)
         return
       end
@@ -44,7 +47,7 @@ class Loaders::CourseOutcomeAlignmentStatsLoader < GraphQL::Batch::Loader
 
       total_artifacts = Assignment.active.where(context: course)
 
-      total_artifacts_sub = Assignment
+      total_artifacts_sub = AbstractAssignment
                             .select("COUNT(*) as total_artifacts")
                             .from("(#{total_artifacts.to_sql}) AS s3")
 
@@ -64,14 +67,44 @@ class Loaders::CourseOutcomeAlignmentStatsLoader < GraphQL::Batch::Loader
                                 ")
 
       indirect_alignments = AssessmentQuestionBank.preload(:assessment_questions).where(id: all_outcome_alignments.where(content_type: "AssessmentQuestionBank").pluck(:content_id))
-      indirect_alignments_count = indirect_alignments.reduce(0) { |acc, bank| acc + bank.assessment_questions.active.count }
       @artifacts_with_alignments_ids = Set.new(outcome_alignments_to_artifacts.pluck(:content_id))
-      indirect_artifact_alignments_count = indirect_alignments.reduce(0) { |acc, bank| acc + get_indirect_artifact_alignments(bank, course) }
+      indirect_artifact_alignments_count = indirect_alignments.reduce(0) { |acc, bank| acc + (get_indirect_artifact_alignments(bank, course) * bank.learning_outcome_alignments.count) }
 
       alignment_summary_stats = alignment_summary_stats[0]
-      alignment_summary_stats[:total_alignments] += indirect_alignments_count
+      alignment_summary_stats[:total_alignments] += indirect_artifact_alignments_count
       alignment_summary_stats[:aligned_artifacts] = @artifacts_with_alignments_ids.length
       alignment_summary_stats[:artifact_alignments] += indirect_artifact_alignments_count
+
+      if outcome_alignment_summary_with_new_quizzes_enabled?(course)
+        active_os_alignments = get_active_os_alignments(course)
+
+        if active_os_alignments.present?
+          all_supported_os_alignments = active_os_alignments
+                                        .values
+                                        .flatten
+                                        .filter { |a| SUPPORTED_OS_ALIGNMENTS.include?(a[:artifact_type]) }
+
+          os_aligned_new_quiz_ids = all_supported_os_alignments
+                                    .filter_map { |a| a[:associated_asset_id].to_i if a[:associated_asset_type] == "canvas.assignment.quizzes" }
+
+          canvas_aligned_outcome_ids = Set.new(all_outcome_alignments.pluck(:learning_outcome_id))
+
+          os_aligned_outcome_ids = active_os_alignments.keys.map(&:to_i)
+
+          alignment_summary_stats[:aligned_outcomes] = canvas_aligned_outcome_ids
+                                                       .merge(os_aligned_outcome_ids)
+                                                       .size
+          alignment_summary_stats[:aligned_artifacts] = @artifacts_with_alignments_ids
+                                                        .merge(os_aligned_new_quiz_ids)
+                                                        .size
+
+          # OS API returns alignments to new quizzes and questions (which belong to a quiz) and since new quizzes are
+          # artifacts, the total number of alignments returned by OS API is equal to the number of artifact alignments
+          alignment_summary_stats[:total_alignments] += all_supported_os_alignments.size
+          alignment_summary_stats[:artifact_alignments] += all_supported_os_alignments.size
+        end
+      end
+
       fulfill(course, alignment_summary_stats)
     end
   end
@@ -83,14 +116,21 @@ class Loaders::CourseOutcomeAlignmentStatsLoader < GraphQL::Batch::Loader
   end
 
   def get_indirect_artifact_alignments(bank, context)
+    aligned_quiz_ids = Set.new
     bank.assessment_questions.preload(:quiz_questions).reduce(0) do |acc, q|
       quiz_ids, artifact_assignment_ids = Quizzes::Quiz
                                           .active
-                                          .where(context: context, id: q.quiz_questions.active.pluck(:quiz_id))
+                                          .where(context:, id: q.quiz_questions.active.pluck(:quiz_id))
                                           .pluck(:id, :assignment_id)
                                           .reduce([[], []]) { |(acc1, acc2), (val1, val2)| [acc1 << val1, acc2 << val2] }
       @artifacts_with_alignments_ids.merge(artifact_assignment_ids)
-      acc + q.quiz_questions.active.where(quiz_id: quiz_ids).count
+      quiz_ids.each do |qid|
+        unless aligned_quiz_ids.include?(qid)
+          acc += 1
+          aligned_quiz_ids.add(qid)
+        end
+      end
+      acc
     end
   end
 end

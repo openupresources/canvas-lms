@@ -212,7 +212,7 @@ describe "add_people" do
       f(".peoplevalidationissues__missing tbody label").click
 
       # select all should be unchecked
-      expect(f("#missing_users_select_all").attribute("checked")).to eq(nil)
+      expect(f("#missing_users_select_all").attribute("checked")).to be_nil
 
       # re-check the first name
       f(".peoplevalidationissues__missing tbody label").click
@@ -225,13 +225,12 @@ describe "add_people" do
 
       # none of the name checkboxes are checked
       ff(".peoplevalidationissues__missing input[type='checkbox']").each do |checkbox|
-        expect(checkbox.attribute("checked")).to eq(nil)
+        expect(checkbox.attribute("checked")).to be_nil
       end
     end
 
     it "includes invite users without names" do
       get "/courses/#{@course.id}/users"
-
       # open the add people modal dialog
       f("a#addUsers").click
       expect(f(".addpeople")).to be_displayed
@@ -239,7 +238,7 @@ describe "add_people" do
       # search for some emails
       replace_content(f(".addpeople__peoplesearch textarea"),
                       'Z User <zuser@example.com>, yuser@example.com, "User, X" <xuser@example.com>')
-
+      # sleep 1 - works with this
       # click next button
       f("#addpeople_next").click
 

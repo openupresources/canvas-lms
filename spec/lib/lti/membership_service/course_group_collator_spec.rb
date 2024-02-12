@@ -25,7 +25,7 @@ module Lti::MembershipService
         course_with_teacher
         @group_category = @course.group_categories.create!(name: "Membership")
 
-        (0..100).each do |n|
+        101.times do |n|
           @course.groups.create!(name: "Group #{n}", group_category: @group_category)
         end
       end
@@ -35,7 +35,7 @@ module Lti::MembershipService
           collator = CourseGroupCollator.new(@course)
 
           # expect(collator.role).to eq(::IMS::LIS::ContextType::URNs::Group)
-          expect(collator.per_page).to eq(Api.per_page)
+          expect(collator.per_page).to eq(Api::PER_PAGE)
           expect(collator.page).to eq(1)
         end
 
@@ -54,16 +54,16 @@ module Lti::MembershipService
           }
           collator = CourseGroupCollator.new(@course, opts)
 
-          expect(collator.per_page).to eq(Api.per_page)
+          expect(collator.per_page).to eq(Api::PER_PAGE)
         end
 
         it "handles values for :per_page option that exceed per page max" do
           opts = {
-            per_page: Api.max_per_page + 1
+            per_page: Api::MAX_PER_PAGE + 1
           }
           collator = CourseGroupCollator.new(@course, opts)
 
-          expect(collator.per_page).to eq(Api.max_per_page)
+          expect(collator.per_page).to eq(Api::MAX_PER_PAGE)
         end
 
         it "generates a list of ::IMS::LTI::Models::Membership objects" do
@@ -104,13 +104,13 @@ module Lti::MembershipService
         describe "#next_page?" do
           it "returns true when there is an additional page of results" do
             collator = CourseGroupCollator.new(@course, page: 1)
-            expect(collator.next_page?).to eq(true)
+            expect(collator.next_page?).to be(true)
           end
 
           it "returns false when there are no more pages" do
             collator = CourseGroupCollator.new(@course, page: 11)
             collator.memberships
-            expect(collator.next_page?).to eq(false)
+            expect(collator.next_page?).to be(false)
           end
         end
       end

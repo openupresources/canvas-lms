@@ -155,18 +155,16 @@ class ExternalToolsController < ApplicationController
 
   TimingMeta = Struct.new(:tags)
 
-  def track_time_with_lti_version(name)
-    timing_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    timing_meta = TimingMeta.new({})
-    yield(timing_meta)
-  ensure
-    timing_end = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    InstStatsd::Statsd.timing(name, timing_end - timing_start, tags: timing_meta.tags || {})
-  end
-
   def retrieve
-    track_time_with_lti_version "lti.retrieve.request_time" do |timing_meta|
-      tool, url = find_tool_and_url(resource_link_lookup_uuid, params[:url], @context, params[:client_id])
+    Utils::InstStatsdUtils::Timing.track "lti.retrieve.request_time" do |timing_meta|
+      tool, url = find_tool_and_url(
+        resource_link_lookup_uuid,
+        params[:url],
+        @context,
+        params[:client_id],
+        params[:resource_link_id],
+        prefer_1_1: !!params[:prefer_1_1]
+      )
       @tool = tool
       placement = placement_from_params
       add_crumb(@tool.name)
@@ -182,8 +180,11 @@ class ExternalToolsController < ApplicationController
         return
       end
 
+      launch_type = placement.present? ? :indirect_link : :content_item
+      Lti::LogService.new(tool:, context: @context, user: @current_user, placement:, launch_type:).call
+
       display_override = params["borderless"] ? "borderless" : params[:display]
-      render Lti::AppUtil.display_template(@tool.display_type(placement), display_override: display_override)
+      render Lti::AppUtil.display_template(@tool.display_type(placement), display_override:)
       timing_meta.tags = { lti_version: tool&.lti_version }.compact
     rescue InvalidSettingsError => e
       flash[:error] = e.message
@@ -195,14 +196,21 @@ class ExternalToolsController < ApplicationController
   # Finds a tool for a given resource_link_id or url in a context
   # Prefers the resource_link_id, but defaults to the provided_url,
   #   if the resource_link does not provide a url
-  def find_tool_and_url(lookup_id, provided_url, context, client_id)
-    resource_link = Lti::ResourceLink.where(
-      lookup_uuid: lookup_id,
-      context: context
-    ).active.take
+  def find_tool_and_url(lookup_id, provided_url, context, client_id, resource_link_id = nil, prefer_1_1: false)
+    resource_link = if resource_link_id
+                      Lti::ResourceLink.where(
+                        resource_link_uuid: resource_link_id,
+                        context:
+                      ).active.take
+                    else
+                      Lti::ResourceLink.where(
+                        lookup_uuid: lookup_id,
+                        context:
+                      ).active.take
+                    end
     if resource_link.nil? || resource_link.url.nil?
       # If the resource_link doesn't have a url, then use the provided url to look up the tool
-      tool = ContextExternalTool.find_external_tool(provided_url, context, nil, nil, client_id)
+      tool = ContextExternalTool.find_external_tool(provided_url, context, nil, nil, client_id, prefer_1_1:)
       unless tool
         invalid_settings_error
       end
@@ -313,7 +321,7 @@ class ExternalToolsController < ApplicationController
   end
 
   def sessionless_launch
-    track_time_with_lti_version "lti.sessionless_launch.request_time" do |timing_meta|
+    Utils::InstStatsdUtils::Timing.track "lti.sessionless_launch.request_time" do |timing_meta|
       if Canvas.redis_enabled?
         launch_settings = fetch_and_delete_launch(
           @context,
@@ -328,15 +336,20 @@ class ExternalToolsController < ApplicationController
       end
 
       launch_settings = JSON.parse(launch_settings)
-      if (tool = ContextExternalTool.find_external_tool(launch_settings["launch_url"], @context))
-        log_asset_access(tool, "external_tools", "external_tools", overwrite: false)
-      end
-
       @lti_launch = Lti::Launch.new
       @lti_launch.params = launch_settings["tool_settings"]
       @lti_launch.resource_url = launch_settings["launch_url"]
       @lti_launch.link_text =  launch_settings["tool_name"]
       @lti_launch.analytics_id = launch_settings["analytics_id"]
+
+      tool = ContextExternalTool.where(id: launch_settings.dig("metadata", "tool_id")).first ||
+             ContextExternalTool.find_external_tool(launch_settings["launch_url"], @context)
+      if tool
+        placement = launch_settings.dig("metadata", "placement")
+        launch_type = launch_settings.dig("metadata", "launch_type")&.to_sym
+        Lti::LogService.new(tool:, context: @context, user: @current_user, placement:, launch_type:).call
+        log_asset_access(tool, "external_tools", "external_tools", overwrite: false)
+      end
 
       render Lti::AppUtil.display_template("borderless")
       timing_meta.tags = { lti_version: tool&.lti_version }.compact
@@ -354,7 +367,7 @@ class ExternalToolsController < ApplicationController
   # @response_field description A description of the tool
   # @response_field created_at Timestamp of creation
   # @response_field updated_at Timestamp of last update
-  # @response_field privacy_level What information to send to the external tool, "anonymous", "name_only", "public"
+  # @response_field privacy_level How much user information to send to the external tool: "anonymous", "name_only", "email_only", "public"
   # @response_field custom_fields Custom fields that will be sent to the tool consumer
   # @response_field is_rce_favorite Boolean determining whether this tool should be in a preferred location in the RCE.
   # @response_field account_navigation The configuration for account navigation links (see create API for values)
@@ -438,13 +451,13 @@ class ExternalToolsController < ApplicationController
   #        "not_selectable": false
   #      }
   def show
-    track_time_with_lti_version "lti.show.request_time" do |timing_meta|
+    Utils::InstStatsdUtils::Timing.track "lti.show.request_time" do |timing_meta|
       if api_request?
         tool = @context.context_external_tools.active.find(params[:external_tool_id])
         render json: external_tool_json(tool, @context, @current_user, session)
         timing_meta.tags = { lti_version: tool.lti_version }
       else
-        placement = placement_from_params
+        placement = placement_from_params || "#{@context.class.url_context_class.to_s.downcase}_navigation"
         unless find_tool(params[:id], placement)
           timing_meta.tags = { error: true }
           return
@@ -465,7 +478,7 @@ class ExternalToolsController < ApplicationController
         @show_embedded_chat = false if @tool.tool_id == "chat"
 
         launch_url = params[:launch_url] if params[:launch_url] && @tool.matches_host?(params[:launch_url])
-        @lti_launch = lti_launch(tool: @tool, selection_type: placement, launch_url: launch_url)
+        @lti_launch = lti_launch(tool: @tool, selection_type: placement, launch_url:)
         unless @lti_launch
           timing_meta.tags = { error: true }
           return
@@ -474,6 +487,8 @@ class ExternalToolsController < ApplicationController
         # Some LTI apps have tutorial trays. Provide some details to the client to know what tray, if any, to show
         js_env(LTI_LAUNCH_RESOURCE_URL: @lti_launch.resource_url)
         set_tutorial_js_env
+
+        Lti::LogService.new(tool: @tool, context: @context, user: @current_user, placement:, launch_type: :direct_link).call
 
         render Lti::AppUtil.display_template(@tool.display_type(placement), display_override: params[:display])
         timing_meta.tags = { lti_version: @tool&.lti_version }.compact
@@ -514,7 +529,7 @@ class ExternalToolsController < ApplicationController
   end
 
   def resource_selection
-    track_time_with_lti_version "lti.resource_selection.request_time" do |timing_meta|
+    Utils::InstStatsdUtils::Timing.track "lti.resource_selection.request_time" do |timing_meta|
       placement = params[:placement] || params[:launch_type]
       selection_type = placement || "resource_selection"
       selection_type = "editor_button" if params[:editor]
@@ -528,11 +543,13 @@ class ExternalToolsController < ApplicationController
         return
       end
 
-      @lti_launch = lti_launch(tool: @tool, selection_type: selection_type, launch_token: params[:launch_token])
+      @lti_launch = lti_launch(tool: @tool, selection_type:, launch_token: params[:launch_token])
       unless @lti_launch
         timing_meta.tags = { error: true, lti_version: @tool&.lti_version }.compact
         return
       end
+
+      Lti::LogService.new(tool: @tool, context: @context, user: @current_user, placement: selection_type, launch_type: :resource_selection).call
 
       render Lti::AppUtil.display_template("borderless")
       timing_meta.tags = { lti_version: @tool&.lti_version }.compact
@@ -561,10 +578,16 @@ class ExternalToolsController < ApplicationController
       jwt_body = Canvas::Security.decode_jwt(secure_params)
       link_params[:ext][:lti_assignment_id] = jwt_body[:lti_assignment_id] if jwt_body[:lti_assignment_id]
     end
-    opts = { launch_url: launch_url, link_params: link_params, launch_token: launch_token, context_module_id: params[:context_module_id], parent_frame_context: params[:parent_frame_context] }
+    opts = { launch_url:, link_params:, launch_token:, context_module_id: params[:context_module_id], parent_frame_context: params[:parent_frame_context] }
     @return_url ||= url_for(@context)
     message_type = tool.extension_setting(selection_type, "message_type") if selection_type
     log_asset_access(@tool, "external_tools", "external_tools") if post_live_event
+
+    if tool.root_account.feature_enabled?(:lti_unique_tool_form_ids)
+      @tool_form_id = random_lti_tool_form_id
+      js_env(LTI_TOOL_FORM_ID: @tool_form_id)
+    end
+
     case message_type
     when "ContentItemSelectionResponse", "ContentItemSelection"
       # ContentItemSelectionResponse is deprecated, use ContentItemSelection instead
@@ -573,6 +596,7 @@ class ExternalToolsController < ApplicationController
       opts[:content_item_id] = content_item_id if content_item_id
       content_item_selection_request(tool, selection_type, opts)
     else
+      opts[:content_item_id] = content_item_id if content_item_id
       basic_lti_launch_request(tool, selection_type, opts)
     end
   rescue Lti::Errors::UnauthorizedError => e
@@ -605,18 +629,30 @@ class ExternalToolsController < ApplicationController
   end
   protected :resource_link_lookup_uuid
 
+  def resource_link_id
+    params[:resource_link_id]
+  end
+
   # Get resource link from `resource_link_lookup_id` or `resource_link_lookup_uuid`
   # query param, and ensure the tool matches the resource link.
   # Used for link-level custom params, and to
   # determine resource_link_id to send to tool.
   def lookup_resource_link(tool)
-    return nil unless resource_link_lookup_uuid
+    return nil if resource_link_lookup_uuid.nil? && resource_link_id.nil?
 
-    resource_link = Lti::ResourceLink.where(
-      lookup_uuid: resource_link_lookup_uuid,
-      context: @context,
-      root_account_id: tool.root_account_id
-    ).active.take
+    resource_link = if resource_link_id
+                      Lti::ResourceLink.where(
+                        resource_link_uuid: resource_link_id,
+                        context: @context,
+                        root_account_id: tool.root_account_id
+                      ).active.take
+                    else
+                      Lti::ResourceLink.where(
+                        lookup_uuid: resource_link_lookup_uuid,
+                        context: @context,
+                        root_account_id: tool.root_account_id
+                      ).active.take
+                    end
     if resource_link.nil?
       raise InvalidSettingsError, t(
         "Couldn't find valid settings for this link: Resource link not found"
@@ -626,13 +662,26 @@ class ExternalToolsController < ApplicationController
     # Verify the resource link was intended for the domain it's being
     # launched from
     if params[:url] && !resource_link&.current_external_tool(@context)
-      &.matches_host?(params[:url])
+                                     &.matches_host?(params[:url])
       nil
     else
       resource_link
     end
   end
 
+  def assignment_from_assignment_id
+    return nil unless params[:assignment_id].present?
+
+    assignment = api_find(@context.assignments.active, params[:assignment_id])
+    raise Lti::Errors::UnauthorizedError unless assignment.grants_right?(@current_user, :read)
+
+    assignment
+  end
+
+  # This handles non-content item 1.1 launches, and 1.3 launches including deep linking requests.
+  # LtiAdvantageAdapter#generate_lti_params (called via
+  # adapter.generate_post_payload) determines whether or not an LTI 1.3 launch
+  # is a deep linking request
   def basic_lti_launch_request(tool, selection_type = nil, opts = {})
     lti_launch = tool.settings["post_only"] ? Lti::Launch.new(post_only: true) : Lti::Launch.new
     default_opts = {
@@ -642,32 +691,51 @@ class ExternalToolsController < ApplicationController
     }
 
     opts = default_opts.merge(opts)
+    opts[:launch_url] = tool.url_with_environment_overrides(opts[:launch_url])
 
-    assignment = api_find(@context.assignments.active, params[:assignment_id]) if params[:assignment_id]
+    assignment = assignment_from_assignment_id
 
     if assignment.present? && @current_user.present?
       assignment = AssignmentOverrideApplicator.assignment_overridden_for(assignment, @current_user)
     end
 
-    # from specs, seems this is only a fix for Quizzes Next
-    # resource_link_id in regular QN launches is assignment.lti_resource_link_id
-    opts[:link_code] = @tool.opaque_identifier_for(assignment.external_tool_tag) if assignment.present? && assignment.quiz_lti?
+    if assignment.present? && ((@current_user && assignment.quiz_lti?) || assignment.root_account.feature_enabled?(:lti_resource_link_id_speedgrader_launches_reference_assignment))
+      # Set assignment LTI launch parameters for this code path (e.g. launches
+      # from Speedgrader)
+      opts[:link_code] = @tool.opaque_identifier_for(assignment.external_tool_tag)
+      opts[:overrides] ||= {}
+      opts[:overrides]["resource_link_title"] = assignment.title
+    end
 
-    expander = variable_expander(assignment: assignment,
-                                 tool: tool, launch: lti_launch,
-                                 post_message_token: opts[:launch_token],
-                                 secure_params: params[:secure_params],
-                                 placement: opts[:resource_type], launch_url: opts[:launch_url])
+    # This is only for 1.3: editing collaborations for 1.1 goes thru content_item_selection_request()
+    if selection_type == "collaboration"
+      collaboration = opts[:content_item_id].presence&.then { ExternalToolCollaboration.find _1 }
+      collaboration = nil unless collaboration&.update_url == params[:url]
+    end
+
+    expander = variable_expander(
+      assignment:,
+      tool:,
+      launch: lti_launch,
+      post_message_token: opts[:launch_token],
+      secure_params: params[:secure_params],
+      placement: opts[:resource_type],
+      launch_url: opts[:launch_url],
+      collaboration:,
+      resource_link: lookup_resource_link(tool)
+    )
 
     adapter = if tool.use_1_3?
                 a = Lti::LtiAdvantageAdapter.new(
-                  tool: tool,
+                  tool:,
                   user: @current_user,
                   context: @context,
                   return_url: @return_url,
-                  expander: expander,
+                  expander:,
+                  include_storage_target: !in_lti_mobile_webview?,
                   opts: opts.merge(
-                    resource_link: lookup_resource_link(tool)
+                    resource_link: lookup_resource_link(tool),
+                    lti_launch_debug_logger: make_lti_launch_debug_logger(tool)
                   )
                 )
 
@@ -690,7 +758,7 @@ class ExternalToolsController < ApplicationController
                                        @context.user_has_been_student?(student)
                           raise Lti::Errors::UnauthorizedError unless can_launch
 
-                          adapter.generate_post_payload(student_id: student.global_id)
+                          adapter.generate_post_payload_for_student_context_card(student_id: student.global_id)
                         elsif tool.extension_setting(selection_type, "required_permissions")
                           can_launch = tool.visible_with_permission_check?(selection_type, @current_user, @context, session)
                           raise Lti::Errors::UnauthorizedError unless can_launch
@@ -709,6 +777,7 @@ class ExternalToolsController < ApplicationController
     lti_launch.resource_url = opts[:launch_url] || adapter.launch_url
     lti_launch.link_text = selection_type ? tool.label_for(selection_type.to_sym, I18n.locale) : tool.default_label
     lti_launch.analytics_id = tool.tool_id
+
     lti_launch
   end
   protected :basic_lti_launch_request
@@ -724,7 +793,7 @@ class ExternalToolsController < ApplicationController
       media_types.to_unsafe_h,
       params["export_type"]
     )
-    launch_url = opts[:launch_url] || tool.extension_setting(placement, :url)
+    launch_url = tool.launch_url(extension_type: placement, preferred_launch_url: opts[:launch_url])
     params = Lti::ContentItemSelectionRequest.default_lti_params(@context, @domain_root_account, @current_user)
                                              .merge({
                                                       # required params
@@ -737,7 +806,7 @@ class ExternalToolsController < ApplicationController
                                                       tool_consumer_instance_name: @domain_root_account.name,
                                                       tool_consumer_instance_contact_email: HostUrl.outgoing_email_address,
                                                     })
-                                             .merge(variable_expander(tool: tool, attachment: content_item_response.file, launch_url: launch_url)
+                                             .merge(variable_expander(tool:, attachment: content_item_response.file, launch_url:)
       .expand_variables!(tool.set_custom_fields(placement)))
 
     lti_launch = @tool.settings["post_only"] ? Lti::Launch.new(post_only: true) : Lti::Launch.new
@@ -762,33 +831,33 @@ class ExternalToolsController < ApplicationController
                                                              domain_root_account: @domain_root_account,
                                                              user: @current_user,
                                                              base_url: request.base_url,
-                                                             tool: tool,
+                                                             tool:,
                                                              secure_params: params[:secure_params])
 
-    assignment = api_find(@context.assignments.active, params[:assignment_id]) if params[:assignment_id].present?
+    assignment = assignment_from_assignment_id
 
     opts = {
       post_only: @tool.settings["post_only"].present?,
-      launch_url: opts[:launch_url] || tool.extension_setting(placement, :url),
+      launch_url: tool.launch_url(extension_type: placement, preferred_launch_url: opts[:launch_url]),
       content_item_id: opts[:content_item_id],
-      assignment: assignment,
+      assignment:,
       parent_frame_context: opts[:parent_frame_context]
     }
 
     collaboration = opts[:content_item_id].present? ? ExternalToolCollaboration.find(opts[:content_item_id]) : nil
 
     base_expander = variable_expander(
-      tool: tool,
-      collaboration: collaboration,
+      tool:,
+      collaboration:,
       launch_url: opts[:launch_url]
     )
 
     expander = Lti::PrivacyLevelExpander.new(placement, base_expander)
 
     selection_request.generate_lti_launch(
-      placement: placement,
+      placement:,
       expanded_variables: expander.expanded_variables!(tool.set_custom_fields(placement)),
-      opts: opts
+      opts:
     )
   end
   protected :content_item_selection_request
@@ -806,8 +875,8 @@ class ExternalToolsController < ApplicationController
   # @argument name [Required, String]
   #   The name of the tool
   #
-  # @argument privacy_level [Required, String, "anonymous"|"name_only"|"public"]
-  #   What information to send to the external tool.
+  # @argument privacy_level [Required, String, "anonymous"|"name_only"|"email_only"|"public"]
+  #   How much user information to send to the external tool.
   #
   # @argument consumer_key [Required, String]
   #   The consumer key for the external tool
@@ -1083,7 +1152,7 @@ class ExternalToolsController < ApplicationController
     end
     @tool.check_for_duplication(params.dig(:external_tool, :verify_uniqueness).present?)
     if @tool.errors.blank? && @tool.save
-      @tool.prepare_for_ags_if_needed!
+      @tool.migrate_content_to_1_3_if_needed!
       invalidate_nav_tabs_cache(@tool)
       if api_request?
         render json: external_tool_json(@tool, @context, @current_user, session)
@@ -1194,7 +1263,7 @@ class ExternalToolsController < ApplicationController
 
     raise ActiveRecord::RecordNotFound if tool.nil?
 
-    launch = lti_launch(tool: tool, post_live_event: false)
+    launch = lti_launch(tool:, post_live_event: false)
     return unless launch
 
     params = launch.params.reject { |p| p.starts_with?("oauth_") }
@@ -1371,7 +1440,7 @@ class ExternalToolsController < ApplicationController
 
     generate_common_sessionless_launch(
       launch_url: module_item.url,
-      options: { module_item: module_item }
+      options: { module_item: }
     )
   end
 
@@ -1392,7 +1461,7 @@ class ExternalToolsController < ApplicationController
 
     generate_common_sessionless_launch(
       launch_url: assignment.external_tool_tag.url,
-      options: { assignment: assignment }
+      options: { assignment: }
     )
   end
 
@@ -1403,6 +1472,10 @@ class ExternalToolsController < ApplicationController
     module_item = options[:module_item]
     assignment = options[:assignment]
     resource_link_lookup_uuid = options[:resource_link_lookup_uuid]
+
+    if assignment.present? && @current_user.present?
+      assignment = AssignmentOverrideApplicator.assignment_overridden_for(assignment, @current_user)
+    end
 
     unless tool_id || launch_url || module_item || resource_link_lookup_uuid
       message = "A tool id, tool url, module item id, or resource link lookup uuid must be provided"
@@ -1419,11 +1492,7 @@ class ExternalToolsController < ApplicationController
     elsif launch_url && module_item.blank?
       @tool = ContextExternalTool.find_external_tool(launch_url, @context, tool_id)
     elsif module_item
-      @tool = ContextExternalTool.find_external_tool(
-        module_item.url,
-        @context,
-        module_item.content_id
-      )
+      @tool = ContextExternalTool.from_content_tag(module_item, @context)
     else
       return unless find_tool(tool_id, launch_type)
     end
@@ -1448,7 +1517,7 @@ class ExternalToolsController < ApplicationController
       # initialize a Canvas session and launch the tool.
       begin
         launch_link = sessionless_launch_link(
-          options.merge(id: tool_id, launch_type: launch_type, lookup_id: resource_link_lookup_uuid),
+          options.merge(id: tool_id, launch_type:, lookup_id: resource_link_lookup_uuid),
           @context,
           @tool,
           generate_session_token
@@ -1458,13 +1527,19 @@ class ExternalToolsController < ApplicationController
         render_unauthorized_action
       end
     else
+      metadata = {
+        placement: launch_type,
+        launch_type: tool_id.present? ? :direct_link : :indirect_link,
+        tool_id:
+      }
       # generate the launch
       opts = {
-        launch_url: launch_url,
+        launch_url: @tool.url_with_environment_overrides(launch_url),
         resource_type: launch_type
       }
       if module_item || assignment
         opts[:link_code] = @tool.opaque_identifier_for(module_item || assignment.external_tool_tag)
+        metadata[:launch_type] = :content_item
       end
 
       opts[:overrides] = {
@@ -1478,26 +1553,27 @@ class ExternalToolsController < ApplicationController
         @context
       ).prepare_tool_launch(
         url_for(@context),
-        variable_expander(assignment: assignment, content_tag: module_item, launch_url: opts[:launch_url]),
+        variable_expander(assignment:, content_tag: module_item, launch_url: opts[:launch_url]),
         opts
       )
 
+      tool_settings = if assignment
+                        adapter.generate_post_payload_for_assignment(
+                          assignment,
+                          lti_grade_passback_api_url(@tool),
+                          blti_legacy_grade_passback_api_url(@tool),
+                          lti_turnitin_outcomes_placement_url(@tool.id)
+                        )
+                      else
+                        adapter.generate_post_payload
+                      end
       launch_settings = {
-        "launch_url" => adapter.launch_url(post_only: @tool.settings["post_only"]),
-        "tool_name" => @tool.name,
-        "analytics_id" => @tool.tool_id
+        launch_url: adapter.launch_url(post_only: @tool.settings["post_only"]),
+        tool_name: @tool.name,
+        analytics_id: @tool.tool_id,
+        tool_settings:,
+        metadata:
       }
-
-      launch_settings["tool_settings"] = if assignment
-                                           adapter.generate_post_payload_for_assignment(
-                                             assignment,
-                                             lti_grade_passback_api_url(@tool),
-                                             blti_legacy_grade_passback_api_url(@tool),
-                                             lti_turnitin_outcomes_placement_url(@tool.id)
-                                           )
-                                         else
-                                           adapter.generate_post_payload
-                                         end
 
       # store the launch settings and return to the user
       verifier = cache_launch(launch_settings, @context, prefix: Lti::RedisMessageClient::SESSIONLESS_LAUNCH_PREFIX)
@@ -1511,7 +1587,7 @@ class ExternalToolsController < ApplicationController
       # NOTE: now that we are using session_token here for LTI 1.1 tools, we
       # _might_ be able to simplify the above code and just do a regular launch
       # with token like we do for LTI 1.3 -- see this comment's commit
-      uri.query = { verifier: verifier, session_token: session_token_if_authorized }.compact.to_query
+      uri.query = { verifier:, session_token: session_token_if_authorized }.compact.to_query
 
       render json: { id: @tool.id, name: @tool.name, url: uri.to_s }
     end
@@ -1525,13 +1601,29 @@ class ExternalToolsController < ApplicationController
 
   def set_tool_attributes(tool, params)
     attrs = Lti::ResourcePlacement.valid_placements(@domain_root_account)
-    attrs += %i[name description url icon_url canvas_icon_class domain privacy_level consumer_key shared_secret
-                custom_fields custom_fields_string text config_type config_url config_xml not_selectable app_center_id
-                oauth_compliant is_rce_favorite]
+    attrs += %i[name
+                description
+                url
+                icon_url
+                canvas_icon_class
+                domain
+                privacy_level
+                consumer_key
+                shared_secret
+                custom_fields
+                custom_fields_string
+                text
+                config_type
+                config_url
+                config_xml
+                not_selectable
+                app_center_id
+                oauth_compliant
+                is_rce_favorite]
     attrs += [:allow_membership_service_access] if @context.root_account.feature_enabled?(:membership_service_for_lti_tools)
 
     attrs.each do |prop|
-      tool.send("#{prop}=", params[prop]) if params.key?(prop)
+      tool.send(:"#{prop}=", params[prop]) if params.key?(prop)
     end
   end
 
@@ -1592,7 +1684,7 @@ class ExternalToolsController < ApplicationController
   end
 
   def placement_from_params
-    params[:placement] || params[:launch_type] || "#{@context.class.base_class.to_s.downcase}_navigation"
+    params[:placement] || params[:launch_type]
   end
 
   def whitelisted_query_params

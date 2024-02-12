@@ -50,6 +50,38 @@ describe "assignments" do
       end
     end
 
+    it "renders only 10 students on each peer review page" do
+      course_with_teacher_logged_in
+      create_users_in_course(@course, 11)
+
+      @assignment = assignment_model({
+                                       course: @course,
+                                       peer_reviews: true,
+                                       automatic_peer_reviews: false,
+                                     })
+
+      get "/courses/#{@course.id}/assignments/#{@assignment.id}/peer_reviews"
+
+      list_items = driver.find_elements(class: "student_reviews")
+      expect(list_items.count).to eq(10)
+    end
+
+    it "renders the remaining students on another page if total number of students exceeds the limit of 10 students per page" do
+      course_with_teacher_logged_in
+      create_users_in_course(@course, 11)
+
+      @assignment = assignment_model({
+                                       course: @course,
+                                       peer_reviews: true,
+                                       automatic_peer_reviews: false,
+                                     })
+
+      get "/courses/#{@course.id}/assignments/#{@assignment.id}/peer_reviews?page=2"
+
+      list_items = driver.find_elements(class: "student_reviews")
+      expect(list_items.count).to eq(1)
+    end
+
     it "displays the intra-group review toggle for group assignments" do
       course_with_teacher_logged_in
       student = student_in_course.user
@@ -179,7 +211,7 @@ describe "assignments" do
     end
     let!(:submission) do
       submission_model({
-                         assignment: assignment,
+                         assignment:,
                          body: "submission body",
                          course: review_course,
                          grade: "5",
@@ -190,7 +222,7 @@ describe "assignments" do
     end
     let!(:submissionReviewer) do
       submission_model({
-                         assignment: assignment,
+                         assignment:,
                          body: "submission body reviewer",
                          course: review_course,
                          grade: "5",
@@ -202,7 +234,7 @@ describe "assignments" do
     let!(:comment) do
       submission_comment_model({
                                  author: reviewer,
-                                 submission: submission
+                                 submission:
                                })
     end
     let!(:rubric) { rubric_model }

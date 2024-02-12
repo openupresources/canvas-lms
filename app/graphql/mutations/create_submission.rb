@@ -66,6 +66,8 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     context = assignment.context
     submission_type = input[:submission_type]
 
+    InstStatsd::Statsd.increment("submission.graphql.create.proxy_submit") if input[:student_id].present?
+
     verify_authorized_action!(assignment, :read)
     if input[:student_id]
       verify_authorized_action!(assignment.course, :proxy_assignment_submission)
@@ -78,7 +80,7 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
       attachments: [],
       body: "",
       require_submission_type_is_valid: true,
-      submission_type: submission_type,
+      submission_type:,
       url: nil
     }
     case submission_type
@@ -126,25 +128,34 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     when "online_upload"
       owning_user = nil
       if input[:student_id]
-        owning_user =
-          User
-          .joins(:submissions)
-          .where(submissions: { assignment: assignment })
-          .find(input[:student_id])
+        owning_user = assignment.submissions.find_by(user_id: input[:student_id])&.user
         submission_params[:proxied_student] = owning_user
       else
         owning_user = current_user
       end
       file_ids = (input[:file_ids] || []).compact.uniq
+      error_files = []
+      attachments = []
+      file_ids.each do |file_id|
+        attachment = Attachment.active.where(context_type: "User", context_id: owning_user&.id).find_by(id: file_id)
+        attachment ||= Attachment.active.where(
+          context_type: "Group",
+          context_id: GroupMembership.where(workflow_state: "accepted", user_id: [owning_user&.id, owning_user&.global_id]).select(:group_id)
+        ).find_by(id: file_id)
 
-      attachments = owning_user&.submittable_attachments&.active&.where(id: file_ids) || []
-      unless file_ids.size == attachments.size
-        attachment_ids = attachments.map(&:id)
+        if attachment
+          attachments << attachment
+        else
+          error_files << file_id
+        end
+      end
+
+      if error_files.present?
         return(
           validation_error(
             I18n.t(
               "No attachments found for the following ids: %{ids}",
-              { ids: file_ids - attachment_ids.map(&:to_s) }
+              { ids: error_files }
             ),
             attribute: "file_ids"
           )
@@ -162,7 +173,7 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     end
 
     submission = assignment.submit_homework(current_user, submission_params)
-    { submission: submission }
+    { submission: }
   rescue ActiveRecord::RecordNotFound
     raise GraphQL::ExecutionError, "not found"
   rescue ActiveRecord::RecordInvalid => e

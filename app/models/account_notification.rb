@@ -32,6 +32,8 @@ class AccountNotification < ActiveRecord::Base
   after_save :queue_message_broadcast
   after_save :clear_cache
 
+  USERS_PER_MESSAGE_BATCH = 1000
+
   ACCOUNT_SERVICE_NOTIFICATION_FLAGS = %w[account_survey_notifications].freeze
   validates :required_account_service, inclusion: { in: ACCOUNT_SERVICE_NOTIFICATION_FLAGS, allow_nil: true }
 
@@ -60,9 +62,12 @@ class AccountNotification < ActiveRecord::Base
     thresholds = ObserverAlertThreshold.active.where(observer: User.of_account(account), alert_type: "institution_announcement")
                                        .where.not(id: ObserverAlert.where(context: self).select(:observer_alert_threshold_id))
     thresholds.find_each do |threshold|
-      ObserverAlert.create(student: threshold.student, observer: threshold.observer,
-                           observer_alert_threshold: threshold, context: self,
-                           alert_type: "institution_announcement", action_date: start_at,
+      ObserverAlert.create(student: threshold.student,
+                           observer: threshold.observer,
+                           observer_alert_threshold: threshold,
+                           context: self,
+                           alert_type: "institution_announcement",
+                           action_date: start_at,
                            title: I18n.t('Institution announcement: "%{announcement_title}"', {
                                            announcement_title: subject
                                          }))
@@ -82,7 +87,7 @@ class AccountNotification < ActiveRecord::Base
   def self.for_user_and_account(user, root_account, include_past: false)
     GuardRail.activate(:secondary) do
       if root_account.site_admin?
-        current = for_account(root_account, include_past: include_past)
+        current = for_account(root_account, include_past:)
       else
         course_ids = user.enrollments.active_or_pending_by_date.shard(user.in_region_associated_shards).distinct.pluck(:course_id) # fetch sharded course ids
         # and then fetch account_ids separately - using pluck on a joined column doesn't give relative ids
@@ -92,7 +97,7 @@ class AccountNotification < ActiveRecord::Base
                                .joins(:account).where(accounts: { workflow_state: "active" })
                                .distinct.pluck(:account_id).uniq
         all_account_ids = Account.multi_account_chain_ids(all_account_ids) # get all parent sub-accounts too
-        current = for_account(root_account, all_account_ids, include_past: include_past)
+        current = for_account(root_account, all_account_ids, include_past:)
       end
 
       user_role_ids = {}
@@ -138,7 +143,7 @@ class AccountNotification < ActiveRecord::Base
           user_role_ids[announcement.account_id] |= account_users.map { |au| au.role.role_for_root_account_id(root_account.id).id }
         end
 
-        role_ids.empty? || (role_ids & user_role_ids[announcement.account_id]).present?
+        role_ids.empty? || role_ids.intersect?(user_role_ids[announcement.account_id])
       end
 
       user.shard.activate do
@@ -267,7 +272,7 @@ class AccountNotification < ActiveRecord::Base
 
     if all_visible_account_ids || include_past
       # Refreshes every 10 minutes at the longest
-      all_account_ids_hash = Digest::MD5.hexdigest all_visible_account_ids.try(:sort).to_s
+      all_account_ids_hash = Digest::SHA256.hexdigest all_visible_account_ids.try(:sort).to_s
       Rails.cache.fetch(["account_notifications5", root_account, all_account_ids_hash, include_past].cache_key, expires_in: 10.minutes, &block)
     else
       # no point in doing an additional layer of caching for _only_ root accounts when root accounts are explicitly cached
@@ -331,15 +336,11 @@ class AccountNotification < ActiveRecord::Base
     MultiCache.delete(self.class.cache_key_for_root_account(account_id, Time.now.utc)) if account.root_account?
   end
 
-  def self.users_per_message_batch
-    Setting.get("account_notification_message_batch_size", "1000").to_i
-  end
-
   def broadcast_messages
     return unless should_send_message? # sanity check before we start grabbing user ids
 
     # don't try to send a message to an entire account in one job
-    applicable_user_ids.each_slice(self.class.users_per_message_batch) do |sliced_user_ids|
+    applicable_user_ids.each_slice(USERS_PER_MESSAGE_BATCH) do |sliced_user_ids|
       self.message_recipients = sliced_user_ids.map { |id| "user_#{id}" }
       save # trigger the broadcast policy
     ensure
@@ -388,6 +389,13 @@ class AccountNotification < ActiveRecord::Base
         users_with_no_enrollments_from_given_accounts = User.joins(:user_account_associations).where(user_account_associations: { account_id: all_account_ids }).where.not(id: Enrollment.active_or_pending_by_date.select(:user_id))
         user_ids += users_with_no_enrollments_from_given_accounts.pluck(:id)
       end
+
+      suspended_user_ids = User.where(id: user_ids)
+                               .joins(:active_pseudonyms)
+                               .group("users.id")
+                               .having("COUNT(pseudonyms.id) = COUNT(CASE WHEN pseudonyms.workflow_state = 'suspended' THEN 1 END)")
+                               .pluck(:id)
+      user_ids -= suspended_user_ids
       user_ids.to_a.sort
     end
   end

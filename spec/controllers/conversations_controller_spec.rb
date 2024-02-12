@@ -124,7 +124,7 @@ describe ConversationsController do
 
       get "index", params: { scope: "sent" }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 3
+      expect(assigns[:conversations_json].size).to be 3
       expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.sent.pages_loaded.legacy")
     end
 
@@ -137,7 +137,7 @@ describe ConversationsController do
 
       get "index", params: { scope: "starred" }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 3
+      expect(assigns[:conversations_json].size).to be 3
       expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.starred.pages_loaded.legacy")
     end
 
@@ -150,7 +150,7 @@ describe ConversationsController do
 
       get "index", params: { scope: "unread" }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 1
+      expect(assigns[:conversations_json].size).to be 1
       expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.unread.pages_loaded.legacy")
     end
 
@@ -163,7 +163,7 @@ describe ConversationsController do
 
       get "index", params: { scope: "archived" }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 1
+      expect(assigns[:conversations_json].size).to be 1
       expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.archived.pages_loaded.legacy")
     end
 
@@ -175,8 +175,7 @@ describe ConversationsController do
 
       get "index", params: { scope: "inbox" }, format: "json"
       expect(response).to be_successful
-      puts assigns[:conversations_json]
-      expect(assigns[:conversations_json].size).to eql 3
+      expect(assigns[:conversations_json].size).to be 3
       expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.inbox.pages_loaded.legacy")
     end
 
@@ -192,7 +191,7 @@ describe ConversationsController do
 
       get "index", params: { filter: @other_course.asset_string }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 1
+      expect(assigns[:conversations_json].size).to be 1
       expect(assigns[:conversations_json][0][:id]).to eq @c2.conversation_id
     end
 
@@ -236,7 +235,7 @@ describe ConversationsController do
 
       get "index", params: { filter: @user.asset_string, include_all_conversation_ids: 1 }, format: "json"
       expect(response).to be_successful
-      expect(assigns[:conversations_json].size).to eql 2
+      expect(assigns[:conversations_json].size).to be 2
     end
 
     it "does not allow student view student to load inbox" do
@@ -268,14 +267,14 @@ describe ConversationsController do
       it "filters conversations" do
         get "index", format: "json"
         expect(response).to be_successful
-        expect(assigns[:conversations_json].size).to eql 1
+        expect(assigns[:conversations_json].size).to be 1
       end
 
       it "filters conversations when returning ids" do
         get "index", params: { include_all_conversation_ids: true }, format: "json"
         expect(response).to be_successful
-        expect(assigns[:conversations_json][:conversations].size).to eql 1
-        expect(assigns[:conversations_json][:conversation_ids].size).to eql 1
+        expect(assigns[:conversations_json][:conversations].size).to be 1
+        expect(assigns[:conversations_json][:conversation_ids].size).to be 1
       end
 
       it "recomputes inbox count" do
@@ -451,8 +450,12 @@ describe ConversationsController do
           course1.enroll_user(student2, "StudentEnrollment").accept!
 
           user_session(student1)
-          post "create", params: { recipients: [student2.id.to_s], body: "yo", message: "you suck", group_conversation: true,
-                                   course: course1.asset_string, context_code: course1.asset_string }
+          post "create", params: { recipients: [student2.id.to_s],
+                                   body: "yo",
+                                   message: "you suck",
+                                   group_conversation: true,
+                                   course: course1.asset_string,
+                                   context_code: course1.asset_string }
           expect(response).to be_successful
         end
 
@@ -466,8 +469,12 @@ describe ConversationsController do
         # request, so it's not an issue
         RequestStore.clear!
 
-        post "create", params: { recipients: [student2.id.to_s], body: "yo again", message: "you still suck", group_conversation: true,
-                                 course: course2.asset_string, context_code: course2.asset_string }
+        post "create", params: { recipients: [student2.id.to_s],
+                                 body: "yo again",
+                                 message: "you still suck",
+                                 group_conversation: true,
+                                 course: course2.asset_string,
+                                 context_code: course2.asset_string }
         expect(response).to be_successful
 
         c = Conversation.where(context_type: "Course", context_id: course2).first
@@ -618,7 +625,9 @@ describe ConversationsController do
       enrollment3.save
 
       post "create", params: { recipients: [@course2.asset_string + "_students", @group1.asset_string],
-                               body: "yo", group_conversation: true, context_code: @group3.asset_string }
+                               body: "yo",
+                               group_conversation: true,
+                               context_code: @group3.asset_string }
       expect(response).to be_successful
 
       c = Conversation.first
@@ -654,7 +663,7 @@ describe ConversationsController do
       post "create", params: { recipients: [new_user1.id.to_s, new_user2.id.to_s], body: "later", subject: "farewell" }
       expect(response).to be_successful
       json = json_parse(response.body)
-      expect(json.size).to eql 2
+      expect(json.size).to be 2
       json.each do |c|
         expect(c["subject"]).not_to be_nil
       end
@@ -668,22 +677,34 @@ describe ConversationsController do
         @students = create_users_in_course(@course, 2, account_associations: true, return_type: :record)
       end
 
-      it "creates user notes" do
-        post "create", params: { recipients: @students.map(&:id), body: "yo", subject: "greetings", user_note: "1" }
-        @students.each { |x| expect(x.user_notes.size).to be(1) }
-        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.legacy")
+      context "when the deprecate_faculty_journal feature flag is disabled" do
+        before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+        it "creates user notes" do
+          post "create", params: { recipients: @students.map(&:id), body: "yo", subject: "greetings", user_note: "1" }
+          @students.each { |x| expect(x.user_notes.size).to be(1) }
+          expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.legacy")
+        end
+
+        it "_not_s create user notes if asked not to" do
+          post "create", params: { recipients: @students.map(&:id), body: "yolo", subject: "salutations", user_note: "0" }
+          @students.each { |x| expect(x.user_notes.size).to be(0) }
+          expect(InstStatsd::Statsd).not_to have_received(:increment).with("inbox.conversation.sent.faculty_journal.legacy")
+        end
+
+        it "includes the domain root account in the user note" do
+          post "create", params: { recipients: @students.map(&:id), body: "hi there", subject: "hi there", user_note: true }
+          note = UserNote.last
+          expect(note.root_account_id).to eql Account.default.id
+        end
       end
 
-      it "_not_s create user notes if asked not to" do
-        post "create", params: { recipients: @students.map(&:id), body: "yolo", subject: "salutations", user_note: "0" }
-        @students.each { |x| expect(x.user_notes.size).to be(0) }
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("inbox.conversation.sent.faculty_journal.legacy")
-      end
-
-      it "includes the domain root account in the user note" do
-        post "create", params: { recipients: @students.map(&:id), body: "hi there", subject: "hi there", user_note: true }
-        note = UserNote.last
-        expect(note.root_account_id).to eql Account.default.id
+      context "when the deprecate_faculty_journal feature flag is enabled" do
+        it "does not create user notes" do
+          post "create", params: { recipients: @students.map(&:id), body: "yo", subject: "greetings", user_note: "1" }
+          @students.each { |x| expect(x.user_notes.size).to be(0) }
+          expect(InstStatsd::Statsd).to_not have_received(:increment).with("inbox.conversation.sent.faculty_journal.legacy")
+        end
       end
     end
 
@@ -691,7 +712,7 @@ describe ConversationsController do
       it "fails" do
         user_session(@student)
         post "create", params: { recipients: [User.create.id.to_s], body: "foo" }
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
       end
 
       context "as a siteadmin user with send_messages grants" do
@@ -700,7 +721,7 @@ describe ConversationsController do
           user_session(site_admin_user)
           post "create", params: { recipients: [User.create.id.to_s], body: "foo" }
           expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.account_context.legacy")
-          expect(response.status).to eq 201
+          expect(response).to have_http_status :created
         end
       end
     end
@@ -898,22 +919,40 @@ describe ConversationsController do
       expect(@conversation.reload.last_message_at).to eql expected_lma
     end
 
-    it "generates a user note when requested" do
-      Account.default.update_attribute :enable_user_notes, true
-      course_with_teacher_logged_in(active_all: true)
-      conversation
+    context "when the deprecate_faculty_journal feature flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
 
-      post "add_message", params: { conversation_id: @conversation.conversation_id, body: "hello world" }
-      expect(response).to be_successful
-      message = @conversation.messages.first # newest message is first
-      student = message.recipients.first
-      expect(student.user_notes.size).to eq 0
+      it "generates a user note when requested" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher_logged_in(active_all: true)
+        conversation
 
-      post "add_message", params: { conversation_id: @conversation.conversation_id, body: "make a note", user_note: 1 }
-      expect(response).to be_successful
-      message = @conversation.messages.first
-      student = message.recipients.first
-      expect(student.user_notes.size).to eq 1
+        post "add_message", params: { conversation_id: @conversation.conversation_id, body: "hello world" }
+        expect(response).to be_successful
+        message = @conversation.messages.first # newest message is first
+        student = message.recipients.first
+        expect(student.user_notes.size).to eq 0
+
+        post "add_message", params: { conversation_id: @conversation.conversation_id, body: "make a note", user_note: 1 }
+        expect(response).to be_successful
+        message = @conversation.messages.first
+        student = message.recipients.first
+        expect(student.user_notes.size).to eq 1
+      end
+    end
+
+    context "when the deprecate_faculty_journal feature flag is enabled" do
+      it "does not generate a user note when requested" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher_logged_in(active_all: true)
+        conversation
+
+        post "add_message", params: { conversation_id: @conversation.conversation_id, body: "make a note", user_note: 1 }
+        expect(response).to be_successful
+        message = @conversation.messages.first
+        student = message.recipients.first
+        expect(student.user_notes.size).to eq 0
+      end
     end
 
     it "does not allow new messages in concluded courses for students" do
@@ -982,11 +1021,15 @@ describe ConversationsController do
         @my_section.restrict_enrollments_to_section_dates = true
         @my_section.save!
 
-        @course.enroll_student(@student, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: @my_section)
+        @course.enroll_student(@student,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: @my_section)
 
-        @course.enroll_teacher(@teacher, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: @my_section)
+        @course.enroll_teacher(@teacher,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: @my_section)
         teacher_convo = @teacher.initiate_conversation([@student])
         teacher_convo.add_message("test")
         teacher_convo.conversation.update_attribute(:context, @course)
@@ -1006,11 +1049,15 @@ describe ConversationsController do
 
         @my_section = @course.course_sections.create!(name: "test section")
 
-        @course.enroll_student(@student, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: @my_section)
+        @course.enroll_student(@student,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: @my_section)
 
-        @course.enroll_teacher(@teacher, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: @my_section)
+        @course.enroll_teacher(@teacher,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: @my_section)
         teacher_convo = @teacher.initiate_conversation([@student])
         teacher_convo.add_message("test")
 
@@ -1256,7 +1303,7 @@ describe ConversationsController do
 
     it "includes part the message text in the title" do
       message = "Sending a test message to some random users, in the hopes that it really works."
-      conversation(message: message)
+      conversation(message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
       feed = Atom::Feed.load_feed(response.body) rescue nil
       expect(feed).not_to be_nil
@@ -1266,7 +1313,7 @@ describe ConversationsController do
 
     it "includes the message in the content" do
       message = "Sending a test message to some random users, in the hopes that it really works."
-      conversation(message: message)
+      conversation(message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
       feed = Atom::Feed.load_feed(response.body) rescue nil
       expect(feed).not_to be_nil
@@ -1275,7 +1322,7 @@ describe ConversationsController do
 
     it "includes context about the conversation" do
       message = "Sending a test message to some random users, in the hopes that it really works."
-      conversation(num_other_users: 4, message: message)
+      conversation(num_other_users: 4, message:)
       get "public_feed", params: { feed_code: @student.feed_code }, format: "atom"
       feed = Atom::Feed.load_feed(response.body) rescue nil
       expect(feed).not_to be_nil

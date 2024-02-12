@@ -103,7 +103,12 @@ init_log_file "Docker Dev Update"
 [[ -n "$UPDATE_CODE" ]] && ./script/rebase_canvas_and_plugins.sh "${params[@]}"
 if [[ -n "$REBUILD_DOCKER" ]]; then rebuild_docker_images; else check_dockerfile; fi
 docker_compose_up
-bundle_install_with_check
+bundle_install
 install_node_packages
 compile_assets
 rake_db_migrate_dev_and_test
+
+if [[ ${stop:-n} == 'y' ]]; then
+  message "Restarting stopped docker containers..."
+  $DOCKER_COMMAND start
+fi

@@ -16,16 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import htmlEscape from 'escape-html'
-import {IconDownloadLine, IconExternalLinkLine} from '@instructure/ui-icons/es/svg'
+import {IconDownloadLine} from '@instructure/ui-icons/es/svg'
 import formatMessage from '../format-message'
-import {closest, show, hide, insertAfter, getData, setData} from './jqueryish_funcs'
-import {youTubeID, isExternalLink, getTld, showFilePreview} from './instructure_helper'
+import {closest, getData, hide, insertAfter, setData, show} from './jqueryish_funcs'
+import {isExternalLink, showFilePreview, youTubeID} from './instructure_helper'
 import mediaCommentThumbnail from './media_comment_thumbnail'
+import {addParentFrameContextToUrl} from '../rce/plugins/instructure_rce_external_tools/util/addParentFrameContextToUrl'
+import {MathJaxDirective, Mathml} from './mathml'
+import {makeExternalLinkIcon} from './external_links'
 
 // in jest the es directory doesn't exist so stub the undefined svg
 const IconDownloadSVG = IconDownloadLine?.src || '<svg></svg>'
-const IconExternalLinkSVG = IconExternalLinkLine?.src || '<svg></svg>'
 
 function makeDownloadButton(download_url, filename) {
   const a = document.createElement('a')
@@ -46,32 +47,10 @@ function makeDownloadButton(download_url, filename) {
 
   const srspan = document.createElement('span')
   srspan.setAttribute('class', 'screenreader-only')
-  srspan.innerHTML = htmlEscape(formatMessage('Download {filename}', {filename}))
+  srspan.textContent = formatMessage('Download {filename}', {filename})
   a.appendChild(srspan)
 
   return a
-}
-
-function makeExternalLinkIcon(forLink) {
-  const dir = (forLink && window.getComputedStyle(forLink).direction) || 'ltr'
-  const $icon = document.createElement('span')
-  $icon.setAttribute('class', 'external_link_icon')
-  const style = `margin-inline-start: 5px; display: inline-block; ${
-    dir === 'rtl' ? 'transform:scale(-1, 1)' : ''
-  }`
-  $icon.setAttribute('style', style)
-  $icon.setAttribute('role', 'presentation')
-  $icon.innerHTML = IconExternalLinkSVG
-  $icon.firstChild.setAttribute(
-    'style',
-    'width:1em; height:1em; vertical-align:middle; fill:currentColor'
-  )
-
-  const srspan = document.createElement('span')
-  srspan.setAttribute('class', 'screenreader-only')
-  srspan.innerHTML = htmlEscape(formatMessage('Links to an external site.'))
-  $icon.appendChild(srspan)
-  return $icon
 }
 
 function handleYoutubeLink($link) {
@@ -81,36 +60,39 @@ function handleYoutubeLink($link) {
     const $after = document.createElement('a')
     $after.setAttribute('href', href)
     $after.setAttribute('class', 'youtubed')
-    $after.innerHTML = `
-      <img src="/images/play_overlay.png"
-        class="media_comment_thumbnail"
-        style="background-image: url(//img.youtube.com/vi/${htmlEscape(id)}/2.jpg)"
-        alt="${htmlEscape(getData($link, 'preview-alt') || '')}"
-      />
-    `
+
+    const img = document.createElement('img')
+    img.src = '/images/play_overlay.png'
+    img.className = 'media_comment_thumbnail'
+    img.alt = getData($link, 'preview-alt') || ''
+    img.style.backgroundImage = `url(//img.youtube.com/vi/${id}/2.jpg)`
+    $after.appendChild(img)
+
     $after.addEventListener('click', function (event) {
       event.preventDefault()
       const $this = event.currentTarget
       const $video = document.createElement('span')
       $video.setAttribute('class', 'youtube_holder')
       $video.style.display = 'block'
-      $video.innerHTML = `
-        <iframe
-          src='//www.youtube.com/embed/${htmlEscape(id)}?autoplay=1&rel=0&hl=en_US&fs=1'
-          frameborder='0'
-          width='425'
-          height='344'
-          allowfullscreen
-        ></iframe>
-        <br/>
-        <a
-          href='#'
-          style='font-size: 0.8em;'
-          class='hide_youtube_embed_link'
-        >
-          ${htmlEscape(formatMessage('Minimize Video'))}
-        </a>
-      `
+
+      const iframe = document.createElement('iframe')
+      iframe.src = `//www.youtube.com/embed/${id}?autoplay=1&rel=0&hl=en_US&fs=1`
+      iframe.setAttribute('frameborder', '0')
+      iframe.setAttribute('width', '425')
+      iframe.setAttribute('height', '344')
+      iframe.setAttribute('allowfullscreen', '')
+      $video.appendChild(iframe)
+
+      const br = document.createElement('br')
+      $video.appendChild(br)
+
+      const link = document.createElement('a')
+      link.href = '#'
+      link.setAttribute('style', 'font-size: 0.8em;')
+      link.setAttribute('class', 'hide_youtube_embed_link')
+      link.textContent = formatMessage('Minimize Video')
+      $video.appendChild(link)
+
       $video.querySelectorAll('.hide_youtube_embed_link').forEach($elem => {
         $elem.addEventListener('click', function (event2) {
           event2.preventDefault()
@@ -147,6 +129,18 @@ export function enhanceUserContent(container = document, opts = {}) {
     kalturaSettings,
     disableGooglePreviews,
     canvasLinksTarget,
+
+    /**
+     * For MathML configuration
+     */
+    new_math_equation_handling,
+    explicit_latex_typesetting,
+    locale,
+
+    /**
+     * When used inside of an LTI tool, this contains the canvas global id of the tool.
+     */
+    containingCanvasLtiToolId,
   } = opts
 
   const content =
@@ -156,11 +150,16 @@ export function enhanceUserContent(container = document, opts = {}) {
 
   const showFilePreviewEx = event => showFilePreview(event, {canvasOrigin, disableGooglePreviews})
 
-  content
-    .querySelectorAll('.user_content:not(.enhanced)')
-    .forEach(elem => elem.classList.add('unenhanced'))
+  content.querySelectorAll('.user_content:not(.enhanced)').forEach(elem => {
+    elem.classList.add('unenhanced')
+    explicit_latex_typesetting && elem.classList.add(MathJaxDirective.Process)
+  })
+
+  const mathml = new Mathml({new_math_equation_handling, explicit_latex_typesetting}, {locale})
 
   content.querySelectorAll('.unenhanced').forEach(unenhanced_elem => {
+    explicit_latex_typesetting && mathml.processNewMathInElem(unenhanced_elem)
+
     unenhanced_elem.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src')
 
@@ -206,6 +205,26 @@ export function enhanceUserContent(container = document, opts = {}) {
         }
       })
     }
+
+    // add parent_frame_context to canvas iframes to allow them loading inside another LTI tool
+    if (containingCanvasLtiToolId != null) {
+      unenhanced_elem.querySelectorAll('iframe[src]').forEach(iframeElem => {
+        const src = iframeElem.getAttribute('src')
+
+        if (src.startsWith(canvasOrigin)) {
+          iframeElem.setAttribute('src', addParentFrameContextToUrl(src, containingCanvasLtiToolId))
+        }
+      })
+    }
+
+    // tell LTI tools that they are launching from within the active RCE
+    unenhanced_elem.querySelectorAll('iframe[src]').forEach(iframeElem => {
+      const src = iframeElem.getAttribute('src')
+
+      if (src.startsWith(canvasOrigin)) {
+        iframeElem.setAttribute('src', src.replace('display=in_rce', 'display=borderless'))
+      }
+    })
 
     unenhanced_elem.querySelectorAll('a:not(.not_external, .external)').forEach(childLink => {
       if (!isExternalLink(childLink, canvasOrigin)) return
@@ -358,40 +377,4 @@ export function enhanceUserContent(container = document, opts = {}) {
       const src = frame.src
       frame.src = src
     })
-}
-
-export function makeAllExternalLinksExternalLinks() {
-  // in 100ms (to give time for everything else to load), find all the external links and add give them
-  // the external link look and behavior (force them to open in a new tab)
-  setTimeout(function () {
-    const content = document.getElementById('content')
-    if (!content) return
-    const tld = getTld(window.location.hostname)
-    const links = content.querySelectorAll(`a[href*="//"]:not([href*="${tld}"])`) // technique for finding "external" links copied from https://davidwalsh.name/external-links-css
-    for (let i = 0; i < links.length; i++) {
-      const $link = links[i]
-      // don't mess with the ones that were already processed in enhanceUserContent
-      if ($link.classList.contains('external')) continue
-      if ($link.matches('.open_in_a_new_tab')) continue
-      if ($link.querySelectorAll('img').length > 0) continue
-      if ($link.matches('.not_external')) continue
-      if ($link.matches('.exclude_external_icon')) continue
-      // we have some pre-instui buttons that are styled links
-      if ($link.classList.contains('btn')) continue
-      const $linkToReplace = $link
-      if ($linkToReplace) {
-        const $linkIndicator = makeExternalLinkIcon()
-        $linkToReplace.classList.add('external')
-        $linkToReplace.querySelectorAll('span.ui-icon-extlink').forEach(c => c.remove)
-        $linkToReplace.setAttribute('target', '_blank')
-        $linkToReplace.setAttribute('rel', 'noreferrer noopener')
-        const $linkSpan = document.createElement('span')
-        const $linkText = $linkToReplace.innerHTML
-        $linkSpan.innerHTML = $linkText
-        while ($linkToReplace.firstChild) $linkToReplace.removeChild($linkToReplace.firstChild)
-        $linkToReplace.appendChild($linkSpan)
-        $linkToReplace.appendChild($linkIndicator)
-      }
-    }
-  }, 100)
 }

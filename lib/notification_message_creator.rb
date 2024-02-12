@@ -28,6 +28,8 @@
 class NotificationMessageCreator
   include LocaleSelection
 
+  PENDING_DUPLICATE_MESSAGE_WINDOW = 6.hours
+
   attr_accessor :notification, :asset, :to_user_channels, :message_data
   attr_reader :courses, :account
 
@@ -45,7 +47,7 @@ class NotificationMessageCreator
     root_account_id = @message_data&.dig(:root_account_id)
     if course_ids.any? && root_account_id
       @account = Account.find_cached(root_account_id)
-      @courses = course_ids.map { |id| Course.new(id: id, root_account_id: @account&.id) }
+      @courses = course_ids.map { |id| Course.new(id:, root_account_id: @account&.id) }
     end
   end
 
@@ -68,7 +70,7 @@ class NotificationMessageCreator
       # date is different for a specific user when using variable due dates.
       next unless (asset = asset_applied_to(user))
 
-      user_locale = infer_locale(user: user, context: user_asset_context(asset), ignore_browser_locale: true)
+      user_locale = infer_locale(user:, context: user_asset_context(asset), ignore_browser_locale: true)
       I18n.with_locale(user_locale) do
         # the channels in this method are all the users active channels or the
         # channels that were provided in the to_list.
@@ -191,7 +193,7 @@ class NotificationMessageCreator
   def dispatch_immediate_messages(messages)
     Message.transaction do
       # Cancel any that haven't been sent out for the same purpose
-      cancel_pending_duplicate_messages if Rails.env.production?
+      cancel_pending_duplicate_messages if Rails.env.production? || ENV["RAILS_LOAD_CANCEL_PENDING_DUPLICATE_MESSAGES"]
       messages.each do |message|
         message.stage_without_dispatch!
         message.save!
@@ -322,7 +324,7 @@ class NotificationMessageCreator
       subject: @notification.subject,
       notification: @notification,
       notification_name: @notification.name,
-      user: user,
+      user:,
       context: user_asset,
     }
 
@@ -354,38 +356,43 @@ class NotificationMessageCreator
   end
 
   def cancel_pending_duplicate_messages
-    first_start_time = start_time = Setting.get("pending_duplicate_message_window_hours", "6").to_i.hours.ago
+    first_start_time = start_time = PENDING_DUPLICATE_MESSAGE_WINDOW.ago
     final_end_time = Time.now.utc
     first_partition = Message.infer_partition_table_name("created_at" => first_start_time)
 
-    loop do
-      end_time = start_time + 7.days
-      end_time = final_end_time if end_time > final_end_time
-      scope = Message
-              .in_partition("created_at" => start_time)
-              .where(notification_id: @notification)
-              .for(@asset)
-              .by_name(@notification.name)
-              .for_user(@to_user_channels.keys)
-              .cancellable
-      start_partition = Message.infer_partition_table_name("created_at" => start_time)
-      end_partition = Message.infer_partition_table_name("created_at" => end_time)
-      if first_partition == start_partition &&
-         start_partition == end_partition
-        scope = scope.where(created_at: start_time..end_time)
-        break_this_loop = true
-      elsif start_time == first_start_time
-        scope = scope.where("created_at>=?", start_time)
-      elsif start_partition == end_partition
-        scope = scope.where("created_at<=?", end_time)
-        break_this_loop = true
-        # else <no conditions; we're addressing the entire partition>
+    @to_user_channels.each_key do |user|
+      # a user's messages exist on the user's shard
+      user.shard.activate do
+        loop do
+          end_time = start_time + 7.days
+          end_time = final_end_time if end_time > final_end_time
+          scope = Message
+                  .in_partition("created_at" => start_time)
+                  .where(notification_id: @notification)
+                  .for(@asset)
+                  .by_name(@notification.name)
+                  .for_user(@to_user_channels.keys)
+                  .cancellable
+          start_partition = Message.infer_partition_table_name("created_at" => start_time)
+          end_partition = Message.infer_partition_table_name("created_at" => end_time)
+          if first_partition == start_partition &&
+             start_partition == end_partition
+            scope = scope.where(created_at: start_time..end_time)
+            break_this_loop = true
+          elsif start_time == first_start_time
+            scope = scope.where("created_at>=?", start_time)
+          elsif start_partition == end_partition
+            scope = scope.where("created_at<=?", end_time)
+            break_this_loop = true
+            # else <no conditions; we're addressing the entire partition>
+          end
+          scope.update_all(workflow_state: "cancelled") if Message.connection.table_exists?(start_partition)
+
+          break if break_this_loop
+
+          start_time = end_time
+        end
       end
-      scope.update_all(workflow_state: "cancelled") if Message.connection.table_exists?(start_partition)
-
-      break if break_this_loop
-
-      start_time = end_time
     end
   end
 

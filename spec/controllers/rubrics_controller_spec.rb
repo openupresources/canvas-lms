@@ -19,6 +19,10 @@
 #
 
 describe RubricsController do
+  before do
+    Account.site_admin.disable_feature!(:enhanced_rubrics)
+  end
+
   describe "GET 'index'" do
     it "requires authorization" do
       course_with_teacher(active_all: true)
@@ -32,6 +36,7 @@ describe RubricsController do
       it "is assigned with a course" do
         get "index", params: { course_id: @course.id }
         expect(response).to be_successful
+        expect(response).to render_template("rubrics/index")
       end
 
       it "is assigned with a user" do
@@ -41,17 +46,17 @@ describe RubricsController do
 
       it "includes managed_outcomes permission" do
         get "index", params: { course_id: @course.id }
-        expect(assigns[:js_env][:PERMISSIONS][:manage_outcomes]).to eq true
+        expect(assigns[:js_env][:PERMISSIONS][:manage_outcomes]).to be true
       end
 
       it "includes manage_rubrics permission" do
         get "index", params: { course_id: @course.id }
-        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to eq true
+        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be true
       end
 
       it "returns non_scoring_rubrics if enabled" do
         get "index", params: { course_id: @course.id }
-        expect(assigns[:js_env][:NON_SCORING_RUBRICS]).to eq true
+        expect(assigns[:js_env][:NON_SCORING_RUBRICS]).to be true
       end
     end
 
@@ -63,12 +68,38 @@ describe RubricsController do
 
       it "can access rubrics" do
         get "index", params: { course_id: @course.id }
+
         expect(response).to be_successful
       end
 
       it "does not allow the teacher to manage_rubrics" do
         get "index", params: { course_id: @course.id }
-        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to eq false
+        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be false
+      end
+
+      it "sets correct permissions with enhanced_rubrics enabled" do
+        Account.site_admin.enable_feature!(:enhanced_rubrics)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be false
+      end
+    end
+
+    describe "with enhanced_rubrics enabled" do
+      before do
+        Account.site_admin.enable_feature!(:enhanced_rubrics)
+        course_with_teacher_logged_in(active_all: true)
+      end
+
+      it "can access rubrics" do
+        get "index", params: { course_id: @course.id }
+
+        expect(response).to render_template("layouts/application")
+      end
+
+      it "can access rubrics for /create route" do
+        get "index", params: { course_id: "create" }
+
+        expect(response).to render_template("layouts/application")
       end
     end
   end
@@ -99,7 +130,7 @@ describe RubricsController do
                                                      association_id: association.id } }
       expect(assigns[:rubric]).not_to be_nil
       expect(assigns[:rubric]).not_to be_new_record
-      expect(assigns[:rubric].rubric_associations.length).to eql(1)
+      expect(assigns[:rubric].rubric_associations.length).to be(1)
       expect(response).to be_successful
     end
 
@@ -114,7 +145,7 @@ describe RubricsController do
                                                      association_id: association.id } }
       expect(assigns[:rubric]).not_to be_nil
       expect(assigns[:rubric]).not_to be_new_record
-      expect(assigns[:rubric].rubric_associations.length).to eql(1)
+      expect(assigns[:rubric].rubric_associations.length).to be(1)
       expect(response).to be_successful
     end
 
@@ -183,6 +214,59 @@ describe RubricsController do
       expect(assignment.reload.learning_outcome_alignments.count).to eq 1
       expect(Rubric.last.learning_outcome_alignments.count).to eq 1
     end
+
+    it "generates criterion record if enhanced_rubrics is turned on" do
+      Account.site_admin.enable_feature!(:enhanced_rubrics)
+      course_with_teacher_logged_in(active_all: true)
+      assignment = @course.assignments.create!(assignment_valid_attributes)
+      create_params = {
+        "course_id" => @course.id,
+        "points_possible" => "5",
+        "rubric" => {
+          "criteria" => {
+            "0" => {
+              "description" => "hi",
+              "long_description" => "even longer version of hi",
+              "mastery_points" => "3",
+              "points" => "5",
+              "ratings" => {
+                "0" => {
+                  "description" => "Exceeds Expectations",
+                  "id" => "blank",
+                  "points" => "5"
+                },
+                "1" => {
+                  "description" => "Meets Expectations",
+                  "id" => "blank",
+                  "points" => "3"
+                },
+                "2" => {
+                  "description" => "Does Not Meet Expectations",
+                  "id" => "blank_2",
+                  "points" => "0"
+                }
+              }
+            }
+          },
+          "free_form_criterion_comments" => "0",
+          "points_possible" => "5",
+          "title" => "Some Rubric"
+        },
+        "rubric_association" => {
+          "association_id" => assignment.id,
+          "association_type" => "Assignment",
+          "hide_score_total" => "0",
+          "id" => "",
+          "purpose" => "grading",
+          "use_for_grading" => "1"
+        },
+        "rubric_association_id" => "",
+        "rubric_id" => "new",
+        "skip_updating_points_possible" => "false",
+        "title" => "Some Rubric"
+      }
+      expect { post("create", params: create_params) }.to change { RubricCriterion.count }.by(1)
+    end
   end
 
   describe "POST 'create' for assignment" do
@@ -217,7 +301,7 @@ describe RubricsController do
         expect do
           post("create", params: request_params)
         end.to change {
-          AnonymousOrModerationEvent.where(event_type: "rubric_created", assignment: assignment).count
+          AnonymousOrModerationEvent.where(event_type: "rubric_created", assignment:).count
         }.by(1)
       end
 
@@ -250,7 +334,7 @@ describe RubricsController do
     it "assigns variables" do
       course_with_teacher_logged_in(active_all: true)
       rubric_association_model(user: @user, context: @course)
-      expect(@course.rubrics).to be_include(@rubric)
+      expect(@course.rubrics).to include(@rubric)
       put "update", params: { course_id: @course.id, id: @rubric.id, rubric: {} }
       expect(assigns[:rubric]).to eql(@rubric)
       expect(response).to be_successful
@@ -383,6 +467,97 @@ describe RubricsController do
       expect(response).to be_successful
     end
 
+    it "updates the criteria records if changed and enhanced_rubrics is turned on" do
+      Account.site_admin.enable_feature!(:enhanced_rubrics)
+      course_with_teacher_logged_in(active_all: true)
+      assignment = @course.assignments.create!(assignment_valid_attributes)
+      create_params = {
+        "course_id" => @course.id,
+        "points_possible" => "5",
+        "rubric" => {
+          "criteria" => {
+            "0" => {
+              "description" => "hi",
+              "long_description" => "even longer version of hi",
+              "mastery_points" => "3",
+              "points" => "5",
+              "ratings" => {
+                "0" => {
+                  "description" => "Exceeds Expectations",
+                  "id" => "blank",
+                  "points" => "5"
+                },
+                "1" => {
+                  "description" => "Meets Expectations",
+                  "id" => "blank",
+                  "points" => "3"
+                },
+                "2" => {
+                  "description" => "Does Not Meet Expectations",
+                  "id" => "blank_2",
+                  "points" => "0"
+                }
+              }
+            },
+            "1" => {
+              "description" => "another one",
+              "long_description" => "the second criterion on the rubric",
+              "mastery_points" => "3",
+              "points" => "5",
+              "ratings" => {
+                "0" => {
+                  "description" => "Exceeds Expectations",
+                  "id" => "blank",
+                  "points" => "5"
+                },
+                "1" => {
+                  "description" => "Meets Expectations",
+                  "id" => "blank",
+                  "points" => "3"
+                },
+                "2" => {
+                  "description" => "Does Not Meet Expectations",
+                  "id" => "blank_2",
+                  "points" => "0"
+                }
+              }
+            }
+          },
+          "free_form_criterion_comments" => "0",
+          "points_possible" => "5",
+          "title" => "Some Rubric"
+        },
+        "rubric_association" => {
+          "association_id" => assignment.id,
+          "association_type" => "Assignment",
+          "hide_score_total" => "0",
+          "id" => "",
+          "purpose" => "grading",
+          "use_for_grading" => "1"
+        },
+        "rubric_association_id" => "",
+        "rubric_id" => "new",
+        "skip_updating_points_possible" => "false",
+        "title" => "Some Rubric"
+      }
+      post("create", params: create_params)
+      @rubric = Rubric.last
+      new_params = {
+        title: "new title",
+        criteria: {
+          "0" => {
+            description: "updated description",
+            long_description: "even longer description",
+            points: "5",
+          }
+        }
+      }
+      expect do
+        put "update", params: { course_id: @course.id, id: @rubric.id, rubric: new_params }
+      end.to change { @rubric.reload.rubric_criteria.count }.from(2).to(1)
+      expect(@rubric.reload.rubric_criteria.first.description).to eq "updated description"
+    end
+
     it "updates the newly-created rubric if updateable, even if the old id is specified" do
       course_with_teacher_logged_in(active_all: true)
       rubric_association_model(user: @user, context: @course)
@@ -430,9 +605,9 @@ describe RubricsController do
       }
       put "update", params: update_params
       @rubric_association.reload
-      expect(@rubric_association.hide_points).to eq true
-      expect(@rubric_association.hide_score_total).to eq false
-      expect(@rubric_association.hide_outcome_results).to eq true
+      expect(@rubric_association.hide_points).to be true
+      expect(@rubric_association.hide_score_total).to be false
+      expect(@rubric_association.hide_outcome_results).to be true
     end
 
     it "adds an outcome association if one is linked" do
@@ -742,7 +917,7 @@ describe RubricsController do
       association.destroy
       delete "destroy", params: { course_id: @course.id, id: @rubric.id }
 
-      expect(response.status).to eq 500
+      expect(response).to have_http_status :internal_server_error
     end
 
     it "deletes the rubric if the rubric is only associated with a course" do
@@ -800,14 +975,14 @@ describe RubricsController do
         expect do
           delete("destroy", params: { course_id: course.id, id: rubric.id })
         end.to change {
-          AnonymousOrModerationEvent.where(event_type: "rubric_deleted", assignment: assignment, user: teacher).count
+          AnonymousOrModerationEvent.where(event_type: "rubric_deleted", assignment:, user: teacher).count
         }.by(1)
       end
 
       it "includes the removed rubric in the event payload" do
         delete("destroy", params: { course_id: course.id, id: rubric.id })
 
-        event = AnonymousOrModerationEvent.find_by(event_type: "rubric_deleted", assignment: assignment, user: teacher)
+        event = AnonymousOrModerationEvent.find_by(event_type: "rubric_deleted", assignment:, user: teacher)
         expect(event.payload["id"]).to eq rubric.id
       end
     end
@@ -831,7 +1006,7 @@ describe RubricsController do
     it "returns 404 if rubric is deleted" do
       rubric = Rubric.create!(user: @teacher, context: Account.default)
       RubricAssociation.create!(
-        rubric: rubric,
+        rubric:,
         context: @course,
         purpose: :bookmark,
         association_object: @course
@@ -845,18 +1020,21 @@ describe RubricsController do
     describe "with a valid rubric" do
       before do
         @r = Rubric.create! user: @teacher, context: Account.default
-        RubricAssociation.create! rubric: @r, context: @course,
-                                  purpose: :bookmark, association_object: @course
+        RubricAssociation.create! rubric: @r,
+                                  context: @course,
+                                  purpose: :bookmark,
+                                  association_object: @course
       end
 
       it "works" do
         get "show", params: { id: @r.id, course_id: @course.id }
         expect(response).to be_successful
+        expect(response).to render_template("rubrics/show")
       end
 
       it "allows the teacher to manage_rubrics" do
         get "show", params: { id: @r.id, course_id: @course.id }
-        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to eq true
+        expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be true
       end
 
       describe "after a course has concluded" do
@@ -869,8 +1047,27 @@ describe RubricsController do
 
         it "does not allow the teacher to manage_rubrics" do
           get "show", params: { id: @r.id, course_id: @course.id }
-          expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to eq false
+          expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be false
         end
+
+        it "sets correct permissions with enhanced_rubrics enabled" do
+          Account.site_admin.enable_feature!(:enhanced_rubrics)
+          get "show", params: { id: @r.id, course_id: @course.id }
+          expect(assigns[:js_env][:PERMISSIONS][:manage_rubrics]).to be false
+        end
+      end
+    end
+
+    describe "with enhanced_rubrics enabled" do
+      before do
+        Account.site_admin.enable_feature!(:enhanced_rubrics)
+        course_with_teacher_logged_in(active_all: true)
+      end
+
+      it "can access rubrics" do
+        get "index", params: { course_id: @course.id }
+
+        expect(response).to render_template("layouts/application")
       end
     end
   end

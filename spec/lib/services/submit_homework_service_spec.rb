@@ -25,12 +25,12 @@ module Services
 
     let(:submission) { submission_model }
     let(:assignment) { submission.assignment }
-    let(:progress) { Progress.create!(context: assignment, user: user, tag: "test") }
+    let(:progress) { Progress.create!(context: assignment, user:, tag: "test") }
     let(:user) { user_factory }
     let(:attachment) do
       attachment_model(
         context: assignment,
-        user: user,
+        user:,
         filename: "Some File"
       )
     end
@@ -40,9 +40,9 @@ module Services
         from_name: "notifications@instructure.com",
         subject: "Submission upload failed: #{assignment.name}",
         to: user.email,
-        body: "Your file, #{attachment.display_name}, failed to upload to your "\
-              "Canvas assignment, #{assignment.name}. Please re-submit to "\
-              "the assignment or contact your instructor if you are no "\
+        body: "Your file, #{attachment.display_name}, failed to upload to your " \
+              "Canvas assignment, #{assignment.name}. Please re-submit to " \
+              "the assignment or contact your instructor if you are no " \
               "longer able to do so."
       )
     end
@@ -81,8 +81,7 @@ module Services
       end
 
       before do
-        allow(worker).to receive(:homework_service).and_return(service)
-        allow(worker).to receive(:attachment).and_return(attachment)
+        allow(worker).to receive_messages(homework_service: service, attachment:)
       end
 
       it "clones and submit the url when submit_assignment is true" do
@@ -95,8 +94,7 @@ module Services
 
       it "clones and not submit the url when submit_assignment is false" do
         worker = described_class.submit_job(attachment, progress, eula_agreement_timestamp, comment, executor, false)
-        allow(worker).to receive(:homework_service).and_return(service)
-        allow(worker).to receive(:attachment).and_return(attachment)
+        allow(worker).to receive_messages(homework_service: service, attachment:)
         expect(attachment).to receive(:clone_url).with(url, dup_handling, check_quota, opts)
         expect(service).not_to receive(:submit)
         worker.perform
@@ -114,7 +112,7 @@ module Services
         end
 
         it "creates an AttachmentUploadStatus" do
-          failure = AttachmentUploadStatus.find_by(attachment: attachment)
+          failure = AttachmentUploadStatus.find_by(attachment:)
           expect(failure.error).to eq "error"
           expect(AttachmentUploadStatus.upload_status(attachment)).to eq "failed"
         end

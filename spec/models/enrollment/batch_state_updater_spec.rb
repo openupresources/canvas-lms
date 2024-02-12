@@ -59,9 +59,9 @@ describe "Enrollment::BatchStateUpdater" do
       StudentEnrollment.create!(user: user3, course: @course, course_section: @course.course_sections.create(name: "s"))
 
       group = group_model(context: @course)
-      gm1 = GroupMembership.create(group: group, user: @user, workflow_state: "accepted")
-      gm2 = GroupMembership.create(group: group, user: @user2, workflow_state: "accepted")
-      gm3 = GroupMembership.create(group: group, user: user3, workflow_state: "accepted")
+      gm1 = GroupMembership.create(group:, user: @user, workflow_state: "accepted")
+      gm2 = GroupMembership.create(group:, user: @user2, workflow_state: "accepted")
+      gm3 = GroupMembership.create(group:, user: user3, workflow_state: "accepted")
       Enrollment::BatchStateUpdater.remove_group_memberships([@enrollment.id, enrollment3.id], [@course], [user3.id, @user.id])
 
       expect(gm1.reload.workflow_state).to eq "deleted"
@@ -72,13 +72,13 @@ describe "Enrollment::BatchStateUpdater" do
 
     it "removes leader" do
       group = group_model(context: @course)
-      GroupMembership.create(group: group, user: @user, workflow_state: "accepted")
-      GroupMembership.create(group: group, user: @user2, workflow_state: "accepted")
+      GroupMembership.create(group:, user: @user, workflow_state: "accepted")
+      GroupMembership.create(group:, user: @user2, workflow_state: "accepted")
       group.update!(leader_id: @user.id)
 
       Enrollment::BatchStateUpdater.remove_group_memberships([@enrollment.id], [@course], [@user.id])
 
-      expect(group.reload.leader_id).to eq nil
+      expect(group.reload.leader_id).to be_nil
     end
   end
 
@@ -206,6 +206,7 @@ describe "Enrollment::BatchStateUpdater" do
       autosave_associated_records_for_root_account
       autosave_associated_records_for_sis_pseudonym
       autosave_associated_records_for_user
+      autosave_associated_records_for_temporary_enrollment_pairing
       around_save_collection_association
       broadcast_notifications
       cancel_future_appointments
@@ -225,6 +226,7 @@ describe "Enrollment::BatchStateUpdater" do
       update_assignment_overrides_if_needed
       update_linked_enrollments
       update_user_account_associations_if_necessary
+      _notify_live_events_observer_for_after_save
     ]
     expect(Enrollment._save_callbacks.collect(&:filter).select { |k| k.is_a? Symbol } - accounted_for_callbacks).to eq []
   end

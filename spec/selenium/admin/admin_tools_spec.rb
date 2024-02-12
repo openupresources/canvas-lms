@@ -19,7 +19,6 @@
 
 require_relative "../common"
 require_relative "../helpers/calendar2_common"
-require_relative "../../cassandra_spec_helper"
 
 describe "admin_tools" do
   include_context "in-process server selenium tests"
@@ -72,7 +71,7 @@ describe "admin_tools" do
 
   def change_log_type(log_type)
     wait_for_ajaximations
-    click_option("#loggingType", "\#logging#{log_type}", :value)
+    click_option("#loggingType", "#logging#{log_type}", :value)
     wait_for_ajaximations
   end
 
@@ -173,6 +172,38 @@ describe "admin_tools" do
           expect(f("#commMessagesSearchOverview").text).to include("Notifications sent to #{@student.name} from Mar 3, 2001 at 1:05pm to Mar 9, 2001 at 3pm.")
         end
 
+        it "filters with spanish" do
+          # Setup with spanish locale
+          skip("RAILS_LOAD_ALL_LOCALES=true") unless ENV["RAILS_LOAD_ALL_LOCALES"]
+          @user.locale = "es-ES"
+          @user.save!
+
+          @account.default_locale = "es-ES"
+          @account.save!
+
+          Timecop.travel(Time.new(2010, 1, 3, 14, 35, 0)) do
+            Messages::Partitioner.process
+            message_model(user_id: @student.id, body: "foo bar", root_account_id: @account.id)
+          end
+
+          load_admin_tools_page
+          click_view_notifications_tab
+
+          # Search should find message, ene == Enero == January
+          perform_user_search("#commMessagesSearchForm", @student.id)
+          replace_and_proceed(f(".userDateRangeSearchModal .dateEndSearchField"), "4 ene 2010")
+          f(".userDateRangeSearchModal .userDateRangeSearchBtn").click
+          wait_for_ajaximations
+          expect(f("#commMessagesSearchResults .message-body").text).to include("foo bar")
+
+          # Search should not message
+          perform_user_search("#commMessagesSearchForm", "")
+          replace_and_proceed(f(".userDateRangeSearchModal .dateEndSearchField"), "2 ene 2010")
+          f(".userDateRangeSearchModal .userDateRangeSearchBtn").click
+          wait_for_ajaximations
+          expect(f("#commMessagesSearchResults .alert").text).to include("No messages found")
+        end
+
         it "displays an error when given invalid input data" do
           load_admin_tools_page
           click_view_notifications_tab
@@ -208,8 +239,6 @@ describe "admin_tools" do
   end
 
   context "Logging" do
-    include_examples "cassandra audit logs"
-
     it "changes log types with dropdown" do
       load_admin_tools_page
       click_view_tab "logging"
@@ -241,7 +270,7 @@ describe "admin_tools" do
         expect(select).not_to be_nil
         expect(select).to be_displayed
 
-        options = ffj("#loggingType > option").map(&:text).map(&:strip)
+        options = ffj("#loggingType > option").map { |e| e.text.strip }
         expect(options).to include("Select a Log type")
         expect(options).to include("Login / Logout Activity")
         expect(options).to include("Grade Change Activity")
@@ -296,13 +325,27 @@ describe "admin_tools" do
           options.map!(&:text)
           expect(options).not_to include("Course Activity")
         end
+
+        it "does not include course change activity option for sub-account admins" do
+          sub_account = @account.sub_accounts.create!(name: "sub-account")
+          sub_admin = account_admin_user(account: sub_account)
+          user_with_pseudonym(user: sub_admin, account: sub_account)
+          user_session(sub_admin)
+
+          get "/accounts/#{sub_account.id}/admin_tools"
+          wait_for_ajaximations
+
+          click_view_tab "logging"
+
+          options = ff("#loggingType > option")
+          options.map!(&:text)
+          expect(options).not_to include("Course Activity")
+        end
       end
     end
   end
 
   context "Authentication Logging" do
-    include_examples "cassandra audit logs"
-
     before do
       Timecop.freeze(8.seconds.ago) do
         Auditors::Authentication.record(@student.pseudonyms.first, "login")
@@ -332,8 +375,6 @@ describe "admin_tools" do
   end
 
   context "Grade Change Logging" do
-    include_examples "cassandra audit logs"
-
     before do
       Timecop.freeze(8.seconds.ago) do
         course_with_teacher(course: @course, user: user_with_pseudonym(name: "Teacher TestUser"))
@@ -413,8 +454,6 @@ describe "admin_tools" do
   end
 
   context "Course Logging" do
-    it_behaves_like "cassandra audit logs"
-
     before do
       course_with_teacher(course: @course, user: user_with_pseudonym(name: "Teacher TestUser"))
 
@@ -517,7 +556,7 @@ describe "admin_tools" do
       @course.name = "Course Updated"
 
       sis_batch = @account.root_account.sis_batches.create
-      @event = Auditors::Course.record_updated(@course, @teacher, @course.changes, source: :sis, sis_batch: sis_batch)
+      @event = Auditors::Course.record_updated(@course, @teacher, @course.changes, source: :sis, sis_batch:)
 
       show_event_details("Updated", old_name)
       items = ffj(".ui-dialog dl > dd")
@@ -612,6 +651,7 @@ describe "admin_tools" do
     end
 
     it "performs searches" do
+      skip "FOO-4092"
       @account.settings[:admins_can_view_notifications] = true
       @account.save!
       load_admin_tools_page
@@ -621,7 +661,7 @@ describe "admin_tools" do
       replace_content fj('label:contains("Last bounced before") input'), 3.days.ago.iso8601
       fj('button:contains("Search")').click
       wait_for_ajaximations
-      data = ff("#bouncedEmailsPane table td").map(&:text)
+      data = f("#bouncedEmailsPane").text
       expect(data).not_to include "one@example.com"
       expect(data).to include "two@example.com"
       expect(data).not_to include "three@example.com"

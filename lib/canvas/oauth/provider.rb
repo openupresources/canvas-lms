@@ -23,11 +23,15 @@ module Canvas::OAuth
 
     attr_reader :client_id, :scopes, :purpose
 
-    def initialize(client_id, redirect_uri = "", scopes = [], purpose = nil)
+    def initialize(client_id, redirect_uri = "", scopes = [], purpose = nil, key: nil)
       @client_id = client_id
       @redirect_uri = redirect_uri
       @scopes = scopes
       @purpose = purpose
+
+      # Some grant types have already loaded the developer key. If that's the case allow
+      # passing the key into this provider rather than re-querying for it.
+      @key = key if key&.global_id&.to_s == client_id.to_s
     end
 
     def has_valid_key?
@@ -69,7 +73,7 @@ module Canvas::OAuth
     # user
     def authorized_token?(user, real_user: nil)
       unless self.class.is_oob?(redirect_uri)
-        return true if Token.find_reusable_access_token(user, key, scopes, purpose, real_user: real_user)
+        return true if Token.find_reusable_access_token(user, key, scopes, purpose, real_user:)
         return true if key.trusted?
       end
 
@@ -96,7 +100,7 @@ module Canvas::OAuth
     end
 
     def session_hash
-      { client_id: key.id, redirect_uri: redirect_uri, scopes: scopes, purpose: purpose }
+      { client_id: key.id, redirect_uri:, scopes:, purpose: }
     end
 
     def valid_scopes?
@@ -113,7 +117,7 @@ module Canvas::OAuth
 
     def self.confirmation_redirect(controller, provider, current_user, real_user = nil)
       # skip the confirmation page if access is already (or automatically) granted
-      if provider.authorized_token?(current_user, real_user: real_user)
+      if provider.authorized_token?(current_user, real_user:)
         final_redirect(controller, final_redirect_params(controller.session[:oauth2], current_user, real_user))
       else
         controller.oauth2_auth_confirm_url
@@ -123,7 +127,7 @@ module Canvas::OAuth
     def self.final_redirect_params(oauth_session, current_user, real_user = nil, options = {})
       options = { scopes: oauth_session&.dig(:scopes), remember_access: options&.dig(:remember_access), purpose: oauth_session&.dig(:purpose) }
       code = Canvas::OAuth::Token.generate_code_for(current_user.global_id, real_user&.global_id, oauth_session[:client_id], options)
-      redirect_params = { code: code }
+      redirect_params = { code: }
       redirect_params[:state] = oauth_session[:state] if oauth_session[:state]
       redirect_params
     end

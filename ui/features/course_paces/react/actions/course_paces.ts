@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -20,6 +21,7 @@ import {Action} from 'redux'
 import {ThunkAction} from 'redux-thunk'
 import {showFlashAlert, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import {captureException} from '@sentry/browser'
 
 import {
   CoursePaceItemDueDates,
@@ -212,6 +214,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('resetToLastPublished', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },
@@ -246,6 +249,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('loading', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },
@@ -269,6 +273,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('relinkToParent', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },

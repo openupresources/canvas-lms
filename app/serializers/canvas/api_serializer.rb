@@ -77,8 +77,11 @@ module Canvas
     alias_method :user, :scope
     alias_method :current_user, :user
 
-    def_delegators :@controller, :polymorphic_url,
-                   :accepts_jsonapi?, :session, :context
+    def_delegators :@controller,
+                   :polymorphic_url,
+                   :accepts_jsonapi?,
+                   :session,
+                   :context
 
     # See ActiveModel::Serializer's documentation for options.
     #
@@ -108,11 +111,9 @@ module Canvas
       @controller.send(:stringify_json_ids?)
     end
 
-    # Overriding to allow for "links" hash.
+    # Overriding to build the "links" hash how we want.
     # You should probably NOT override this method in your own serializer.
-    # This will be going away once ActiveModel::Serializer has support for
-    # the "links" style.
-    def associations
+    def associations(options = {})
       associations = self.class._associations
       included_associations = filter(associations.keys)
       associations.each_with_object({}) do |(name, association), hash|
@@ -121,10 +122,10 @@ module Canvas
             hash["links"] ||= {}
             hash["links"][association.name] = serialize_ids association
           elsif association.embed_objects? && association.embed_in_root?
-            hash[association.embedded_key] = build_serializer(association).serializable_object
+            hash[association.embedded_key] = serialize association, options
           elsif association.embed_objects?
             hash["links"] ||= {}
-            hash["links"][association.embedded_key] = serialize association
+            hash["links"][association.embedded_key] = serialize association, options
           end
         end
       end
@@ -164,10 +165,10 @@ module Canvas
     # assocs (AMS defaults to true).
     def build_serializer(association)
       object = send(association.name)
-      options = { controller: @controller, scope: scope }
+      options = { controller: @controller, scope: }
       association.build_serializer(object, options).tap do |serializer|
         if association.options.key?(:wrap_in_array)
-          serializer.instance_variable_set("@wrap_in_array",
+          serializer.instance_variable_set(:@wrap_in_array,
                                            association.options[:wrap_in_array])
         end
       end
@@ -239,9 +240,9 @@ module Canvas
                                   else
                                     instance.empty?
                                   end
-        send("#{name}_url".to_sym) unless instance_does_not_exist
+        send(:"#{name}_url") unless instance_does_not_exist
       elsif instance.present?
-        send("#{name}_url".to_sym)
+        send(:"#{name}_url")
       end
     end
 

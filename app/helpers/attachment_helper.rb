@@ -54,10 +54,22 @@ module AttachmentHelper
   end
 
   def media_preview_attributes(attachment, attrs = {})
+    attrs[:attachment_id] = attachment.id
+    attrs[:bp_locked_attachment] = attachment_locked? attachment
     attrs[:type] = attachment.content_type&.include?("video") ? "video" : "audio"
     attrs[:download_url] = context_url(attachment.context, :context_file_download_url, attachment.id)
     attrs[:media_entry_id] = attachment.media_entry_id if attachment.media_entry_id
     attrs.inject(+"") { |s, (attr, val)| s << "data-#{attr}=#{val} " }
+  end
+
+  def attachment_locked?(attachment)
+    cct = MasterCourses::ChildContentTag.where(content_type: "Attachment", content_id: attachment.id).first
+    return false unless cct
+
+    mct = MasterCourses::MasterContentTag.where(migration_id: cct.migration_id).first
+    return false unless mct # This *should* never happen, but you never know...
+
+    !!mct.restrictions[:content] || !!mct.restrictions[:all]
   end
 
   def doc_preview_json(attachment, locked_for_user: false)
@@ -88,8 +100,10 @@ module AttachmentHelper
 
     set_cache_header(attachment, direct)
     if safer_domain_available?
-      redirect_to safe_domain_file_url(attachment, host_and_shard: @safer_domain_host,
-                                                   verifier: verifier, download: !inline)
+      redirect_to safe_domain_file_url(attachment,
+                                       host_and_shard: @safer_domain_host,
+                                       verifier:,
+                                       download: !inline)
     elsif attachment.stored_locally?
       @headers = false if @files_domain
       send_file(attachment.full_filename, type: attachment.content_type_with_encoding, disposition: (inline ? "inline" : "attachment"), filename: attachment.display_name)
@@ -97,7 +111,7 @@ module AttachmentHelper
       body = attachment.open.read
       add_csp_for_file if attachment.mime_class == "html"
       send_file_headers!(length: body.length, filename: attachment.filename, disposition: "inline", type: attachment.content_type_with_encoding)
-      render body: body
+      render body:
     elsif must_proxy
       render 400, text: I18n.t("It's not allowed to redirect to HTML files that can't be proxied while Content-Security-Policy is being enforced")
     elsif inline

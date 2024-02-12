@@ -29,7 +29,7 @@ describe QuizzesNext::QuizSerializer do
     original_context.assignments.create(
       title: "some assignment 1",
       assignment_group: group,
-      due_at: Time.zone.now + 1.week,
+      due_at: 1.week.from_now,
       workflow_state: "published"
     )
   end
@@ -43,7 +43,7 @@ describe QuizzesNext::QuizSerializer do
     context.assignments.create(
       title: "some assignment",
       assignment_group: group,
-      due_at: Time.zone.now + 1.week,
+      due_at: 1.week.from_now,
       workflow_state: "published",
       duplicate_of: original_assignment,
       settings: {
@@ -64,26 +64,33 @@ describe QuizzesNext::QuizSerializer do
   end
   let(:quiz_serializer) do
     QuizzesNext::QuizSerializer.new(assignment, {
-                                      controller: controller,
+                                      controller:,
                                       scope: user,
-                                      session: session,
+                                      session:,
                                       root: false
                                     })
   end
 
   before do
-    allow(controller).to receive(:session).and_return session
-    allow(controller).to receive(:context).and_return context
+    allow(controller).to receive_messages(session:, context:)
     allow(assignment).to receive(:grants_right?).at_least(:once).and_return true
     allow(context).to receive(:grants_right?).at_least(:once).and_return true
     allow(context).to receive(:grants_any_right?).at_least(:once).and_return true
   end
 
   %i[
-    id title description due_at lock_at unlock_at
+    id
+    title
+    description
+    due_at
+    lock_at
+    unlock_at
     points_possible
-    assignment_group_id migration_id only_visible_to_overrides
-    post_to_sis allowed_attempts
+    assignment_group_id
+    migration_id
+    only_visible_to_overrides
+    post_to_sis
+    allowed_attempts
     workflow_state
   ].each do |attribute|
     it "serializes #{attribute}" do
@@ -165,7 +172,7 @@ describe QuizzesNext::QuizSerializer do
 
   context "when the assignment is a migrated quiz" do
     let(:quiz) do
-      Quizzes::Quiz.create(title: "Quiz Name", context: context)
+      Quizzes::Quiz.create(title: "Quiz Name", context:)
     end
 
     let(:assignment) do
@@ -173,7 +180,7 @@ describe QuizzesNext::QuizSerializer do
       context.assignments.create(
         title: "some assignment",
         assignment_group: group,
-        due_at: Time.zone.now + 1.week,
+        due_at: 1.week.from_now,
         workflow_state: "published",
         migrate_from_id: quiz.id
       )
@@ -188,13 +195,20 @@ describe QuizzesNext::QuizSerializer do
     it "when enabled, quiz is 'in_paced_course'" do
       context.enable_course_paces = true
       result = quiz_serializer.as_json
-      expect(result[:in_paced_course]).to eq(true)
+      expect(result[:in_paced_course]).to be(true)
+    end
+
+    it "when enabled, but feature is off quiz is not 'in_paced_course'" do
+      context.account.disable_feature!(:course_paces)
+      context.enable_course_paces = true
+      result = quiz_serializer.as_json
+      expect(result[:in_paced_course]).to be(false)
     end
 
     it "when disabled, quiz is not 'in_paced_course'" do
       context.enable_course_paces = false
       result = quiz_serializer.as_json
-      expect(result[:in_paced_course]).to eq(false)
+      expect(result[:in_paced_course]).to be(false)
     end
   end
 

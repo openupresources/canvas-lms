@@ -97,7 +97,7 @@ module DataFixup
 
     # sanity safety check
     KEY_VALUE_PATTERN = '\s*"\d+"\s*:\s*"[0-9a-f-]+"\s*'
-    JSON_LINE_PATTERN = /^\s*{#{KEY_VALUE_PATTERN}(?:,#{KEY_VALUE_PATTERN})*}\s*$/.freeze
+    JSON_LINE_PATTERN = /^\s*{#{KEY_VALUE_PATTERN}(?:,#{KEY_VALUE_PATTERN})*}\s*$/
     def valid_import_json?(line)
       line =~ JSON_LINE_PATTERN
     end
@@ -118,7 +118,7 @@ module DataFixup
     end
 
     def reenqueue_job(queue)
-      self.class.delay(run_at: @next_options[:run_at]).run(queue, @next_options)
+      self.class.delay(run_at: @next_options[:run_at]).run(queue, @next_options) # rubocop:disable Datafixup/StrandDownstreamJobs
     end
   end
 end

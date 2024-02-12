@@ -20,11 +20,13 @@
 require_relative "../common"
 require_relative "../helpers/quizzes_common"
 require_relative "../helpers/assignment_overrides"
+require_relative "../helpers/rubrics_common"
 
 describe "quizzes regressions" do
   include_context "in-process server selenium tests"
   include QuizzesCommon
   include AssignmentOverridesSeleniumHelper
+  include RubricsCommon
 
   before do
     course_with_teacher_logged_in(course_name: "teacher course")
@@ -45,7 +47,7 @@ describe "quizzes regressions" do
   it "marks questions as answered when the window loses focus", priority: "1"
 
   it "quiz show page displays the quiz due date", priority: "1" do
-    due_date = Time.zone.now + 4.days
+    due_date = 4.days.from_now
     create_quiz_with_due_date(due_at: due_date)
     verify_quiz_show_page_due_date(format_date_for_view(due_date))
   end
@@ -75,6 +77,15 @@ describe "quizzes regressions" do
       fj(".icon-plus:visible", dialog).click
 
       expect(f("#criterion_duplicate_menu")).to be_displayed
+    end
+
+    it "can search and select" do
+      outcome_with_rubric
+      @rubric.associate_with(@course, @course, purpose: "grading")
+
+      fj(".find_rubric_link:visible").click
+      fj(".select_rubric_link:visible").click
+      expect(fj(".rubric_title:visible").text).to eq @rubric.title
     end
   end
 end

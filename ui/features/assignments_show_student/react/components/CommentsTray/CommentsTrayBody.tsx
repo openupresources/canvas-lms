@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -36,19 +37,19 @@ import StudentViewContext from '../Context'
 import {SUBMISSION_COMMENT_QUERY} from '@canvas/assignments/graphql/student/Queries'
 import {Submission} from '@canvas/assignments/graphql/student/Submission'
 import {useQuery} from 'react-apollo'
-import {bool} from 'prop-types'
-import PeerReviewPromptModal, {PeerReviewSubheader} from '../PeerReviewPromptModal'
+import {bool, func} from 'prop-types'
+import PeerReviewPromptModal from '../PeerReviewPromptModal'
 import {
   getRedirectUrlToFirstPeerReview,
   assignedAssessmentsCount,
   availableAndUnavailableCounts,
+  getPeerReviewHeaderText,
+  getPeerReviewSubHeaderText,
+  getPeerReviewButtonText,
 } from '../../helpers/PeerReviewHelpers'
 
 const I18n = useI18nScope('assignments_2')
 const COMPLETED_WORKFLOW_STATE = 'completed'
-export const COMPLETED_PEER_REVIEW_TEXT = I18n.t('You have completed your Peer Reviews!')
-
-const {Item: FlexItem} = Flex as any
 
 export default function CommentsTrayBody(props) {
   const [isFetchingMoreComments, setIsFetchingMoreComments] = useState(false)
@@ -57,6 +58,7 @@ export default function CommentsTrayBody(props) {
   const queryVariables = {
     submissionId: props.submission.id,
     submissionAttempt: props.submission.attempt,
+    peerReview: props.isPeerReviewEnabled,
   }
 
   const {loading, error, data, fetchMore} = useQuery(SUBMISSION_COMMENT_QUERY, {
@@ -104,47 +106,6 @@ export default function CommentsTrayBody(props) {
     setPeerReviewModalOpen(true)
   }
 
-  const peerReviewHeaderText = (): string[] => {
-    const headerText =
-      availableCount > 0
-        ? headerTextTemplate(availableCount)
-        : unavailableCount > 0
-        ? headerTextTemplate(unavailableCount)
-        : COMPLETED_PEER_REVIEW_TEXT
-    return [headerText]
-  }
-
-  const headerTextTemplate = (count: number): string => {
-    return I18n.t(
-      {
-        one: 'You have 1 more Peer Review to complete.',
-        other: 'You have %{count} more Peer Reviews to complete.',
-      },
-      {count}
-    )
-  }
-
-  const peerReviewSubHeaderText = (): PeerReviewSubheader[] => {
-    if (!availableCount && unavailableCount) {
-      return [
-        {
-          props: {size: 'medium'},
-          text: I18n.t('The submission is not available just yet.'),
-        },
-        {
-          props: {size: 'medium'},
-          text: I18n.t('Please check back soon.'),
-        },
-      ]
-    }
-
-    return []
-  }
-
-  const peerReviewButtonText = (): string | null => {
-    return availableCount || unavailableCount ? I18n.t('Next Peer Review') : null
-  }
-
   const {allowChangesToSubmission} = useContext(StudentViewContext)
 
   const gradeAsGroup =
@@ -175,7 +136,7 @@ export default function CommentsTrayBody(props) {
       }
     >
       <Flex as="div" direction="column" height="100%" data-testid="comments-container">
-        <FlexItem shouldGrow={true}>
+        <Flex.Item shouldGrow={true}>
           {!props.isPeerReviewEnabled && props.submission.gradeHidden && comments.length === 0 && (
             <SVGWithTextPlaceholder
               text={hiddenCommentsMessage}
@@ -207,38 +168,40 @@ export default function CommentsTrayBody(props) {
             isPeerReviewEnabled={props.isPeerReviewEnabled}
             reviewerSubmission={props.reviewerSubmission}
           />
-        </FlexItem>
+        </Flex.Item>
 
         {allowChangesToSubmission && (
           <Flex as="div" direction="column">
             {gradeAsGroup && (
-              <FlexItem padding="x-small medium">
+              <Flex.Item padding="x-small medium">
                 <Text as="div">{I18n.t('All comments are sent to the whole group.')}</Text>
-              </FlexItem>
+              </Flex.Item>
             )}
 
-            <FlexItem padding="x-small medium">
+            <Flex.Item padding="x-small medium">
               <CommentTextArea
                 assignment={props.assignment}
                 submission={props.submission}
                 reviewerSubmission={props.reviewerSubmission}
+                isPeerReviewEnabled={props.isPeerReviewEnabled}
                 onSendCommentSuccess={() => {
-                  if (props.isPeerReviewEnabled) {
+                  if (props.isPeerReviewEnabled && !props.assignment.rubric) {
                     handlePeerReviewPromptModal()
+                    props.onSuccessfulPeerReview?.(props.reviewerSubmission)
                   }
                 }}
               />
-            </FlexItem>
+            </Flex.Item>
           </Flex>
         )}
 
         <PeerReviewPromptModal
-          headerText={peerReviewHeaderText()}
+          headerText={getPeerReviewHeaderText(availableCount, unavailableCount)}
           headerMargin={
             availableCount === 0 && unavailableCount === 0 ? 'small 0 x-large' : 'small 0 0'
           }
-          subHeaderText={peerReviewSubHeaderText()}
-          peerReviewButtonText={peerReviewButtonText()}
+          subHeaderText={getPeerReviewSubHeaderText(availableCount, unavailableCount)}
+          peerReviewButtonText={getPeerReviewButtonText(availableCount, unavailableCount)}
           peerReviewButtonDisabled={availableCount === 0}
           open={peerReviewModalOpen}
           onClose={() => setPeerReviewModalOpen(false)}
@@ -257,6 +220,7 @@ CommentsTrayBody.propTypes = {
   submission: Submission.shape.isRequired,
   reviewerSubmission: Submission.shape,
   isPeerReviewEnabled: bool,
+  onSuccessfulPeerReview: func,
 }
 
 CommentsTrayBody.defaultProps = {

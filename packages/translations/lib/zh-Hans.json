@@ -1,18 +1,21 @@
 {
-    "a_great_discussion_6526a6d9": {
-        "message": "精彩的讨论"
-    },
-    "a_wonderful_assignment_d3139d9b": {
-        "message": "精彩的作业"
-    },
     "access_the_pretty_html_editor_37168efe": {
         "message": "访问精美 HTML 编辑器"
     },
     "accessibility_checker_b3af1f6c": {
         "message": "辅助功能检查器"
     },
+    "action_to_take_b626a99a": {
+        "message": "要执行的操作："
+    },
     "add_8523c19b": {
         "message": "添加"
+    },
+    "add_a_caption_2a915239": {
+        "message": "添加说明"
+    },
+    "add_alt_text_for_the_image_48cd88aa": {
+        "message": "为图像添加替换文本"
     },
     "add_another_f4e50d57": {
         "message": "新增"
@@ -23,14 +26,14 @@
     "add_image_60b2de07": {
         "message": "添加图像"
     },
-    "add_to_do_7537af64": {
-        "message": "添加待办事项"
+    "add_one_9e34a6f8": {
+        "message": "添加一个!"
     },
-    "add_to_do_7def3c37": {
-        "message": "添加到待办事项"
+    "additional_considerations_f3801683": {
+        "message": "其他考虑事项"
     },
-    "address_3159962f": {
-        "message": "地址："
+    "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
+        "message": "具有相同 URL 的相邻链接应该为一个单链接。"
     },
     "afrikaans_da0fe6ee": {
         "message": "南非语"
@@ -41,6 +44,9 @@
     "aleph_f4ffd155": {
         "message": "Aleph"
     },
+    "align_11050992": {
+        "message": "协调"
+    },
     "alignment_and_lists_5cebcb69": {
         "message": "对齐和列表"
     },
@@ -50,17 +56,14 @@
     "all_apps_a50dea49": {
         "message": "所有应用"
     },
-    "all_day_fb42c4fc": {
-        "message": "全天"
-    },
-    "all_items_loaded_aa256183": {
-        "message": "已加载所有项目"
-    },
     "alpha_15d59033": {
         "message": "Alpha"
     },
     "alphabetical_55b5b4e0": {
         "message": "按字母顺序"
+    },
+    "alt_attribute_text_should_not_contain_more_than_12_e21d4040": {
+        "message": "替换属性文本不得超过 120 个字符。"
     },
     "alt_text_611fb322": {
         "message": "Alt 文本"
@@ -68,14 +71,8 @@
     "amalg_coproduct_c589fb12": {
         "message": "Amalg（余积）"
     },
-    "an_amazing_discussion_assignment_e5c8bd6b": {
-        "message": "精彩的讨论作业"
-    },
     "an_error_occured_reading_the_file_ff48558b": {
         "message": "读取文件时发生错误"
-    },
-    "an_error_occurred_attempting_to_dismiss_the_opport_f86e0667": {
-        "message": "尝试拒绝该机会时出现错误。"
     },
     "an_error_occurred_making_a_network_request_d1bda348": {
         "message": "发出网络请求时出错"
@@ -116,8 +113,8 @@
     "arabic_c5c87acd": {
         "message": "阿拉伯语"
     },
-    "are_you_sure_you_want_to_delete_this_planner_item_b71e330c": {
-        "message": "是否确定要删除此规划者项目？"
+    "are_you_sure_you_want_to_cancel_changes_you_made_m_c5210496": {
+        "message": "确定要取消吗？您做出的变更可能无法保存。"
     },
     "armenian_12da6118": {
         "message": "亚美尼亚语"
@@ -136,36 +133,6 @@
     },
     "assignments_1e02582c": {
         "message": "作业"
-    },
-    "assignmenttype_title_6612d008": {
-        "message": "{ assignmentType } { title }。"
-    },
-    "assignmenttype_title_all_day_on_datetime_9768903c": {
-        "message": "{ assignmentType } { title }，{ datetime }全天。"
-    },
-    "assignmenttype_title_at_datetime_478f0709": {
-        "message": "{ assignmentType } { title }，时间 { datetime }。"
-    },
-    "assignmenttype_title_at_datetime_until_endtime_a5900e38": {
-        "message": "{ assignmentType } { title }，{ datetime }截至{ endTime }"
-    },
-    "assignmenttype_title_due_datetime_a112d8ff": {
-        "message": "{ assignmentType } { title }，截止时间 { datetime }。"
-    },
-    "assignmenttype_title_has_a_to_do_time_at_datetime_e07310e8": {
-        "message": "{ assignmentType } { title }在{ datetime }有待办事项。"
-    },
-    "assignmenttype_title_is_marked_as_done_a8dc46ef": {
-        "message": "{ assignmentType } { title } 已标记为已完成。"
-    },
-    "assignmenttype_title_is_not_marked_as_done_ba80ba66": {
-        "message": "{ assignmentType } { title } 未标记为已完成。"
-    },
-    "assignmenttype_title_posted_datetime_cab69444": {
-        "message": "{ assignmentType } { title }发布了{ datetime }。"
-    },
-    "assignmenttype_title_reminder_datetime_33fa66d5": {
-        "message": "{ assignmentType }{ title }，提醒{ datetime }。"
     },
     "asterisk_82255584": {
         "message": "星号"
@@ -203,17 +170,11 @@
     "because_501841b": {
         "message": "因为"
     },
-    "beginning_of_your_to_do_history_61ef2dce": {
-        "message": "您的待办事项历史记录的开始"
-    },
     "belarusian_b2f19c76": {
         "message": "白俄罗斯语"
     },
     "below_81d4dceb": {
         "message": "下方"
-    },
-    "below_is_an_example_of_how_students_will_see_their_8f7e7971": {
-        "message": "以下示例显示了学生如何查看日程规划"
     },
     "beta_cb5f307e": {
         "message": "Beta"
@@ -248,29 +209,53 @@
     "c_2001_acme_inc_283f7f80": {
         "message": "(c) 2001 Acme Inc."
     },
-    "calendar_a8563bb2": {
-        "message": "日历:"
-    },
-    "calendar_event_89aadc1c": {
-        "message": "日历事件"
-    },
     "cancel_caeb1e68": {
         "message": "取消"
-    },
-    "canvas_planner_98ed106": {
-        "message": "Canvas 计划程序"
     },
     "cap_product_3a5265a6": {
         "message": "卡积"
     },
+    "captions_inherited_from_a_parent_course_cannot_be__9248fa3a": {
+        "message": "无法删除从父课程继承的字幕。"
+    },
     "catalan_16f6b78f": {
         "message": "加泰罗尼亚语"
+    },
+    "center_align_e68d9997": {
+        "message": "居中对齐"
     },
     "centered_dot_64d5e378": {
         "message": "居中点"
     },
     "centered_horizontal_dots_451c5815": {
         "message": "居中横点"
+    },
+    "change_alt_text_92654906": {
+        "message": "更改替换文本"
+    },
+    "change_heading_tag_to_paragraph_a61e3113": {
+        "message": "更改段落的标题标签"
+    },
+    "change_only_this_heading_s_level_903cc956": {
+        "message": "仅更改此标题级别"
+    },
+    "change_text_color_1aecb912": {
+        "message": "更改文本颜色"
+    },
+    "changes_you_made_may_not_be_saved_4e8db973": {
+        "message": "您做出的变更可能无法保存。"
+    },
+    "characters_9d897d1c": {
+        "message": "字符"
+    },
+    "characters_no_spaces_485e5367": {
+        "message": "字符（无空格）"
+    },
+    "check_accessibility_3c78211c": {
+        "message": "检查辅助功能"
+    },
+    "checking_for_accessibility_issues_fac18c6d": {
+        "message": "正在检查辅助功能问题"
     },
     "chi_54a32644": {
         "message": "Chi"
@@ -292,6 +277,9 @@
     },
     "circle_484abe63": {
         "message": "圆圈"
+    },
+    "circle_unordered_list_9e3a0763": {
+        "message": "圆形无序列表"
     },
     "clear_2084585f": {
         "message": "清除"
@@ -323,11 +311,11 @@
     "close_a_menu_or_dialog_also_returns_you_to_the_edi_739079e6": {
         "message": "关闭菜单或对话框。并带您返回至编辑器区域"
     },
+    "close_accessibility_checker_29d1c51e": {
+        "message": "关闭辅助功能检查器"
+    },
     "close_d634289d": {
         "message": "关闭"
-    },
-    "close_opportunity_center_popup_9907d981": {
-        "message": "关闭机会中心弹出窗口"
     },
     "closed_caption_file_must_be_less_than_maxkb_kb_5880f752": {
         "message": "关闭字幕的文件必须小于 { maxKb } kb"
@@ -349,6 +337,12 @@
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "颜色选取器（已选择 { colorName }）"
+    },
+    "column_e1ae5c64": {
+        "message": "列"
+    },
+    "column_group_1c062368": {
+        "message": "列组"
     },
     "complex_numbers_a543d004": {
         "message": "复数"
@@ -380,26 +374,17 @@
     "copyright_holder_66ee111": {
         "message": "版权持有者："
     },
+    "could_not_insert_content_itemtype_items_are_not_cu_638dfecd": {
+        "message": "无法插入内容：Canvas 目前不支持“{ itemType }”项目。"
+    },
+    "count_40eced3b": {
+        "message": "计数"
+    },
     "count_plural_0_0_words_one_1_word_other_words_acf32eca": {
         "message": "{ count, plural,\n     =0 {0 个字}\n    one {1 个字}\n  other {# 个字}\n}"
     },
-    "count_plural_0_opportunities_one_opportunity_other_765e27fa": {
-        "message": "{ count, plural,\n     =0 {# 机会}\n    one {# 机会}\n  other {# 机会}\n}"
-    },
-    "count_plural_one_hide_missing_item_other_hide_miss_4a2562f7": {
-        "message": "{ count, plural,\n    one {隐藏#个缺失的项目}\n  other {隐藏#个缺失的项目}\n}"
-    },
     "count_plural_one_item_loaded_other_items_loaded_857023b7": {
         "message": "{ count, plural,\n    one {已上传 # 项}\n  other {已上传 # 项}\n}"
-    },
-    "count_plural_one_show_completed_item_other_show_co_8d0d0ae5": {
-        "message": "{ count, plural,\n    one {显示#个已完成项目}\n  other {显示#个已完成项目}\n}"
-    },
-    "count_plural_one_show_missing_item_other_show_miss_509327ef": {
-        "message": "{ count, plural,\n    one {显示#个缺失的项目}\n  other {显示#个缺失的项目}\n}"
-    },
-    "course_8a63b4a3": {
-        "message": "课程"
     },
     "course_documents_104d76e0": {
         "message": "课程文件"
@@ -413,6 +398,9 @@
     "course_images_f8511d04": {
         "message": "课程图像"
     },
+    "course_link_b369426": {
+        "message": "课程链接"
+    },
     "course_links_b56959b9": {
         "message": "课程链接"
     },
@@ -422,11 +410,11 @@
     "course_navigation_dd035109": {
         "message": "课程导航"
     },
-    "course_to_do_bcbbab54": {
-        "message": "{ course } 待办"
-    },
     "create_icon_110d6463": {
         "message": "创建图标"
+    },
+    "create_icon_maker_icon_c716bffe": {
+        "message": "创建图标编辑器图标"
     },
     "creative_commons_license_725584ae": {
         "message": "Creative Commons 许可证："
@@ -446,11 +434,17 @@
     "current_image_f16c249c": {
         "message": "当前图像"
     },
+    "current_link_945a47ee": {
+        "message": "当前链接"
+    },
     "current_volume_level_c55ab825": {
         "message": "当前音量"
     },
     "custom_6979cd81": {
         "message": "自定义"
+    },
+    "custom_width_and_height_pixels_946eea7c": {
+        "message": "自定义宽度和高度（像素）"
     },
     "cyan_c1d5f68a": {
         "message": "青色"
@@ -467,38 +461,32 @@
     "date_added_ed5ad465": {
         "message": "按添加日期排序"
     },
-    "date_at_time_dbdb1b99": {
-        "message": "{ date }，时间 { time }"
-    },
-    "date_ee500367": {
-        "message": "日期"
-    },
-    "date_is_not_a_valid_date_4ef9f8ba": {
-        "message": "#{ date } 不是有效的日期。"
-    },
-    "date_is_required_8660ec22": {
-        "message": "日期必填"
-    },
-    "date_time_d9fbf2d7": {
-        "message": "日期和时间："
-    },
     "decorative_icon_9a7f3fc3": {
         "message": "装饰性图标"
+    },
+    "decorative_image_fde98579": {
+        "message": "装饰图片"
     },
     "decorative_type_upper_f2c95e3": {
         "message": "装饰{ TYPE_UPPER }"
     },
+    "decrease_indent_d9cf469d": {
+        "message": "减少缩进"
+    },
     "deep_purple_bb3e2907": {
         "message": "深紫色"
+    },
+    "default_bulleted_unordered_list_47079da8": {
+        "message": "默认项目符号无序列表"
+    },
+    "default_numerical_ordered_list_48dd3548": {
+        "message": "默认数字有序列表"
     },
     "definite_integral_fe7ffed1": {
         "message": "定积分"
     },
     "degree_symbol_4a823d5f": {
         "message": "度数符号"
-    },
-    "delete_a6efa79d": {
-        "message": "删除"
     },
     "delimiters_4db4840d": {
         "message": "分隔符"
@@ -520,9 +508,6 @@
     },
     "details_98a31b68": {
         "message": "详情"
-    },
-    "details_a6f427c3": {
-        "message": "详细信息："
     },
     "diagonal_dots_7d71b57e": {
         "message": "斜点"
@@ -563,18 +548,6 @@
     "disjoint_union_e74351a8": {
         "message": "不交并"
     },
-    "dismiss_itemtitle_a9fae1b3": {
-        "message": "拒绝 { itemTitle }"
-    },
-    "dismiss_opportunityname_5995176f": {
-        "message": "拒绝 { opportunityName }"
-    },
-    "dismissed_8b0b1fc9": {
-        "message": "已拒绝"
-    },
-    "dismissed_opportunities_f0826640": {
-        "message": "已拒绝的机会"
-    },
     "display_options_315aba85": {
         "message": "显示选项"
     },
@@ -584,6 +557,9 @@
     "division_sign_72190870": {
         "message": "除号"
     },
+    "document_678cd7bf": {
+        "message": "文档"
+    },
     "documents_81393201": {
         "message": "文档"
     },
@@ -592,6 +568,9 @@
     },
     "double_dagger_faf78681": {
         "message": "双剑号"
+    },
+    "down_5831a426": {
+        "message": "下"
     },
     "down_and_left_diagonal_arrow_40ef602c": {
         "message": "左下斜箭头"
@@ -617,12 +596,6 @@
     "drag_handle_use_up_and_down_arrows_to_resize_e29eae5c": {
         "message": "拖动手柄。使用上下箭头调整大小"
     },
-    "due_5d7267be": {
-        "message": "到期："
-    },
-    "due_date_124fdd99": {
-        "message": "到期：{ date }"
-    },
     "due_multiple_dates_cc0ee3f5": {
         "message": "到期：多个日期"
     },
@@ -641,6 +614,9 @@
     "edit_course_link_5a5c3c59": {
         "message": "编辑课程链接"
     },
+    "edit_equation_f5279959": {
+        "message": "编辑等式"
+    },
     "edit_existing_icon_maker_icon_5d0ebb3f": {
         "message": "编辑现有图标制作者图标"
     },
@@ -650,17 +626,20 @@
     "edit_link_7f53bebb": {
         "message": "编辑链接"
     },
-    "edit_title_72e5a21e": {
-        "message": "编辑 { title }"
-    },
     "editor_statusbar_26ac81fc": {
         "message": "编辑器状态栏"
+    },
+    "element_starting_with_start_91bf4c3b": {
+        "message": "以{ start }开始的元素"
     },
     "embed_828fac4a": {
         "message": "嵌入"
     },
     "embed_code_314f1bd5": {
         "message": "嵌入代码"
+    },
+    "embed_content_from_external_tool_3397ad2d": {
+        "message": "从外部工具嵌入内容"
     },
     "embed_image_1080badc": {
         "message": "嵌入图片"
@@ -716,8 +695,14 @@
     "equals_sign_c51bdc58": {
         "message": "等号"
     },
+    "equation_1c5ac93c": {
+        "message": "等式"
+    },
     "equation_editor_39fbc3f1": {
         "message": "方程式编辑器"
+    },
+    "equilibrium_6ff3040b": {
+        "message": "平衡点"
     },
     "equivalence_class_7b0f11c0": {
         "message": "等价类"
@@ -725,29 +710,11 @@
     "equivalent_identity_654b3ce5": {
         "message": "等效标识"
     },
-    "error_loading_grades_e0b38f4d": {
-        "message": "加载评分时出错"
-    },
-    "error_loading_items_5218438e": {
-        "message": "加载项目时出错"
-    },
-    "error_loading_more_items_3f109d9f": {
-        "message": "加载更多项目时出错"
-    },
-    "error_loading_past_items_2881dbb1": {
-        "message": "加载过去的项目时出错"
-    },
     "estonian_5e8e2fa4": {
         "message": "爱沙尼亚语"
     },
     "eta_b8828f99": {
         "message": "Eta"
-    },
-    "exciting_discussion_9f67bd0a": {
-        "message": "精彩的讨论"
-    },
-    "excused_cf8792eb": {
-        "message": "已请假"
     },
     "exists_2e62bdaa": {
         "message": "存在"
@@ -761,8 +728,11 @@
     "expand_to_see_types_f5d29352": {
         "message": "展开以查看 { types }"
     },
-    "extended_9a58dcb6": {
-        "message": "扩展"
+    "external_link_d3f9e62a": {
+        "message": "外部链接"
+    },
+    "external_tool_frame_70b32473": {
+        "message": "外部工具框架"
     },
     "external_tools_6e77821": {
         "message": "外部工具"
@@ -779,44 +749,11 @@
     "f_function_fe422d65": {
         "message": "F（函数）"
     },
-    "failed_getting_course_list_49846a93": {
-        "message": "获取课程列表失败"
-    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "文件内容获取失败"
     },
-    "failed_getting_to_do_list_10ce2833": {
-        "message": "获取待办事项列表失败"
-    },
-    "failed_peeking_into_your_future_e95b9306": {
-        "message": "无法查看未来"
-    },
-    "failed_peeking_into_your_past_5bec2323": {
-        "message": "无法查看过去"
-    },
-    "failed_saving_changes_on_name_1e100ad": {
-        "message": "无法保存对{ name }进行的更改。"
-    },
-    "failed_to_delete_name_bdd7b810": {
-        "message": "无法删除{ name }。"
-    },
-    "failed_to_delete_to_do_64edff49": {
-        "message": "删除待办事项出错"
-    },
-    "failed_to_get_new_activity_17e7ec7c": {
-        "message": "获取新活动失败"
-    },
-    "failed_to_load_opportunities_52ab6404": {
-        "message": "加载机遇失败"
-    },
-    "failed_to_save_to_do_ddc7503b": {
-        "message": "保存待办事项出错"
-    },
-    "failure_loading_the_to_do_list_c61895c8": {
-        "message": "加载待办事项列表失败"
-    },
-    "feedback_6dcc1991": {
-        "message": "反馈"
+    "failed_to_retrieve_content_from_external_tool_5899c213": {
+        "message": "无法从外部工具检索内容"
     },
     "file_name_8fd421ff": {
         "message": "文件名称"
@@ -851,6 +788,9 @@
     "finnish_4df2923d": {
         "message": "芬兰语"
     },
+    "fix_heading_hierarchy_f60884c4": {
+        "message": "置顶标题层次结构"
+    },
     "flat_music_76d5a5c3": {
         "message": "降调（音乐）"
     },
@@ -865,6 +805,9 @@
     },
     "format_4247a9c5": {
         "message": "格式"
+    },
+    "format_as_a_list_142210c3": {
+        "message": "使用列表格式"
     },
     "formatting_5b143aa8": {
         "message": "格式化"
@@ -890,9 +833,6 @@
     "fullscreen_873bf53f": {
         "message": "全屏"
     },
-    "fun_quiz_47ab0b0": {
-        "message": "趣味测验"
-    },
     "galician_7e4508b5": {
         "message": "加利西亚语"
     },
@@ -908,26 +848,14 @@
     "gif_png_format_images_larger_than_size_kb_are_not__7af3bdbd": {
         "message": "当前不支持大于 { size } KB 的 GIF/PNG 格式图像。"
     },
-    "go_to_card_view_dashboard_9d03970e": {
-        "message": "前往卡片视图仪表板"
-    },
     "go_to_the_editor_s_menubar_e6674c81": {
         "message": "前往编辑器的菜单栏"
     },
     "go_to_the_editor_s_toolbar_a5cb875f": {
         "message": "前往编辑器的工具栏"
     },
-    "graded_25cd3fcd": {
-        "message": "已评分"
-    },
     "grades_a61eba0a": {
         "message": "评分"
-    },
-    "grades_are_loading_c899652d": {
-        "message": "正在加载评分"
-    },
-    "grades_loaded_5056277c": {
-        "message": "已加载评分"
     },
     "greater_than_e98af662": {
         "message": "大于"
@@ -959,6 +887,9 @@
     "group_isomorphism_45b1458c": {
         "message": "群同构"
     },
+    "group_link_63e626b3": {
+        "message": "组链接"
+    },
     "group_links_9493129e": {
         "message": "小组链接"
     },
@@ -977,6 +908,15 @@
     "hat_ea321e35": {
         "message": "帽"
     },
+    "header_column_f27433cb": {
+        "message": "标题列"
+    },
+    "header_row_and_column_ec5b9ec": {
+        "message": "标题行和列"
+    },
+    "header_row_f33eb169": {
+        "message": "标题行"
+    },
     "heading_2_5b84eed2": {
         "message": "标题 2"
     },
@@ -985,6 +925,15 @@
     },
     "heading_4_b2e74be7": {
         "message": "标题 4"
+    },
+    "heading_levels_should_not_be_skipped_3947c0e0": {
+        "message": "不得跳过标题级别。"
+    },
+    "heading_starting_with_start_42a3e7f9": {
+        "message": "以{ start }开始的标题"
+    },
+    "headings_should_not_contain_more_than_120_characte_3c0e0cb3": {
+        "message": "标题不得超过 120 个字符。"
     },
     "health_icon_8d292eb5": {
         "message": "健康图标"
@@ -1007,6 +956,9 @@
     "hide_title_description_caf092ef": {
         "message": "隐藏{ title }说明"
     },
+    "highlight_an_element_to_activate_the_element_optio_60e1e56b": {
+        "message": "高亮显示一个元素以激活元素选项工具栏"
+    },
     "hindi_9bcd4b34": {
         "message": "印地语"
     },
@@ -1015,6 +967,9 @@
     },
     "html_code_editor_fd967a44": {
         "message": "HTML 代码编辑器"
+    },
+    "html_editor_fb2ab713": {
+        "message": "HTML 编辑器"
     },
     "hungarian_fc7d30c9": {
         "message": "匈牙利语"
@@ -1055,8 +1010,11 @@
     "icon_size_9353edea": {
         "message": "图标大小"
     },
-    "if_left_empty_link_text_will_display_as_course_lin_61087540": {
-        "message": "如果链接为空，文本将显示为课程链接名称"
+    "if_left_empty_link_text_will_display_as_course_lin_2a34eedb": {
+        "message": "如果不填，链接文本将显示为课程链接名称"
+    },
+    "if_usage_rights_are_required_the_file_will_not_pub_841e276e": {
+        "message": "如需使用权限，则在“文件”页面中启用文件之前，不会发布文件。"
     },
     "if_you_do_not_select_usage_rights_now_this_file_wi_14e07ab5": {
         "message": "如果您现在不选择使用权限，该文件在上传后不会被发布。"
@@ -1067,6 +1025,9 @@
     "image_c1c98202": {
         "message": "图像"
     },
+    "image_filenames_should_not_be_used_as_the_alt_attr_bcfd7780": {
+        "message": "不得使用图像文件名作为描述图像内容的替换属性。"
+    },
     "image_options_5412d02c": {
         "message": "图像选项"
     },
@@ -1076,14 +1037,23 @@
     "image_to_crop_3a34487d": {
         "message": "剪裁图像"
     },
+    "image_with_filename_file_aacd7180": {
+        "message": "文件名为{ file }的图像"
+    },
     "images_7ce26570": {
         "message": "图像"
+    },
+    "images_should_include_an_alt_attribute_describing__b86d6a86": {
+        "message": "图像应包括一个描述图像内容的替换属性。"
     },
     "imaginary_portion_of_complex_number_2c733ffa": {
         "message": "虚部（复数）"
     },
     "in_element_of_19ca2f33": {
         "message": "包含（元素）"
+    },
+    "increase_indent_6af90f7c": {
+        "message": "增加缩进"
     },
     "indefinite_integral_6623307e": {
         "message": "不定积分"
@@ -1105,6 +1075,9 @@
     },
     "insert_link_6dc23cae": {
         "message": "插入链接"
+    },
+    "insert_math_equation_57c6e767": {
+        "message": "插入数学公式"
     },
     "integers_336344e1": {
         "message": "整数"
@@ -1130,29 +1103,14 @@
     "irish_567e109f": {
         "message": "爱尔兰语"
     },
+    "issue_num_total_f94536cf": {
+        "message": "问题{ num }/{ total }"
+    },
     "italian_bd3c792d": {
         "message": "意大利语"
     },
-    "items_completed_items_plural_1_item_other_items_717d579f": {
-        "message": "{ items }已完成{ items, plural,\n     =1 {个项目}\n  other {个项目}\n}"
-    },
     "japanese_b5721ca7": {
         "message": "日语"
-    },
-    "join_6cafecca": {
-        "message": "加入"
-    },
-    "join_active_online_meeting_d9d892b2": {
-        "message": "加入活跃的在线会议"
-    },
-    "join_online_meeting_b1725843": {
-        "message": "加入在线会议"
-    },
-    "jump_to_navigation_toolbar_2952cd8b": {
-        "message": "跳转到导航工具栏"
-    },
-    "jump_to_today_254ccf41": {
-        "message": "跳至今天"
     },
     "kappa_2f14c816": {
         "message": "Kappa"
@@ -1163,14 +1121,14 @@
     "keyboard_shortcuts_ed1844bd": {
         "message": "键盘捷径"
     },
+    "keyboards_navigate_to_links_using_the_tab_key_two__5fab8c82": {
+        "message": "键盘使用 Tab 键导航至链接。转至相同目的地的两个相邻链接可以对键盘用户造成混淆。"
+    },
     "korean_da812d9": {
         "message": "朝鲜语"
     },
     "lambda_4f602498": {
         "message": "Lambda"
-    },
-    "language_arts_35b79a8b": {
-        "message": "语言艺术"
     },
     "language_arts_icon_a798b0f8": {
         "message": "语言艺术图标"
@@ -1181,11 +1139,47 @@
     "large_9c5e80e7": {
         "message": "大"
     },
-    "late_2be42b88": {
-        "message": "延迟"
-    },
     "latvian_2bbb6aab": {
         "message": "拉脱维亚语"
+    },
+    "learn_more_about_adjacent_links_2cb9762c": {
+        "message": "详细了解相邻链接"
+    },
+    "learn_more_about_color_contrast_c019dfb9": {
+        "message": "详细了解色彩对比度"
+    },
+    "learn_more_about_organizing_page_headings_8a7caa2e": {
+        "message": "详细了解组织页面标题"
+    },
+    "learn_more_about_proper_page_heading_structure_d2959f2d": {
+        "message": "详细了解适当的页面标题结构"
+    },
+    "learn_more_about_table_headers_5f5ee13": {
+        "message": "详细了解表标题"
+    },
+    "learn_more_about_using_alt_text_for_images_5698df9a": {
+        "message": "详细了解为使用图片替换文本"
+    },
+    "learn_more_about_using_captions_with_tables_36fe496f": {
+        "message": "详细了解将标题与表格一起使用"
+    },
+    "learn_more_about_using_filenames_as_alt_text_264286af": {
+        "message": "详细了解使用文件名作为替换文本"
+    },
+    "learn_more_about_using_lists_4e6eb860": {
+        "message": "详细了解使用列表"
+    },
+    "learn_more_about_using_scope_attributes_with_table_20df49aa": {
+        "message": "详细了解将范围属性与表格一起使用"
+    },
+    "leave_as_is_4facfe55": {
+        "message": "保持原状"
+    },
+    "left_3ea9d375": {
+        "message": "左侧"
+    },
+    "left_align_43d95491": {
+        "message": "左对齐"
     },
     "left_angle_bracket_c87a6d07": {
         "message": "左角括弧"
@@ -1238,11 +1232,20 @@
     "link_options_a16b758b": {
         "message": "链接选项"
     },
+    "link_type_linktypemessage_c6d26815": {
+        "message": "链接类型：{ linkTypeMessage }"
+    },
+    "link_with_text_starting_with_start_b3fcbe71": {
+        "message": "具有以{ start }开始的文本的链接"
+    },
     "links_14b70841": {
         "message": "链接"
     },
     "links_to_an_external_site_de74145d": {
         "message": "链接到外部网站。"
+    },
+    "lists_should_be_formatted_as_lists_f862de8d": {
+        "message": "列表应使用列表格式。"
     },
     "lithuanian_5adcbe24": {
         "message": "立陶宛语"
@@ -1250,26 +1253,17 @@
     "load_more_35d33c7": {
         "message": "加载更多"
     },
-    "load_more_a36f9cf9": {
-        "message": "加载更多"
-    },
-    "load_prior_dates_f2b0f6f0": {
-        "message": "加载以前的日期"
-    },
-    "loaded_count_plural_0_items_one_item_other_items_e58533e9": {
-        "message": "已加载 { count, plural,\n     =0 {#  项}\n    one {# 项}\n  other {# 项}\n}"
-    },
     "loading_25990131": {
         "message": "加载中……"
-    },
-    "loading_725811ca": {
-        "message": "正在加载"
     },
     "loading_bde52856": {
         "message": "正在加载"
     },
     "loading_closed_captions_subtitles_failed_95ceef47": {
         "message": "加载关闭的字幕/副标题失败。"
+    },
+    "loading_external_tool_d839042c": {
+        "message": "正在加载外部工具"
     },
     "loading_failed_b3524381": {
         "message": "加载失败……"
@@ -1280,23 +1274,14 @@
     "loading_folders_d8b5869e": {
         "message": "正在加载文件夹"
     },
-    "loading_grades_c842c887": {
-        "message": "正在加载评分"
-    },
-    "loading_past_items_ca499e75": {
-        "message": "正在加载过去的项目"
-    },
-    "loading_planner_items_947a813d": {
-        "message": "加载计划程序项目"
+    "loading_placeholder_for_filename_792ef5e8": {
+        "message": "正在加载{ fileName }的占位符"
     },
     "loading_please_wait_d276220a": {
         "message": "正在加载，请稍候"
     },
     "loading_preview_9f077aa1": {
         "message": "加载预览"
-    },
-    "location_3b6ff307": {
-        "message": "位置："
     },
     "locked_762f138b": {
         "message": "已锁定"
@@ -1312,9 +1297,6 @@
     },
     "logical_equivalence_thick_662dd3f2": {
         "message": "逻辑等价（厚）"
-    },
-    "looks_like_there_isn_t_anything_here_d9bcef49": {
-        "message": "此处似乎没有任何内容"
     },
     "low_horizontal_dots_cc08498e": {
         "message": "下横点"
@@ -1337,9 +1319,6 @@
     "maps_to_e5ef7382": {
         "message": "映射到"
     },
-    "math_ede93050": {
-        "message": "数学"
-    },
     "math_icon_ad4e9d03": {
         "message": "数学图标"
     },
@@ -1349,8 +1328,14 @@
     "media_file_is_processing_please_try_again_later_58a6d49": {
         "message": "媒体文件正在处理中。请稍后再试。"
     },
+    "media_title_2112243b": {
+        "message": "媒体标题"
+    },
     "medium_5a8e9ead": {
         "message": "中等"
+    },
+    "merge_links_2478df96": {
+        "message": "合并链接"
     },
     "mic_a7f3d311": {
         "message": "麦克风"
@@ -1379,14 +1364,14 @@
     "miscellaneous_e9818229": {
         "message": "其他"
     },
-    "missing_1a256b3b": {
-        "message": "缺失"
-    },
-    "missing_items_for_title_516511f8": {
-        "message": "{ title } 的缺失项目"
+    "module_90d9fd32": {
+        "message": "单元"
     },
     "modules_c4325335": {
         "message": "单元"
+    },
+    "moving_image_to_crop_directionword_6f66cde2": {
+        "message": "正在移动图片以剪裁 { directionWord }"
     },
     "mu_37223b8b": {
         "message": "Mu"
@@ -1409,9 +1394,6 @@
     "my_files_2f621040": {
         "message": "我的文件"
     },
-    "my_grades_98834476": {
-        "message": "我的评分"
-    },
     "n_th_root_9991a6e4": {
         "message": "N 次方根"
     },
@@ -1433,32 +1415,44 @@
     "navigate_through_the_menu_or_toolbar_415a4e50": {
         "message": "导航菜单或工具栏"
     },
+    "navigation_ee9af92d": {
+        "message": "导航"
+    },
     "nested_greater_than_d852e60d": {
         "message": "嵌套大于"
     },
     "nested_less_than_27d17e58": {
         "message": "嵌套小于"
     },
-    "new_13daf639": {
-        "message": "新建"
+    "new_quiz_34aacba6": {
+        "message": "新测验"
     },
-    "new_activity_8b84847d": {
-        "message": "新活动"
+    "next_40e12421": {
+        "message": "下一步"
     },
-    "new_activity_for_title_14c9c3af": {
-        "message": "{ title } 的新活动"
+    "no_accessibility_issues_were_detected_f8d3c875": {
+        "message": "没有发现辅助功能问题。"
     },
-    "new_opportunities_7d349c4d": {
-        "message": "新机会"
+    "no_announcements_created_yet_c44a94f4": {
+        "message": "尚未创建公告。"
     },
-    "next_month_749b1778": {
-        "message": "下个月"
+    "no_announcements_found_20185afc": {
+        "message": "未找到公告。"
+    },
+    "no_assignments_created_yet_1b236d87": {
+        "message": "尚未创建作业。"
+    },
+    "no_assignments_found_79e46d7f": {
+        "message": "未找到作业。"
     },
     "no_changes_to_save_d29f6e91": {
         "message": "没有更改要保存。"
     },
-    "no_due_dates_assigned_e8f5bac8": {
-        "message": "未指定截止日期"
+    "no_discussions_created_yet_ff99abe3": {
+        "message": "尚未创建讨论。"
+    },
+    "no_discussions_found_9284063b": {
+        "message": "未找到讨论。"
     },
     "no_e16d9132": {
         "message": "否"
@@ -1466,11 +1460,29 @@
     "no_file_chosen_9a880793": {
         "message": "没有选择文件"
     },
-    "no_grade_3b4d7f3e": {
-        "message": "没有评分"
+    "no_headers_9bc7dc7f": {
+        "message": "无标题"
+    },
+    "no_modules_created_yet_c71b6d4d": {
+        "message": "尚未创建单元。"
+    },
+    "no_modules_found_2df43a40": {
+        "message": "未找到单元。"
+    },
+    "no_pages_created_yet_c379fa6e": {
+        "message": "尚未创建页面。"
+    },
+    "no_pages_found_6799350": {
+        "message": "未找到页面。"
     },
     "no_preview_is_available_for_this_file_f940114a": {
         "message": "没有预览可用于此文件。"
+    },
+    "no_quizzes_created_yet_1a2370b9": {
+        "message": "尚未创建测验。"
+    },
+    "no_quizzes_found_c80c537a": {
+        "message": "未找到测验。"
     },
     "no_results_940393cf": {
         "message": "无结果。"
@@ -1517,35 +1529,8 @@
     "not_superset_strict_24e06f36": {
         "message": "非超集（严格）"
     },
-    "nothing_due_this_week_d45c9ef9": {
-        "message": "本周没有到期项目"
-    },
-    "nothing_for_now_e3e3ce2a": {
-        "message": "目前没有任何内容"
-    },
-    "nothing_here_needs_attention_c4eaded6": {
-        "message": "此处没有需要关注的。"
-    },
-    "nothing_more_to_do_b665da42": {
-        "message": "没有更多待办事项"
-    },
-    "nothing_new_needs_attention_3ac548d4": {
-        "message": "没有任何新内容需要注意。"
-    },
-    "nothing_planned_today_selecting_most_recent_item_ffd71bff": {
-        "message": "今天没有计划。选择最近的项目。"
-    },
-    "nothing_planned_today_selecting_next_item_f6718aa": {
-        "message": "今天没有计划。选择下一个项目。"
-    },
-    "nothing_planned_yet_8675ffe9": {
-        "message": "尚未进行任何计划"
-    },
     "nu_1c0f6848": {
         "message": "Nu"
-    },
-    "numpoints_points_8621a43b": {
-        "message": "{ numPoints } 分"
     },
     "octagon_e48be9f": {
         "message": "八边形"
@@ -1559,8 +1544,8 @@
     "one_of_the_following_styles_must_be_added_to_save__1de769aa": {
         "message": "必须添加以下其中一个样式以保存图标：图标颜色、轮廓大小、图标文本或图像"
     },
-    "only_most_recent_grading_period_shown_f1ad6458": {
-        "message": "*仅显示最近的评分周期。"
+    "one_or_more_files_failed_to_paste_please_try_uploa_7fa39dd3": {
+        "message": "一个或多个文件未能粘贴。请尝试上传或拖放文件。"
     },
     "open_circle_e9bd069": {
         "message": "开圆"
@@ -1574,17 +1559,14 @@
     "operators_a2ef9a93": {
         "message": "运算符"
     },
-    "opportunities_popup_f6703842": {
-        "message": "机会弹出窗口"
-    },
-    "optional_add_course_ef0d70fc": {
-        "message": "可选：添加课程"
-    },
     "or_9b70ccaa": {
         "message": "或"
     },
     "orange_81386a62": {
         "message": "橙色"
+    },
+    "ordered_and_unordered_lists_cfadfc38": {
+        "message": "有序列表和无序列表"
     },
     "other_editor_shortcuts_may_be_found_at_404aba4a": {
         "message": "其他编辑器快捷方式可见于"
@@ -1607,6 +1589,9 @@
     "paragraph_5e5ad8eb": {
         "message": "段落"
     },
+    "paragraph_starting_with_start_a59923f8": {
+        "message": "以{ start }开始的段落"
+    },
     "parallel_d55d6e38": {
         "message": "平行"
     },
@@ -1618,12 +1603,6 @@
     },
     "pause_12af3bb4": {
         "message": "暂停"
-    },
-    "peer_review_74f26a13": {
-        "message": "同伴互评"
-    },
-    "peer_review_for_itemtitle_358cb413": {
-        "message": "{ itemTitle }同行评审"
     },
     "pentagon_17d82ea3": {
         "message": "五角形"
@@ -1685,12 +1664,6 @@
     "plus_minus_f8be2e83": {
         "message": "加号/减号"
     },
-    "points_bceb5005": {
-        "message": "分值"
-    },
-    "points_points_63e59cce": {
-        "message": "{ points } 分"
-    },
     "polish_4cf2ecaf": {
         "message": "波兰语"
     },
@@ -1712,6 +1685,9 @@
     "preformatted_d0670862": {
         "message": "预定义格式"
     },
+    "prev_f82cbc48": {
+        "message": "上一个"
+    },
     "preview_53003fd2": {
         "message": "预览"
     },
@@ -1723,9 +1699,6 @@
     },
     "preview_inline_9787330": {
         "message": "嵌入式预览"
-    },
-    "previous_month_bb1e3c84": {
-        "message": "上个月"
     },
     "prime_917ea60e": {
         "message": "质"
@@ -1744,9 +1717,6 @@
     },
     "psi_e3f5f0f7": {
         "message": "Psi"
-    },
-    "pts_699bd9aa": {
-        "message": "分"
     },
     "published_c944a23d": {
         "message": "已发布"
@@ -1781,14 +1751,14 @@
     "record_7c9448b": {
         "message": "记录"
     },
+    "record_upload_media_5fdce166": {
+        "message": "记录/上传媒体"
+    },
     "recording_98da6bda": {
         "message": "录制"
     },
     "red_8258edf3": {
         "message": "红色"
-    },
-    "redo_363c58b7": {
-        "message": "重新操作"
     },
     "relationships_6602af70": {
         "message": "关系"
@@ -1796,14 +1766,14 @@
     "religion_icon_246e0be1": {
         "message": "宗教图标"
     },
-    "reminder_date_4564d12d": {
-        "message": "提醒：{ date }"
+    "remove_heading_style_5fdc8855": {
+        "message": "删除标题样式"
+    },
+    "remove_link_d1f2f4d0": {
+        "message": "删除链接"
     },
     "replace_e61834a7": {
         "message": "替换"
-    },
-    "replies_4a8577c8": {
-        "message": "回复"
     },
     "reset_95a81614": {
         "message": "重置"
@@ -1826,8 +1796,14 @@
     "rich_content_editor_2708ef21": {
         "message": "富内容编辑器"
     },
-    "rich_text_area_press_alt_0_for_rich_content_editor_9d23437f": {
-        "message": "富文本区域。按 ALT+0 获取富内容编辑器快捷方式。"
+    "rich_text_area_press_oskey_f8_for_rich_content_edi_c2f651d": {
+        "message": "富文本区域。按{ OSKey }+F8设置富内容编辑器快捷方式。"
+    },
+    "right_71ffdc4d": {
+        "message": "右侧"
+    },
+    "right_align_39e7a32a": {
+        "message": "右对齐"
     },
     "right_angle_bracket_d704e2d6": {
         "message": "右角括弧"
@@ -1874,6 +1850,12 @@
     "rotation_9699c538": {
         "message": "旋转"
     },
+    "row_fc0944a7": {
+        "message": "行"
+    },
+    "row_group_979f5528": {
+        "message": "行组"
+    },
     "russian_1e3e197": {
         "message": "俄语"
     },
@@ -1883,23 +1865,35 @@
     "save_11a80ec3": {
         "message": "保存"
     },
+    "save_copy_ca63944e": {
+        "message": "保存副本"
+    },
     "save_media_cb9e786e": {
         "message": "保存媒体"
     },
-    "schedule_preview_3bcda153": {
-        "message": "日程规划预览"
+    "saved_icon_maker_icons_df86e2a1": {
+        "message": "保存的图标编辑器图标"
     },
-    "science_8d92214a": {
-        "message": "科学"
+    "screen_readers_cannot_determine_what_is_displayed__6a5842ab": {
+        "message": "如果没有替换文本，且文件名通常是不描述上下文或意义的无意义的数字和字母字符串，则屏幕读取器无法确定图像显示的内容。"
+    },
+    "screen_readers_cannot_determine_what_is_displayed__6f1ea667": {
+        "message": "如果没有描述图像内容和意义的替换文本，则屏幕读取器无法确定图像显示的内容。替换文本应简单明了。"
+    },
+    "screen_readers_cannot_determine_what_is_displayed__a57e6723": {
+        "message": "如果没有描述图像内容和意义的替换文本，则屏幕读取器无法确定图像显示的内容。"
+    },
+    "screen_readers_cannot_interpret_tables_without_the_bd861652": {
+        "message": "屏幕读取器无法解读不具有正确结构的表格。表格标题提供说明和内容范围。"
+    },
+    "screen_readers_cannot_interpret_tables_without_the_e62912d5": {
+        "message": "屏幕读取器无法解读不具有正确结构的表格。表格说明描述表格的上下文和对表格的一般理解。"
+    },
+    "screen_readers_cannot_interpret_tables_without_the_f0bdec0f": {
+        "message": "屏幕读取器无法解读不具有正确结构的表格。表格标题提供说明和内容概述。"
     },
     "script_l_42a7b254": {
         "message": "花体 L"
-    },
-    "scroll_up_to_see_your_history_19b14cad": {
-        "message": "向上滚动以查看您的历史记录！"
-    },
-    "scrolls_up_to_the_previous_item_with_new_activity_99717459": {
-        "message": "向上滚动到上一个具有新活动的项目。"
     },
     "search_280d00bd": {
         "message": "搜索"
@@ -1916,17 +1910,32 @@
     "select_video_source_1b5c9dbe": {
         "message": "选择视频来源"
     },
+    "selected_274ce24f": {
+        "message": "选定的"
+    },
     "selected_linkfilename_c093b1f2": {
         "message": "已选择 { linkFileName }"
+    },
+    "selection_b52c4c5e": {
+        "message": "选择"
     },
     "serbian_7187f1f2": {
         "message": "塞尔维亚语"
     },
+    "set_header_scope_8c548f40": {
+        "message": "设置标题范围"
+    },
     "set_minus_b46e9b88": {
         "message": "设置负"
     },
+    "set_table_header_cfab13a0": {
+        "message": "设置表格标题"
+    },
     "sharp_music_ab956814": {
         "message": "升调（音乐）"
+    },
+    "shift_arrows_4d5785fe": {
+        "message": "SHIFT+箭头键"
     },
     "shift_o_to_open_the_pretty_html_editor_55ff5a31": {
         "message": "按 Shift-O 打开精美 HTML 编辑器。"
@@ -1934,11 +1943,26 @@
     "shortcut_911d6255": {
         "message": "快捷方式"
     },
-    "show_all_ae37d610": {
-        "message": "显示全部"
+    "show_audio_options_b489926b": {
+        "message": "显示音频选项"
     },
-    "show_my_grades_ebd08684": {
-        "message": "显示我的评分"
+    "show_image_options_1e2ecc6b": {
+        "message": "显示图像选项"
+    },
+    "show_link_options_545338fd": {
+        "message": "显示链接选项"
+    },
+    "show_studio_media_options_a0c748c6": {
+        "message": "显示 Studio 媒体选项"
+    },
+    "show_video_options_6ed3721a": {
+        "message": "显示视频选项"
+    },
+    "sighted_users_browse_web_pages_quickly_looking_for_1d4db0c1": {
+        "message": "视力好的用户快速浏览网页，查找大号字体或粗体标题。屏幕读取器用户依赖于标题了解上下文。标题应使用正确的结构。"
+    },
+    "sighted_users_browse_web_pages_quickly_looking_for_ade806f5": {
+        "message": "视力好的用户快速浏览网页，查找大号字体或粗体标题。屏幕读取器用户依赖于标题了解上下文。标题应在正确的结构内保持简洁。"
     },
     "sigma_5c35e553": {
         "message": "Sigma"
@@ -1966,9 +1990,6 @@
     },
     "small_b070434a": {
         "message": "小"
-    },
-    "social_studies_13fa30c7": {
-        "message": "社会研究"
     },
     "solid_circle_9f061dfc": {
         "message": "实心圆"
@@ -2027,6 +2048,9 @@
     "square_superset_strict_fa4262e4": {
         "message": "平方超集（严格）"
     },
+    "square_unordered_list_b15ce93b": {
+        "message": "方形无序列表"
+    },
     "star_8d156e09": {
         "message": "星形标记"
     },
@@ -2036,32 +2060,20 @@
     "start_recording_9a65141a": {
         "message": "开始录制"
     },
-    "startdate_to_enddate_d245175b": {
-        "message": "{ startDate } 至 { endDate }"
-    },
-    "startdatetime_enddatetime_20abc10e": {
-        "message": "{ startDateTime } - { endDateTime }"
-    },
-    "startdatetime_endtime_49741bbe": {
-        "message": "{ startDateTime } - { endTime }"
-    },
-    "starttime_to_endtime_d7cc249d": {
-        "message": "{ startTime } 至 { endTime }"
-    },
     "steel_blue_14296f08": {
         "message": "钢青色"
     },
-    "student_to_do_c018c835": {
-        "message": "学生待办事项"
+    "studio_media_options_ee504361": {
+        "message": "Studio 媒体选项"
+    },
+    "studio_media_options_tray_cfb94654": {
+        "message": "Studio 媒体选项任务栏"
     },
     "styles_2aa721ef": {
         "message": "样式"
     },
     "submit_a3cc6859": {
         "message": "提交"
-    },
-    "submitted_318fad53": {
-        "message": "已提交"
     },
     "subscript_59744f96": {
         "message": "下标"
@@ -2078,14 +2090,14 @@
     "succeeds_equal_158e8c3a": {
         "message": "后于等于"
     },
-    "success_to_do_created_e34ed395": {
-        "message": "成功：创建的待办列表"
-    },
     "sum_b0842d31": {
         "message": "总和"
     },
     "superscript_8cb349a2": {
         "message": "上标"
+    },
+    "superscript_and_subscript_37f94a50": {
+        "message": "上标和下标"
     },
     "superset_c4db8a7a": {
         "message": "超集"
@@ -2126,11 +2138,23 @@
     "tab_arrows_4cf5abfc": {
         "message": "TAB/箭头"
     },
+    "table_header_starting_with_start_ffcabba6": {
+        "message": "以{ start }开始的表格标题"
+    },
+    "table_starting_with_start_e7232848": {
+        "message": "以{ start }开始的表格"
+    },
+    "tables_headers_should_specify_scope_5abf3a8e": {
+        "message": "表格标题应确定范围。"
+    },
+    "tables_should_include_a_caption_describing_the_con_e91e78fc": {
+        "message": "表格应包括描述表格内容的说明。"
+    },
+    "tables_should_include_at_least_one_header_48779eac": {
+        "message": "表格应包括至少一个标题。"
+    },
     "tagalog_74906db7": {
         "message": "塔加拉族语"
-    },
-    "task_16b0ef38": {
-        "message": "任务"
     },
     "tau_880974b7": {
         "message": "Tau"
@@ -2147,6 +2171,12 @@
     "text_color_acf75eb6": {
         "message": "文本颜色"
     },
+    "text_is_difficult_to_read_without_sufficient_contr_69e62bd6": {
+        "message": "文字和背景之间的对比度不足，因此文字阅读困难，尤其是对于视力较弱的人员而言。"
+    },
+    "text_larger_than_18pt_or_bold_14pt_should_display__5c364db6": {
+        "message": "文字大于 18 磅（或粗体 14 磅）时显示的对比度应至少为 3:1。"
+    },
     "text_optional_384f94f7": {
         "message": "文本（可选）"
     },
@@ -2156,17 +2186,20 @@
     "text_size_887c2f6": {
         "message": "文字大小"
     },
+    "text_smaller_than_18pt_or_bold_14pt_should_display_aaffb22b": {
+        "message": "文字小于 18 磅（或粗体 14 磅）时显示的对比度应至少为 4.5:1。"
+    },
     "thai_8f9bc548": {
         "message": "泰语"
     },
-    "the_best_assignment_15e98be1": {
-        "message": "最佳作业"
-    },
-    "the_date_and_time_this_to_do_is_due_74c823d4": {
-        "message": "完成该事项的日期和时间已截止"
-    },
     "the_document_preview_is_currently_being_processed__7d9ea135": {
         "message": "目前正在处理文档预览。请稍后再试。"
+    },
+    "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
+        "message": "页面上的第一个标题应该是H2。"
+    },
+    "the_following_content_is_partner_provided_ed1da756": {
+        "message": "以下内容由合作伙伴提供"
     },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "材料在公开域中"
@@ -2177,17 +2210,14 @@
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "材料有例外情况——例如，合理使用、引用权，或版权法规定的其他适用的情况"
     },
+    "the_preceding_content_is_partner_provided_d753928c": {
+        "message": "以上内容由合作伙伴提供"
+    },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "无法通过键盘访问精美 HTML 编辑器。按 Shift O 打开原始 HTML 编辑器。"
     },
     "the_selected_file_exceeds_the_maxsize_byte_limit_f7e8c771": {
         "message": "所选文件超过 { maxSize } 字节限制"
-    },
-    "there_are_no_points_associated_with_this_item_449c712a": {
-        "message": "没有与此项目相关的分数"
-    },
-    "there_is_nothing_planned_for_today_e09bfc8c": {
-        "message": "今天没有计划。"
     },
     "therefore_d860e024": {
         "message": "因此"
@@ -2228,50 +2258,23 @@
     "though_your_video_will_have_the_correct_title_in_t_90e427f3": {
         "message": "虽然您的视频在浏览器里会有正确标题，但我们无法在数据库里更新。"
     },
-    "time_2b5aac58": {
-        "message": "时间"
-    },
     "timebar_a4d18443": {
         "message": "进度条"
     },
     "title_ee03d132": {
         "message": "标题"
     },
-    "title_is_required_6ddcab69": {
-        "message": "名称必填"
-    },
     "to_be_posted_when_d24bf7dc": {
         "message": "待发布：{ when }"
     },
-    "to_do_1d554f36": {
-        "message": "待办事项"
-    },
-    "to_do_date_4b211ad0": {
-        "message": "待办事项：{ date }"
-    },
-    "to_do_items_loading_d1cdfcd5": {
-        "message": "正在加载待办事项"
-    },
     "to_do_when_2783d78f": {
         "message": "待办事项：{ when }"
-    },
-    "today_76e10f9c": {
-        "message": "今天"
-    },
-    "today_at_date_8ac30d6": {
-        "message": "今天 { date }"
     },
     "toggle_summary_group_413df9ac": {
         "message": "切换{ summary }组"
     },
     "toggle_tooltip_d3b7cb86": {
         "message": "切换工具提示"
-    },
-    "tomorrow_9a6c9a00": {
-        "message": "明天"
-    },
-    "tomorrow_at_date_b53f2cf1": {
-        "message": "明天 { date }"
     },
     "tools_2fcf772e": {
         "message": "工具"
@@ -2303,8 +2306,8 @@
     "ukrainian_945b00b7": {
         "message": "乌克兰语"
     },
-    "unable_to_mark_as_complete_8141856d": {
-        "message": "无法标记为完成"
+    "unable_to_determine_resource_selection_url_7867e060": {
+        "message": "无法确定资源选择 url"
     },
     "union_e6b57a53": {
         "message": "并集"
@@ -2324,6 +2327,15 @@
     "up_and_right_diagonal_arrow_935b902e": {
         "message": "右上斜箭头"
     },
+    "up_c553575d": {
+        "message": "上"
+    },
+    "updated_link_a827e441": {
+        "message": "更新的链接"
+    },
+    "upload_document_253f0478": {
+        "message": "上传文档"
+    },
     "upload_file_fd2361b8": {
         "message": "上传文件"
     },
@@ -2333,8 +2345,14 @@
     "upload_media_ce31135a": {
         "message": "上传媒体"
     },
+    "upload_record_media_e4207d72": {
+        "message": "上传/录制媒体"
+    },
     "uploading_19e8a4e7": {
         "message": "正在上传"
+    },
+    "uppercase_alphabetic_ordered_list_3f5aa6b2": {
+        "message": "大写字母有序列表"
     },
     "uppercase_delta_d4f4bc41": {
         "message": "大写 Delta"
@@ -2356,6 +2374,9 @@
     },
     "uppercase_psi_6395acbe": {
         "message": "大写 Psi"
+    },
+    "uppercase_roman_numeral_ordered_list_853f292b": {
+        "message": "大写罗马数字有序列表"
     },
     "uppercase_sigma_dbb70e92": {
         "message": "大写 Sigma"
@@ -2459,6 +2480,9 @@
     "vietnamese_e7a76583": {
         "message": "越南语"
     },
+    "view_all_e13bf0a6": {
+        "message": "查看全部"
+    },
     "view_ba339f93": {
         "message": "查看"
     },
@@ -2467,12 +2491,6 @@
     },
     "view_keyboard_shortcuts_34d1be0b": {
         "message": "查看键盘快捷键"
-    },
-    "view_next_week_7f61f755": {
-        "message": "查看下一周"
-    },
-    "view_previous_week_6f83849f": {
-        "message": "查看上一周"
     },
     "view_title_description_67940918": {
         "message": "查看{ title }说明"
@@ -2495,14 +2513,20 @@
     "webcam_fe91b20f": {
         "message": "网络摄像头"
     },
-    "weekly_schedule_navigation_6b042645": {
-        "message": "每周日程规划导航"
+    "webpages_should_only_have_a_single_h1_which_is_aut_dc99189e": {
+        "message": "网页应仅具有一个H1，自动供页面标题使用。内容中的第一个标题应该是H2。"
     },
     "welsh_42ab94b1": {
         "message": "威尔士语"
     },
+    "when_markup_is_used_that_visually_formats_items_as_f941fc1b": {
+        "message": "如果对使用列表格式显示的项目使用标记，但不指示列表关系，用户可能在浏览信息时会遇到困难。"
+    },
     "white_87fa64fd": {
         "message": "白色"
+    },
+    "why_523b3d8c": {
+        "message": "原因"
     },
     "width_492fec76": {
         "message": "宽度"
@@ -2516,6 +2540,12 @@
     "wiki_home_9cd54d0": {
         "message": "维基主页"
     },
+    "word_count_c77fe3a6": {
+        "message": "字数统计"
+    },
+    "words_b448b7d5": {
+        "message": "字"
+    },
     "wreath_product_200b38ef": {
         "message": "圈积"
     },
@@ -2525,29 +2555,20 @@
     "yes_dde87d5": {
         "message": "是"
     },
-    "yesterday_at_date_1aa6d18e": {
-        "message": "昨天 { date }"
-    },
-    "yesterday_c6bd6abf": {
-        "message": "昨天"
-    },
     "yiddish_f96986df": {
         "message": "意第绪语"
     },
-    "you_have_media_feedback_f5f9aba8": {
-        "message": "您有媒体反馈。"
+    "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
+        "message": "您可以通过上传新的字幕文件进行替换。"
     },
     "you_have_unsaved_changes_in_the_icon_maker_tray_do_e8cf5f1b": {
         "message": "“图标编辑器”托盘中有未保存的更改。是否要继续操作而不保存这些更改？"
     },
+    "you_may_need_to_adjust_additional_headings_to_main_975f0eee": {
+        "message": "您可能需要调整其他标题以保持页面层次结构。"
+    },
     "you_may_not_upload_an_empty_file_11c31eb2": {
         "message": "无法上传空文件。"
-    },
-    "you_must_provide_a_date_and_time_a86839d2": {
-        "message": "须提供日期和时间。"
-    },
-    "you_ve_scrolled_back_to_your_very_first_to_do_29374681": {
-        "message": "您已经往回滚动到第一个待办事项！"
     },
     "your_image_has_been_compressed_for_icon_maker_imag_2e45cd91": {
         "message": "您的图像已被压缩以用于 Icon Maker。小于 { size } KB 的图像将不会被压缩。"

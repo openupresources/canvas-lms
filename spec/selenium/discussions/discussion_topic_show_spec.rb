@@ -60,7 +60,7 @@ describe "Discussion Topic Show" do
         discussion_type: "threaded",
         posted_at: "2017-07-09 16:32:34",
         user: @teacher,
-        assignment: assignment
+        assignment:
       )
 
       rubric = rubric_model({ context: @course })
@@ -81,8 +81,7 @@ describe "Discussion Topic Show" do
       expect(f("input[placeholder='Search entries or author...']")).to be_present
       expect(fj("span:contains('Jul 9, 2017')")).to be_present
       expect(fj("span[data-testid='author_name']:contains('teacher')")).to be_present
-      expect(f("span[data-testid='pill-Author']")).to be_present
-      expect(f("span[data-testid='pill-Teacher']")).to be_present
+      expect(ff("ul[data-testid='pill-container'] li").collect(&:text)).to eq ["AUTHOR", "TEACHER"]
       f("button[data-testid='discussion-post-menu-trigger']").click
       expect(fj("span:contains('Mark All as Read')")).to be_present
       expect(fj("span:contains('Edit')")).to be_present
@@ -109,7 +108,7 @@ describe "Discussion Topic Show" do
 
       gc = @course.account.group_categories.create(name: "Group Category")
       group = group_model(name: "Group", group_category: gc, context: @course.account)
-      group_membership_model(group: group, user: @teacher)
+      group_membership_model(group:, user: @teacher)
       topic = discussion_topic_model(context: group)
 
       get "/groups/#{group.id}/discussion_topics/#{topic.id}"
@@ -135,53 +134,6 @@ describe "Discussion Topic Show" do
       expect(f("a[aria-label='Previous Module Item']")).to be_present
     end
 
-    context "isolated view" do
-      before :once do
-        Account.site_admin.enable_feature!(:isolated_view)
-      end
-
-      it "loads older replies" do
-        parent_reply = @topic.discussion_entries.create!(
-          user: @teacher, message: "I am the parent entry"
-        )
-        (1..6).each do |number|
-          @topic.discussion_entries.create!(
-            user: @teacher,
-            message: "child reply number #{number}",
-            parent_entry: parent_reply
-          )
-        end
-
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-        fj("button:contains('6 Replies')").click
-        wait_for_ajaximations
-        fj("button:contains('Show older replies')").click
-        wait_for_ajaximations
-        expect(fj("span:contains('child reply number 1')")).to be_present
-      end
-
-      it "can mention users in the reply" do
-        student_in_course(course: @course, name: "Jeff", active_all: true).user
-        student_in_course(course: @course, name: "Jefferson", active_all: true).user
-        student_in_course(course: @course, name: "Jeffrey", active_all: true).user
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-        f("button[data-testid='discussion-topic-reply']").click
-        wait_for_ajaximations
-        %w[Jeff Jefferson Jeffrey].each do |name|
-          type_in_tiny "textarea", "@"
-          wait_for_ajaximations
-          fj("li:contains('#{name}')").click
-        end
-        wait_for_ajaximations
-        driver.action.send_keys("HI!").perform
-        wait_for_ajaximations
-        fj("button:contains('Reply')").click
-        wait_for_ajaximations
-        expect(fj("p:contains('@Jeff@Jefferson@JeffreyHI!')")).to be_present
-        expect(ff(".user_content p").count).to eq 1
-      end
-    end
-
     it "open Find Outcome dialog when adding a rubric" do
       assignment = @course.assignments.create!(
         name: "Assignment",
@@ -193,7 +145,7 @@ describe "Discussion Topic Show" do
         discussion_type: "threaded",
         posted_at: "2017-07-09 16:32:34",
         user: @teacher,
-        assignment: assignment
+        assignment:
       )
 
       get "/courses/#{@course.id}/discussion_topics/#{dt.id}"
@@ -209,7 +161,7 @@ describe "Discussion Topic Show" do
     it "Able to reply to a group discussion" do
       gc = @course.account.group_categories.create(name: "Group Category")
       group = group_model(name: "Group", group_category: gc, context: @course.account)
-      group_membership_model(group: group, user: @teacher)
+      group_membership_model(group:, user: @teacher)
       topic = discussion_topic_model(context: group, type: "Announcement")
 
       get "/groups/#{group.id}/discussion_topics/#{topic.id}"

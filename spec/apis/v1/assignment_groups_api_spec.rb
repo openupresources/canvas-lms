@@ -107,8 +107,10 @@ describe AssignmentGroupsController, type: :request do
 
     json = api_call(:get,
                     "/api/v1/courses/#{@course.id}/assignment_groups.json",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.id.to_s })
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.id.to_s })
 
     expect(json).to eq [
       {
@@ -145,7 +147,9 @@ describe AssignmentGroupsController, type: :request do
     setup_groups
     setup_four_assignments
 
-    rubric_model(user: @user, context: @course, points_possible: 12,
+    rubric_model(user: @user,
+                 context: @course,
+                 points_possible: 12,
                  data: larger_rubric_data)
 
     @a3.create_rubric_association(rubric: @rubric, purpose: "grading", use_for_grading: true)
@@ -158,8 +162,10 @@ describe AssignmentGroupsController, type: :request do
 
     json = api_call(:get,
                     "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.id.to_s,
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.id.to_s,
                       include: ["assignments"] })
 
     expected = [
@@ -211,14 +217,39 @@ describe AssignmentGroupsController, type: :request do
     assignment = @course.assignments.create!(title: "title", submission_types: "online_url")
     assignment.grade_student(@observed_student, grade: 10, grader: @teacher)
 
-    json = api_call_as_user(@observer, :get,
+    json = api_call_as_user(@observer,
+                            :get,
                             "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=observed_users&include[]=submission",
                             { controller: "assignment_groups",
-                              action: "index", format: "json",
+                              action: "index",
+                              format: "json",
                               course_id: @course.id,
                               include: %w[assignments observed_users submission] })
 
-    expect(json.first["assignments"].first["submission"].map { |s| s["user_id"] }).to eql [@observed_student.id]
+    expect(json.first["assignments"].first["submission"].pluck("user_id")).to eql [@observed_student.id]
+  end
+
+  it "checks to see if submissions are found when a user is both a teacher and an observer" do
+    course_with_observer(active_all: true)
+    @observed_student = create_users(1, return_type: :record).first
+    @course.enroll_student(@observed_student, enrollment_state: "active")
+    @course.enroll_user(@teacher, "ObserverEnrollment", associated_user_id: @observed_student.id, enrollment_state: "active")
+
+    assignment = @course.assignments.create!(title: "title", submission_types: "online_url")
+    assignment.grade_student(@observed_student, grade: 10, grader: @teacher)
+
+    expect(@teacher.enrollments.count).to be 2
+
+    json = api_call_as_user(@teacher,
+                            :get,
+                            "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=observed_users&include[]=submission",
+                            { controller: "assignment_groups",
+                              action: "index",
+                              format: "json",
+                              course_id: @course.id,
+                              include: %w[assignments observed_users submission] })
+
+    expect(json.first["assignments"].first["submission"].length).to be 1
   end
 
   it "optionally includes 'grades_published' for moderated assignments" do
@@ -244,7 +275,7 @@ describe AssignmentGroupsController, type: :request do
       }
     )
 
-    expect(json.first["assignments"].first["grades_published"]).to eq(true)
+    expect(json.first["assignments"].first["grades_published"]).to be(true)
   end
 
   context "exclude response fields" do
@@ -258,8 +289,10 @@ describe AssignmentGroupsController, type: :request do
       json = api_call(:get,
                       "/api/v1/courses/#{@course.id}/assignment_groups.json?" \
                       "include[]=assignments&exclude_response_fields[]=description",
-                      { controller: "assignment_groups", action: "index",
-                        format: "json", course_id: @course.id.to_s,
+                      { controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s,
                         include: ["assignments"],
                         exclude_response_fields: ["description"] })
 
@@ -273,8 +306,10 @@ describe AssignmentGroupsController, type: :request do
       json = api_call(:get,
                       "/api/v1/courses/#{@course.id}/assignment_groups.json?" \
                       "include[]=assignments&exclude_response_fields[]=needs_grading_count",
-                      { controller: "assignment_groups", action: "index",
-                        format: "json", course_id: @course.id.to_s,
+                      { controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s,
                         include: ["assignments"],
                         exclude_response_fields: ["needs_grading_count"] })
 
@@ -301,8 +336,10 @@ describe AssignmentGroupsController, type: :request do
 
       json = api_call(:get,
                       "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
-                      { controller: "assignment_groups", action: "index",
-                        format: "json", course_id: @course.id.to_s,
+                      { controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s,
                         include: ["assignments"] })
 
       json.each do |ag_json|
@@ -316,10 +353,13 @@ describe AssignmentGroupsController, type: :request do
       course_with_designer(course: @course)
       [@a1, @a3].each(&:unpublish)
 
-      json = api_call_as_user(@designer, :get,
+      json = api_call_as_user(@designer,
+                              :get,
                               "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
-                              { controller: "assignment_groups", action: "index",
-                                format: "json", course_id: @course.id.to_s,
+                              { controller: "assignment_groups",
+                                action: "index",
+                                format: "json",
+                                course_id: @course.id.to_s,
                                 include: ["assignments"] })
 
       json.each do |ag_json|
@@ -332,13 +372,56 @@ describe AssignmentGroupsController, type: :request do
       json = api_call(:get,
                       "/api/v1/courses/#{@course.id}/assignment_groups.json",
                       {
-                        controller: "assignment_groups", action: "index",
-                        format: "json", course_id: @course.id.to_s
+                        controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s
                       },
                       include: ["assignments", "assignment_visibility"])
       json.each do |ag|
         expect(ag["assignments"]).to all(have_key("assignment_visibility"))
       end
+    end
+  end
+
+  describe "checkpoints in-place" do
+    before do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+
+      setup_groups
+
+      assignment = @course.assignments.create!(title: "Assignment 1", assignment_group: @group1, has_sub_assignments: true)
+      @c1 = assignment.sub_assignments.create!(context: assignment.context, assignment_group: @group1, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+      @c2 = assignment.sub_assignments.create!(context: assignment.context, assignment_group: @group1, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
+    end
+
+    it "includes checkpoints data on the assignments" do
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups.json",
+                      {
+                        controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s
+                      },
+                      include: %w[assignments checkpoints])
+
+      # @group1 position is 10, @group2 position is 7
+      # So, @group1 should be second in the list
+      assignment_group = json[1]
+      assignment = assignment_group["assignments"].first
+
+      expect(assignment["has_sub_assignments"]).to be_truthy
+      expect(assignment["checkpoints"]).to be_present
+
+      checkpoints = assignment["checkpoints"]
+
+      expect(checkpoints.length).to eq 2
+      expect(checkpoints.pluck("name")).to match_array [@c1.name, @c2.name]
+      expect(checkpoints.pluck("tag")).to match_array [@c1.sub_assignment_tag, @c2.sub_assignment_tag]
+      expect(checkpoints.pluck("points_possible")).to match_array [@c1.points_possible, @c2.points_possible]
+      expect(checkpoints.pluck("due_at")).to match_array [@c1.due_at.iso8601, @c2.due_at.iso8601]
+      expect(checkpoints.pluck("only_visible_to_overrides")).to match_array [@c1.only_visible_to_overrides, @c2.only_visible_to_overrides]
     end
   end
 
@@ -352,8 +435,11 @@ describe AssignmentGroupsController, type: :request do
       let(:api_path) { "/api/v1/courses/#{@course.id}/assignment_groups" }
       let(:api_settings) do
         {
-          controller: "assignment_groups", action: "index", format: "json",
-          course_id: @course.id.to_s, grading_period_id: @gp_future.id.to_s,
+          controller: "assignment_groups",
+          action: "index",
+          format: "json",
+          course_id: @course.id.to_s,
+          grading_period_id: @gp_future.id.to_s,
           include: ["assignments"]
         }
       end
@@ -375,9 +461,13 @@ describe AssignmentGroupsController, type: :request do
         @course.enroll_student(student)
         api_path = "/api/v1/courses/#{@course.id}/assignment_groups/#{@group1.id}"
         api_settings = {
-          controller: "assignment_groups_api", action: "show", format: "json",
-          course_id: @course.id, grading_period_id: @gp_future.id,
-          assignment_group_id: @group1.id, include: ["assignments", "submission"]
+          controller: "assignment_groups_api",
+          action: "show",
+          format: "json",
+          course_id: @course.id,
+          grading_period_id: @gp_future.id,
+          assignment_group_id: @group1.id,
+          include: ["assignments", "submission"]
         }
         @group1_assignment_future.grade_student(student, grade: 10, grader: @teacher)
         @group1_assignment_today.grade_student(student, grade: 8, grader: @teacher)
@@ -397,8 +487,10 @@ describe AssignmentGroupsController, type: :request do
 
       json = api_call(:get,
                       "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments&include[]=module_ids",
-                      { controller: "assignment_groups", action: "index",
-                        format: "json", course_id: @course.id.to_s,
+                      { controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s,
                         include: %w[assignments module_ids] })
 
       @assignment_json = json.first["assignments"].first
@@ -435,8 +527,10 @@ describe AssignmentGroupsController, type: :request do
 
     json = api_call(:get,
                     "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.id.to_s,
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.id.to_s,
                       include: ["assignments"] })
 
     expected = [
@@ -478,8 +572,10 @@ describe AssignmentGroupsController, type: :request do
 
     json = api_call(:get,
                     "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments&include[]=all_dates&include[]=can_edit",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.id.to_s,
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.id.to_s,
                       include: %w[assignments all_dates can_edit] })
 
     expected = [
@@ -512,8 +608,10 @@ describe AssignmentGroupsController, type: :request do
 
     json = api_call(:get,
                     "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.id.to_s,
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.id.to_s,
                       include: ["assignments"] })
 
     group = json.first
@@ -528,9 +626,12 @@ describe AssignmentGroupsController, type: :request do
     @course.assignment_groups.create!(name: "group1", group_weight: 50)
     @course.assignment_groups.create!(name: "group2", group_weight: 50)
 
-    json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups",
-                    { controller: "assignment_groups", action: "index",
-                      format: "json", course_id: @course.to_param })
+    json = api_call(:get,
+                    "/api/v1/courses/#{@course.id}/assignment_groups",
+                    { controller: "assignment_groups",
+                      action: "index",
+                      format: "json",
+                      course_id: @course.to_param })
 
     json.each { |group| expect(group["group_weight"]).to eq 50 }
   end
@@ -541,7 +642,8 @@ describe AssignmentGroupsController, type: :request do
     assignment.description = '<object width="100%" />'
     assignment.save!
 
-    api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
+    api_call(:get,
+             "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
              controller: "assignment_groups",
              action: "index",
              format: "json",
@@ -561,7 +663,8 @@ describe AssignmentGroupsController, type: :request do
     end
     expect(assignment).to be_unpublished
 
-    json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
+    json = api_call(:get,
+                    "/api/v1/courses/#{@course.id}/assignment_groups.json?include[]=assignments",
                     controller: "assignment_groups",
                     action: "index",
                     format: "json",
@@ -603,7 +706,8 @@ describe AssignmentGroupsApiController, type: :request do
     end
 
     it "succeeds" do
-      response = raw_api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{assignment_group.id}",
+      response = raw_api_call(:get,
+                              "/api/v1/courses/#{@course.id}/assignment_groups/#{assignment_group.id}",
                               controller: "assignment_groups_api",
                               action: "show",
                               format: "json",
@@ -636,7 +740,8 @@ describe AssignmentGroupsApiController, type: :request do
       end
 
       it "includes assignments" do
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}?include[]=assignments",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}?include[]=assignments",
                         controller: "assignment_groups_api",
                         action: "show",
                         format: "json",
@@ -657,7 +762,8 @@ describe AssignmentGroupsApiController, type: :request do
                                               submitted_at: Time.zone.now
                                             })
 
-        json = api_call_as_user(@student, :get,
+        json = api_call_as_user(@student,
+                                :get,
                                 "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}?include[]=assignments&include[]=submission",
                                 controller: "assignment_groups_api",
                                 action: "show",
@@ -675,7 +781,8 @@ describe AssignmentGroupsApiController, type: :request do
       @course.enroll_student(User.create!)
       setup_grading_periods
 
-      json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group1.id}?include[]=assignments&grading_period_id=#{@gp_future.id}",
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups/#{@group1.id}?include[]=assignments&grading_period_id=#{@gp_future.id}",
                       controller: "assignment_groups_api",
                       action: "show",
                       format: "json",
@@ -690,7 +797,8 @@ describe AssignmentGroupsApiController, type: :request do
     it "does not return an error when there are grading periods and no grading_period_id is passed in" do
       setup_grading_periods
 
-      api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group1.id}?include[]=assignments",
+      api_call(:get,
+               "/api/v1/courses/#{@course.id}/assignment_groups/#{@group1.id}?include[]=assignments",
                controller: "assignment_groups_api",
                action: "show",
                format: "json",
@@ -703,7 +811,8 @@ describe AssignmentGroupsApiController, type: :request do
 
     it "includes assignment_visibility when requested and with DA on" do
       @course.assignments.create!(title: "test", assignment_group: @group, points_possible: 10)
-      json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}.json",
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}.json",
                       {
                         controller: "assignment_groups_api",
                         action: "show",
@@ -718,7 +827,8 @@ describe AssignmentGroupsApiController, type: :request do
     it "does not include assignment_visibility when requested as a student" do
       student_in_course(active_all: true)
       @course.assignments.create!(title: "test", assignment_group: @group, points_possible: 10)
-      json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}.json",
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}.json",
                       {
                         controller: "assignment_groups_api",
                         action: "show",
@@ -734,7 +844,9 @@ describe AssignmentGroupsApiController, type: :request do
 
     it "returns never_drop rules as strings with Accept header" do
       rules = { "never_drop" => ["1", "2"], "drop_lowest" => 1, "drop_highest" => 1 }
-      json = api_call(:get, "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}", {
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups/#{@group.id}",
+                      {
                         controller: "assignment_groups_api",
                         action: "show",
                         format: "json",
@@ -767,7 +879,9 @@ describe AssignmentGroupsApiController, type: :request do
     end
 
     it "creates an assignment_group" do
-      api_call(:post, "/api/v1/courses/#{@course.id}/assignment_groups", {
+      api_call(:post,
+               "/api/v1/courses/#{@course.id}/assignment_groups",
+               {
                  controller: "assignment_groups_api",
                  action: "create",
                  format: "json",
@@ -784,20 +898,24 @@ describe AssignmentGroupsApiController, type: :request do
       params["integration_data"] = invalid_integration_data
 
       expect do
-        raw_api_call(:post, "/api/v1/courses/#{@course.id}/assignment_groups", {
+        raw_api_call(:post,
+                     "/api/v1/courses/#{@course.id}/assignment_groups",
+                     {
                        controller: "assignment_groups_api",
                        action: "create",
                        format: "json",
                        course_id: @course.id.to_s
                      },
                      params)
-      end.to change(AssignmentGroup, :count).by(0)
+      end.not_to change(AssignmentGroup, :count)
     end
 
     it "responds with a 400 when invalid integration_data is included" do
       params["integration_data"] = invalid_integration_data
 
-      response = raw_api_call(:post, "/api/v1/courses/#{@course.id}/assignment_groups", {
+      response = raw_api_call(:post,
+                              "/api/v1/courses/#{@course.id}/assignment_groups",
+                              {
                                 controller: "assignment_groups_api",
                                 action: "create",
                                 format: "json",
@@ -924,7 +1042,9 @@ describe AssignmentGroupsApiController, type: :request do
       rules = { "never_drop" => ["1", "2"], "drop_lowest" => 1, "drop_highest" => 1 }
       rules_in_db = "drop_lowest:1\ndrop_highest:1\nnever_drop:1\nnever_drop:2\n"
       params = { "rules" => rules }
-      json = api_call(:put, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}", {
+      json = api_call(:put,
+                      "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+                      {
                         controller: "assignment_groups_api",
                         action: "update",
                         format: "json",
@@ -944,7 +1064,8 @@ describe AssignmentGroupsApiController, type: :request do
         lambda do |params, expected_status|
           api_call_as_user(
             @current_user,
-            :put, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+            :put,
+            "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
             {
               controller: "assignment_groups_api",
               action: "update",
@@ -954,7 +1075,7 @@ describe AssignmentGroupsApiController, type: :request do
             },
             params,
             { "Accept" => "application/json+canvas-string-ids" },
-            { expected_status: expected_status }
+            { expected_status: }
           )
         end
       end
@@ -1036,7 +1157,8 @@ describe AssignmentGroupsApiController, type: :request do
     end
 
     it "destroys an assignment group" do
-      api_call(:delete, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+      api_call(:delete,
+               "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
                controller: "assignment_groups_api",
                action: "destroy",
                format: "json",
@@ -1050,7 +1172,8 @@ describe AssignmentGroupsApiController, type: :request do
       a1 = @course.assignments.create!(title: "test1", assignment_group: @assignment_group, points_possible: 10)
       a2 = @course.assignments.create!(title: "test2", assignment_group: @assignment_group, points_possible: 12)
 
-      api_call(:delete, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+      api_call(:delete,
+               "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
                controller: "assignment_groups_api",
                action: "destroy",
                format: "json",
@@ -1071,7 +1194,9 @@ describe AssignmentGroupsApiController, type: :request do
       @course.assignments.create!(title: "test3", assignment_group: @assignment_group, points_possible: 8)
       @course.assignments.create!(title: "test4", assignment_group: @assignment_group, points_possible: 9)
 
-      api_call(:delete, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}", {
+      api_call(:delete,
+               "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+               {
                  controller: "assignment_groups_api",
                  action: "destroy",
                  format: "json",
@@ -1094,7 +1219,8 @@ describe AssignmentGroupsApiController, type: :request do
 
       expect_any_instance_of(Course).to receive(:recompute_student_scores).once
 
-      api_call(:delete, "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
+      api_call(:delete,
+               "/api/v1/courses/#{@course.id}/assignment_groups/#{@assignment_group.id}",
                {
                  controller: "assignment_groups_api",
                  action: "destroy",

@@ -20,6 +20,7 @@ import {fromImageEmbed, fromVideoEmbed} from '../instructure_image/ImageEmbedOpt
 import {isOnlyTextSelected} from '../../contentInsertionUtils'
 import * as url from 'url'
 import formatMessage from '../../../format-message'
+import {isStudioEmbeddedMedia} from './StudioLtiSupportUtils'
 
 const FILE_DOWNLOAD_PATH_REGEX = /^\/(courses\/\d+\/)?files\/\d+\/download$/
 
@@ -35,7 +36,7 @@ export const DISPLAY_AS_EMBED_DISABLED = 'embed-disabled'
 export const DISPLAY_AS_DOWNLOAD_LINK = 'download-link'
 
 export function asImageEmbed($element) {
-  const nodeName = $element.nodeName.toLowerCase()
+  const nodeName = $element?.nodeName.toLowerCase()
   if (nodeName !== 'img') {
     return null
   }
@@ -49,7 +50,7 @@ export function asImageEmbed($element) {
 
 export function asLink($element, editor) {
   let $link = $element
-  if ($link.tagName !== 'A') {
+  if ($link?.tagName !== 'A') {
     // the user may have selected some text that is w/in a link
     // but didn't include the <a>. Let's see if that's true
     $link = editor.dom.getParent($link, 'a[href]')
@@ -101,7 +102,7 @@ export function asLink($element, editor) {
 export function asVideoElement($element) {
   const $videoElem = findMediaPlayerIframe($element)
 
-  if (!isVideoElement($videoElem)) {
+  if (!isVideoElement($videoElem) && !isStudioEmbeddedMedia($videoElem)) {
     return null
   }
 
@@ -218,7 +219,7 @@ export function isImageEmbed($element) {
 function isMediaElement($element, mediaType) {
   // the video is hosted in an iframe, but tinymce
   // wraps it in a span with swizzled attribute names
-  if (!$element?.getAttribute) {
+  if (!$element?.getAttribute || !$element) {
     return false
   }
 
@@ -246,6 +247,8 @@ export function isAudioElement($element) {
 }
 
 export function findMediaPlayerIframe(elem) {
+  if (!elem) return null
+
   if (elem.tagName === 'IFRAME') {
     // we have the iframe
     return elem

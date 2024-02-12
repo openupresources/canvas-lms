@@ -28,8 +28,10 @@ module Types
   class SubmissionHistoryFilterInputType < Types::BaseInputObject
     graphql_name "SubmissionHistoryFilterInput"
 
-    argument :states, [SubmissionStateType], required: false,
-                                             default_value: DEFAULT_SUBMISSION_HISTORY_STATES
+    argument :states,
+             [SubmissionStateType],
+             required: false,
+             default_value: DEFAULT_SUBMISSION_HISTORY_STATES
 
     argument :include_current_submission, Boolean, <<~MD, required: false, default_value: true
       If the most current submission should be included in the submission
@@ -47,10 +49,25 @@ module Types
 
     global_id_field :id
 
+    field :cached_due_date, DateTimeType, null: true
+
+    field :custom_grade_status, String, null: true
+    def custom_grade_status
+      CustomGradeStatus.find(object.custom_grade_status_id).name if object.custom_grade_status_id
+    end
+
     field :read_state, String, null: true
     def read_state
       object.read_state(current_user)
     end
+
+    field :grading_period_id, ID, null: true
+
+    field :student_entered_score, Float, null: true
+
+    field :redo_request, Boolean, null: true
+
+    field :user_id, ID, null: false
 
     field :submission_histories_connection, SubmissionHistoryType.connection_type, null: true do
       argument :filter, SubmissionHistoryFilterInputType, required: false, default_value: {}

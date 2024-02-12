@@ -16,45 +16,63 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {SetState, GetState} from 'zustand'
+import type {SetState, GetState} from 'zustand'
 import uuid from 'uuid'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import type {Filter, FilterPreset, PartialFilterPreset} from '../gradebook.d'
+import type {
+  Filter,
+  FilterPreset,
+  GradebookFilterApiResponse,
+  PartialFilterPreset,
+  SubmissionFilterValue,
+} from '../gradebook.d'
 import {
   compareFilterSetByUpdatedDate,
   deserializeFilter,
   doFiltersMatch,
+  getCustomStatusIdStrings,
   isFilterNotEmpty,
 } from '../Gradebook.utils'
 import GradebookApi from '../apis/GradebookApi'
 import type {GradebookStore} from './index'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 
 const I18n = useI18nScope('gradebook')
 
 export type FiltersState = {
   appliedFilters: Filter[]
   filterPresets: FilterPreset[]
+  stagedFilterPresetName: string
   stagedFilters: Filter[]
   isFiltersLoading: boolean
 
   addFilters: (filters: Filter[]) => void
   applyFilters: (filters: Filter[]) => void
   toggleFilter: (filter: Filter) => void
-  initializeAppliedFilters: (InitialColumnFilterSettings, InitialRowFilterSettings) => void
+  toggleFilterMultiSelect: (filter: Filter) => void
+  initializeAppliedFilters: (
+    initialRowFilterSettings: InitialRowFilterSettings,
+    initialColumnFilterSettings: InitialColumnFilterSettings,
+    customGradeStatuses: GradeStatus[]
+  ) => void
   initializeStagedFilters: () => void
   fetchFilters: () => Promise<void>
-  saveStagedFilter: (filterPreset: PartialFilterPreset) => Promise<void>
-  updateStagedFilterPreset: (filters: Filter[]) => void
-  updateFilterPreset: (filterPreset: FilterPreset) => Promise<void>
+  saveStagedFilter: (filterPreset: PartialFilterPreset) => Promise<boolean>
+  updateFilterPreset: (filterPreset: FilterPreset) => Promise<boolean>
   deleteFilterPreset: (filterPreset: FilterPreset) => Promise<void>
+  validateFilterPreset: (
+    name: string,
+    filters: Filter[],
+    otherFilterPresets: FilterPreset[]
+  ) => boolean
 }
 
 export type InitialColumnFilterSettings = {
   assignment_group_id: null | string
   context_module_id: null | string
   grading_period_id: null | string
-  submissions: null | 'has-submissions' | 'has-ungraded-submissions'
+  submissions: null | SubmissionFilterValue
   start_date: null | string
   end_date: null | string
 }
@@ -68,6 +86,8 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
   appliedFilters: [],
 
   filterPresets: [],
+
+  stagedFilterPresetName: '',
 
   stagedFilters: [],
 
@@ -96,9 +116,27 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
     })
   },
 
+  toggleFilterMultiSelect: (filter: Filter) => {
+    const existingFilter = get().appliedFilters.find(
+      f => f.type === filter.type && f.value === filter.value
+    )
+
+    let appliedFilters = [...get().appliedFilters]
+
+    const excludedMultiselectFilters = ['grading-period', 'student-group']
+    appliedFilters = excludedMultiselectFilters.includes(filter.type ?? '')
+      ? appliedFilters.filter(f => f.type !== filter.type)
+      : appliedFilters.filter(f => !(f.type === filter.type && f.value === filter.value))
+
+    set({
+      appliedFilters: appliedFilters.concat(existingFilter ? [] : [filter]),
+    })
+  },
+
   initializeAppliedFilters: (
     initialRowFilterSettings: InitialRowFilterSettings,
-    initialColumnFilterSettings: InitialColumnFilterSettings
+    initialColumnFilterSettings: InitialColumnFilterSettings,
+    customStatuses: GradeStatus[]
   ) => {
     const appliedFilters: Filter[] = []
 
@@ -131,11 +169,21 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
         created_at: new Date().toISOString(),
       })
     }
-
+    const customStatusIds = getCustomStatusIdStrings(customStatuses)
     if (
-      ['has-ungraded-submissions', 'has-submissions'].includes(
-        initialColumnFilterSettings.submissions || ''
-      )
+      [
+        'has-ungraded-submissions',
+        'has-submissions',
+        'has-no-submissions',
+        'has-unposted-grades',
+        'late',
+        'missing',
+        'resubmitted',
+        'dropped',
+        'excused',
+        'extended',
+        ...customStatusIds,
+      ].includes(initialColumnFilterSettings.submissions || '')
     ) {
       appliedFilters.push({
         id: uuid.v4(),
@@ -190,12 +238,12 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
   initializeStagedFilters: () => {
     const appliedFilters = get().appliedFilters
 
-    const savedFilterAlreadyMatches = get().filterPresets.some(filterPreset =>
+    const savedFiltersAlreadyMatch = get().filterPresets.some(filterPreset =>
       doFiltersMatch(filterPreset.filters, appliedFilters)
     )
 
     set({
-      stagedFilters: !savedFilterAlreadyMatches ? appliedFilters : [],
+      stagedFilters: savedFiltersAlreadyMatch ? [] : appliedFilters,
     })
   },
 
@@ -203,7 +251,7 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
     set({isFiltersLoading: true})
     const path = `/api/v1/courses/${get().courseId}/gradebook_filters`
     return doFetchApi({path})
-      .then(response => {
+      .then((response: {json: GradebookFilterApiResponse[]}) => {
         set({
           filterPresets: response.json.map(deserializeFilter).sort(compareFilterSetByUpdatedDate),
           isFiltersLoading: false,
@@ -216,7 +264,7 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
           isFiltersLoading: false,
           flashMessages: get().flashMessages.concat([
             {
-              key: 'filter-presets-loading-error',
+              key: `filter-presets-loading-error-${Date.now()}`,
               message: I18n.t('There was an error fetching gradebook filters.'),
               variant: 'error',
             },
@@ -225,22 +273,64 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
       })
   },
 
-  updateStagedFilterPreset: (newStagedFilters: Filter[]) => {
-    const appliedFilters = get().appliedFilters.filter(isFilterNotEmpty)
-    const stagedFilters = get().stagedFilters
-    const isFilterApplied = doFiltersMatch(stagedFilters, appliedFilters)
+  validateFilterPreset: (
+    name: string,
+    filters: Filter[],
+    otherFilterPresets: FilterPreset[]
+  ): boolean => {
+    const filtersNotEmpty = filters.filter(isFilterNotEmpty)
 
-    set({
-      stagedFilters: newStagedFilters,
-      appliedFilters: isFilterApplied
-        ? newStagedFilters.filter(isFilterNotEmpty)
-        : get().appliedFilters,
-    })
+    if (!filtersNotEmpty.length) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-no-filters-${Date.now()}`,
+            message: I18n.t('Please select at least one filter.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    // check for duplicate filter preset name
+    if (otherFilterPresets.some(fp => fp.name === name)) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-duplicate-name-${Date.now()}`,
+            message: I18n.t('A filter with that name already exists.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    // check for duplicate filter preset using doFiltersMatch
+    if (otherFilterPresets.some(fp => doFiltersMatch(fp.filters, filtersNotEmpty))) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-duplicate-filters-${Date.now()}`,
+            message: I18n.t('A filter preset with those conditions already exists.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    return true
   },
 
   saveStagedFilter: async (filterPreset: PartialFilterPreset) => {
     const filters = filterPreset.filters.filter(isFilterNotEmpty)
-    if (!filters.length) return
+
+    if (!get().validateFilterPreset(filterPreset.name, filters, get().filterPresets)) {
+      return false
+    }
+
     const originalFilters = get().filterPresets
     const stagedFilter: FilterPreset = {
       id: uuid.v4() as string,
@@ -253,19 +343,21 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
     // optimistic update
     set({
       filterPresets: get().filterPresets.concat([stagedFilter]).sort(compareFilterSetByUpdatedDate),
+      stagedFilterPresetName: '',
       stagedFilters: [],
     })
 
     return GradebookApi.createGradebookFilterPreset(get().courseId, stagedFilter)
-      .then(response => {
+      .then((response: {json: GradebookFilterApiResponse}) => {
         const newFilter = deserializeFilter(response.json)
         set({
-          stagedFilters: [],
           filterPresets: originalFilters.concat([newFilter]).sort(compareFilterSetByUpdatedDate),
         })
+        return true
       })
       .catch(() => {
         set({
+          stagedFilterPresetName: filterPreset.name,
           stagedFilters: filterPreset.filters,
           flashMessages: get().flashMessages.concat([
             {
@@ -275,19 +367,25 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
             },
           ]),
         })
+        return false
       })
   },
 
   updateFilterPreset: async (filterPreset: FilterPreset) => {
-    const originalFilter = get().filterPresets.find(f => f.id === filterPreset.id)
-    const otherFilters = get().filterPresets.filter(f => f.id !== filterPreset.id)
+    const otherFilterPresets = get().filterPresets.filter(f => f.id !== filterPreset.id)
+
+    if (!get().validateFilterPreset(filterPreset.name, filterPreset.filters, otherFilterPresets)) {
+      return false
+    }
+
+    const originalFilterPreset = get().filterPresets.find(f => f.id === filterPreset.id)
     const appliedFilters = get().appliedFilters
 
-    const isFilterApplied = doFiltersMatch(originalFilter?.filters || [], appliedFilters)
+    const isFilterApplied = doFiltersMatch(originalFilterPreset?.filters || [], appliedFilters)
 
     // optimistic update
     set({
-      filterPresets: otherFilters.concat([filterPreset]).sort(compareFilterSetByUpdatedDate),
+      filterPresets: otherFilterPresets.concat([filterPreset]).sort(compareFilterSetByUpdatedDate),
       appliedFilters: isFilterApplied ? filterPreset.filters : appliedFilters,
     })
 
@@ -301,13 +399,14 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
           .sort(compareFilterSetByUpdatedDate),
         appliedFilters: isFilterApplied ? updatedFilter.filters : appliedFilters,
       })
+      return true
     } catch (err) {
       // rewind
-      if (originalFilter) {
+      if (originalFilterPreset) {
         set({
           filterPresets: get()
             .filterPresets.filter(f => f.id !== filterPreset.id)
-            .concat([originalFilter])
+            .concat([originalFilterPreset])
             .sort(compareFilterSetByUpdatedDate),
           appliedFilters,
         })
@@ -322,6 +421,8 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
           },
         ]),
       })
+
+      return false
     }
   },
 

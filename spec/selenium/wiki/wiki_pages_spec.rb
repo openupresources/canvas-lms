@@ -59,7 +59,7 @@ describe "Wiki Pages" do
       f(".pages").click
       expect(driver.current_url).not_to include("/courses/#{@course.id}/pages")
       expect(driver.current_url).to include("/courses/#{@course.id}/wiki")
-      expect(f("div.front-page")).to include_text "FRONT PAGE"
+      expect(f("div.front-page")).to include_text "Front Page"
       get "/courses/#{@course.id}/pages"
       expect(driver.current_url).to include("/courses/#{@course.id}/pages")
       expect(driver.current_url).not_to include("/courses/#{@course.id}/wiki")
@@ -97,7 +97,7 @@ describe "Wiki Pages" do
       expect_flash_message :info
     end
 
-    it "updates with changes made in other window", priority: "1", custom_timeout: 40.seconds do
+    it "updates with changes made in other window", custom_timeout: 40.seconds, priority: "1" do
       @course.wiki_pages.create!(title: "Page1")
       edit_page("this is")
       driver.execute_script("window.open()")
@@ -158,6 +158,17 @@ describe "Wiki Pages" do
       wait_for_ajaximations
       get "/courses/#{@course.id}/pages/deleted"
       expect_flash_message :info
+    end
+
+    it "shows notification once after deleting a page" do
+      page = @course.wiki_pages.create!(title: "hello")
+      get "/courses/#{@course.id}/pages/#{page.url}"
+      f(".page-toolbar .al-trigger").click
+      f(".delete_page").click
+      expect_new_page_load { fj('button:contains("Delete")').click }
+      expect_flash_message :success, 'The page "hello" has been deleted.'
+      get "/courses/#{@course.id}/pages"
+      expect(f("#flash_message_holder").property("innerHTML")).to eq ""
     end
   end
 
@@ -242,7 +253,7 @@ describe "Wiki Pages" do
       @course.save!
 
       title = "foo"
-      @course.wiki_pages.create!(title: title, body: "bar")
+      @course.wiki_pages.create!(title:, body: "bar")
 
       get "/courses/#{@course.id}/pages/#{title}"
       expect(f("#wiki_page_show")).not_to be_nil
@@ -293,7 +304,7 @@ describe "Wiki Pages" do
     it "displays wiki content", priority: "1" do
       @coures = public_course
       title = "foo"
-      public_course.wiki_pages.create!(title: title, body: "bar")
+      public_course.wiki_pages.create!(title:, body: "bar")
 
       get "/courses/#{public_course.id}/wiki/#{title}"
       expect(f(".user_content")).not_to be_nil

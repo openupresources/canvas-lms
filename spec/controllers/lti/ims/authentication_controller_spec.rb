@@ -25,7 +25,7 @@ describe Lti::IMS::AuthenticationController do
 
   let(:developer_key) do
     key = DeveloperKey.create!(
-      redirect_uris: redirect_uris,
+      redirect_uris:,
       account: context.root_account
     )
     enable_developer_key_account_binding!(key)
@@ -37,7 +37,7 @@ describe Lti::IMS::AuthenticationController do
   let(:verifier) { SecureRandom.hex 64 }
   let(:client_id) { developer_key.global_id }
   let(:context) { account_model }
-  let(:login_hint) { Lti::Asset.opaque_identifier_for(user, context: context) }
+  let(:login_hint) { Lti::Asset.opaque_identifier_for(user, context:) }
   let(:nonce) { SecureRandom.uuid }
   let(:prompt) { "none" }
   let(:redirect_uri) { "https://redirect.tool.com?foo=bar" }
@@ -45,16 +45,18 @@ describe Lti::IMS::AuthenticationController do
   let(:response_type) { "id_token" }
   let(:scope) { "openid" }
   let(:state) { SecureRandom.uuid }
+  let(:include_storage_target) { true }
+  let(:lti_message_hint_jwt_params) do
+    {
+      verifier:,
+      canvas_domain: redirect_domain,
+      context_id: context.global_id,
+      context_type: context.class.to_s,
+      include_storage_target:
+    }
+  end
   let(:lti_message_hint) do
-    Canvas::Security.create_jwt(
-      {
-        verifier: verifier,
-        canvas_domain: redirect_domain,
-        context_id: context.global_id,
-        context_type: context.class.to_s
-      },
-      1.year.from_now
-    )
+    Canvas::Security.create_jwt(lti_message_hint_jwt_params, 1.year.from_now)
   end
   let(:params) do
     {
@@ -74,10 +76,11 @@ describe Lti::IMS::AuthenticationController do
   before { user_session(user) }
 
   describe "authorize_redirect" do
-    before { post :authorize_redirect, params: params }
-
     context "when authorization request has no errors" do
-      subject { URI.parse(response.headers["Location"]) }
+      subject do
+        post(:authorize_redirect, params:)
+        URI.parse(response.headers["Location"])
+      end
 
       it "redirects to the domain in the lti_message_hint" do
         expect(subject.host).to eq "redirect.instructure.com"
@@ -91,6 +94,15 @@ describe Lti::IMS::AuthenticationController do
         sent_params = Rack::Utils.parse_nested_query(subject.query)
         expect(sent_params).to eq params
       end
+
+      context "when Lti::LaunchDebugLogger is enabled for the account" do
+        before { Lti::LaunchDebugLogger.enable!(Account.default, 4) }
+        after { Lti::LaunchDebugLogger.disable!(Account.default) }
+
+        it "adds authredir=1" do
+          expect(subject.query).to match(/lti_message_hint.*&authredir=1/)
+        end
+      end
     end
 
     shared_examples_for "lti_message_hint error" do
@@ -102,7 +114,10 @@ describe Lti::IMS::AuthenticationController do
     end
 
     context "when the authorization request has errors" do
-      subject { response }
+      subject do
+        post(:authorize_redirect, params:)
+        response
+      end
 
       context "when the lti_message_hint is not a JWT" do
         let(:lti_message_hint) { "Not a JWT" }
@@ -114,7 +129,7 @@ describe Lti::IMS::AuthenticationController do
         let(:lti_message_hint) do
           Canvas::Security.create_jwt(
             {
-              verifier: verifier,
+              verifier:,
               canvas_domain: redirect_domain
             },
             1.year.ago
@@ -128,7 +143,7 @@ describe Lti::IMS::AuthenticationController do
         let(:lti_message_hint) do
           jws = Canvas::Security.create_jwt(
             {
-              verifier: verifier,
+              verifier:,
               canvas_domain: redirect_domain
             },
             1.year.from_now
@@ -142,7 +157,7 @@ describe Lti::IMS::AuthenticationController do
   end
 
   describe "authorize" do
-    subject { get :authorize, params: params }
+    subject { get :authorize, params: }
 
     shared_examples_for "redirect_uri errors" do
       let(:expected_status) { 400 }
@@ -182,9 +197,90 @@ describe Lti::IMS::AuthenticationController do
       end
     end
 
+    shared_examples_for "logs using the lti launch debug logger" do |min_enabled_level:|
+      let(:extra_expected_debug_log_fields) { {} } # Override in usage if desired
+      let(:extra_debug_trace_fields) { {} } # Override in usage if desired
+
+      let(:lti_message_hint_jwt_params) { super().merge({ debug_trace: "fake debug_trace" }) }
+
+      around do |example|
+        override_dynamic_settings(private: { canvas: { "frontend_data_collection_endpoint" => "fake endpoint" } }) do
+          example.run
+        end
+      end
+
+      context "when log level is less then #{min_enabled_level}" do
+        before do
+          if min_enabled_level > 1
+            Lti::LaunchDebugLogger.enable!(Account.default, min_enabled_level - 1)
+          end
+        end
+
+        after { Lti::LaunchDebugLogger.disable!(Account.default) }
+
+        it "does not log to the front end data collection framework" do
+          expect(Lti::LaunchDebugLogger).to_not receive(:decode_debug_trace)
+          allow(CanvasHttp).to receive(:put).and_call_original
+          subject
+          expect(CanvasHttp).to_not have_received(:put).with(
+            anything,
+            anything,
+            content_type: anything,
+            body: a_string_including("lti_launch_debug_logger")
+          )
+        end
+      end
+
+      context "when log level is at #{min_enabled_level}" do
+        before { Lti::LaunchDebugLogger.enable!(Account.default, min_enabled_level) }
+        after { Lti::LaunchDebugLogger.disable!(Account.default) }
+
+        let(:debug_trace_fields) do
+          {
+            "request_id" => "abc",
+            "cookie_names" => "chocolatechip,peanutbutter"
+          }.merge(extra_debug_trace_fields)
+        end
+
+        it "logs to the front end data collection framework" do
+          expect(Lti::LaunchDebugLogger).to \
+            receive(:decode_debug_trace).with("fake debug_trace").and_return(debug_trace_fields)
+
+          allow(CanvasHttp).to receive(:put).and_call_original
+          subject
+          expect(CanvasHttp).to have_received(:put).at_least(:once).with(
+            "fake endpoint",
+            anything,
+            content_type: "application/json",
+            body: a_string_including("lti_launch_debug_logger")
+          ) do |*_args, body:, **_kwargs|
+            logs = JSON.parse(body)
+            expect(logs).to be_a(Array)
+            expect(logs.length).to eq(1)
+            log = logs.first
+            expect(log["type"]).to eq("lti_launch_debug_logger")
+
+            expect(log["id"]).to match(/\A[0-9a-f-]{16,}\z/)
+            expect(Time.parse(log["time"])).to be_within(60.seconds).of(Time.now)
+            expect(log["state"]).to eq(state)
+            expect(log["host"]).to eq(request.host)
+            expect(log["path"]).to be_present
+            expect(log["user_agent"]).to be_present
+            expect(log["ip"]).to be_present
+            expect(log["session_id"]).to be_present
+
+            expect(log["init_request_id"]).to eq("abc")
+            expect(log["init_cookie_names"]).to eq("chocolatechip,peanutbutter")
+
+            expect(log).to include(extra_expected_debug_log_fields)
+          end
+        end
+      end
+    end
+
     context "when there is a cached LTI 1.3 launch" do
       subject do
-        get :authorize, params: params
+        get :authorize, params:
       end
 
       include_context "lti_1_3_spec_helper"
@@ -234,19 +330,52 @@ describe Lti::IMS::AuthenticationController do
         expect(assigns.dig(:launch_parameters, :state)).to eq state
       end
 
-      it "sends the default lti_storage_target" do
+      it "sends the lti_storage_target" do
         subject
-        expect(assigns.dig(:launch_parameters, :lti_storage_target)).to eq Lti::PlatformStorage::DEFAULT_TARGET
+        expect(assigns.dig(:launch_parameters, :lti_storage_target)).to eq Lti::PlatformStorage::FORWARDING_TARGET
       end
 
-      context "when platform storage flag is enabled" do
+      it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 3 do
+        let(:extra_expected_debug_log_fields) do
+          { "user" => user.global_id }
+        end
+      end
+
+      context "when there is a valid sessionless_source" do
         before do
-          Account.site_admin.enable_feature! :lti_platform_storage
+          allow(Lti::LaunchDebugLogger).to \
+            receive(:decode_debug_trace).with("fake_sessionless_source").and_return({ "a" => "b" })
         end
 
-        it "sends the actual lti_storage_target" do
+        it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 3 do
+          let(:extra_debug_trace_fields) do
+            { "path" => "/assignments/1?sessionless_source=fake_sessionless_source" }
+          end
+
+          let(:extra_expected_debug_log_fields) do
+            { "sessionless_a" => "b" }
+          end
+        end
+      end
+
+      context "when there is an invalid sessionless_source" do
+        let(:params) { super().merge(sessionless_source: "fake_sessionless_source") }
+
+        # it still launches successfully and logs what it can
+        before do
+          allow(Lti::LaunchDebugLogger).to \
+            receive(:decode_debug_trace).with("fake_sessionless_source").and_raise(StandardError)
+        end
+
+        it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 3
+      end
+
+      context "when include_storage_target is false" do
+        let(:include_storage_target) { false }
+
+        it "does not send the lti_storage_target" do
           subject
-          expect(assigns.dig(:launch_parameters, :lti_storage_target)).to eq Lti::PlatformStorage::FORWARDING_TARGET
+          expect(assigns[:launch_parameters].keys).not_to include(:lti_storage_target)
         end
       end
 
@@ -255,7 +384,7 @@ describe Lti::IMS::AuthenticationController do
         let(:redirect_uri) { "https://redirect.tool.com?must_be_present=true&foo=bar" }
 
         before do
-          developer_key.update!(redirect_uris: redirect_uris)
+          developer_key.update!(redirect_uris:)
         end
 
         it "launches succesfully" do
@@ -279,7 +408,7 @@ describe Lti::IMS::AuthenticationController do
         before { remove_user_session }
 
         it_behaves_like "non redirect_uri errors" do
-          subject { get :authorize, params: params }
+          subject { get :authorize, params: }
 
           let(:expected_message) { "Must have an active user session" }
           let(:expected_error) { "login_required" }
@@ -298,6 +427,14 @@ describe Lti::IMS::AuthenticationController do
             expect(id_token.except("nonce")).to eq lti_launch.except("nonce")
           end
         end
+
+        it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 1 do
+          let(:extra_expected_debug_log_fields) do
+            {
+              "oidc_errors" => "login_required"
+            }
+          end
+        end
       end
 
       it_behaves_like "an endpoint which uses parent_frame_context to set the CSP header" do
@@ -305,13 +442,13 @@ describe Lti::IMS::AuthenticationController do
         # already set up above in the parent rspec context
 
         # Make sure user has access in the PFC tool (enrollment in tool's course)
-        let(:enrollment) { course_with_teacher(user: user, active_all: true) }
+        let(:enrollment) { course_with_teacher(user:, active_all: true) }
         let(:pfc_tool_context) { enrollment.course }
 
         let(:lti_message_hint) do
           Canvas::Security.create_jwt(
             {
-              verifier: verifier,
+              verifier:,
               canvas_domain: redirect_domain,
               context_id: context.global_id,
               context_type: context.class.to_s,
@@ -389,6 +526,12 @@ describe Lti::IMS::AuthenticationController do
       it_behaves_like "redirect_uri errors" do
         let(:expected_message) { "Invalid redirect_uri" }
       end
+
+      it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 4 do
+        let(:extra_expected_debug_log_fields) do
+          { "error" => a_string_including("Invalid redirect_uri") }
+        end
+      end
     end
 
     context "when the developer key redirect uri contains a query string" do
@@ -405,6 +548,12 @@ describe Lti::IMS::AuthenticationController do
       it_behaves_like "redirect_uri errors" do
         let(:expected_message) { nil }
         let(:expected_status) { 404 }
+      end
+
+      it_behaves_like "logs using the lti launch debug logger", min_enabled_level: 4 do
+        let(:extra_expected_debug_log_fields) do
+          { "error" => a_string_including("ActiveRecord::RecordNotFound") }
+        end
       end
     end
   end

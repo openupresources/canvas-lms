@@ -18,12 +18,27 @@
  */
 
 import $ from 'jquery'
+import type JQuery from 'jquery'
+// @ts-expect-error
 import postGradesFrameDialog from '../jst/PostGradesFrameDialog.handlebars'
 import iframeAllowances from '@canvas/external-apps/iframeAllowances'
 import 'jqueryui/dialog'
 
+type PostGradesFrameDialogOptions = {
+  returnFocusTo?: HTMLElement | null
+  baseUrl?: string
+}
+
 export default class PostGradesFrameDialog {
-  constructor(options) {
+  returnFocusTo?: HTMLElement
+
+  baseUrl?: string
+
+  $dialog: JQuery
+
+  $iframe
+
+  constructor(options: PostGradesFrameDialogOptions) {
     this.open = this.open.bind(this)
     this.close = this.close.bind(this)
     this.onDialogOpen = this.onDialogOpen.bind(this)
@@ -41,7 +56,6 @@ export default class PostGradesFrameDialog {
     this.$dialog = $(
       postGradesFrameDialog({
         allowances: iframeAllowances(),
-        shouldRenderForwardingIframe: ENV?.FEATURES?.lti_platform_storage,
       })
     )
 
@@ -54,6 +68,12 @@ export default class PostGradesFrameDialog {
       width: 800,
       height: 600,
       dialogClass: 'post-grades-frame-dialog',
+      open() {
+        const titleClose = $(this).parent().find('.ui-dialog-titlebar-close')
+        if (titleClose.length) {
+          titleClose.trigger('focus')
+        }
+      },
     })
 
     // list for focus/blur events
@@ -64,7 +84,7 @@ export default class PostGradesFrameDialog {
         this.$iframe.addClass('info_alert_outline')
         this.$iframe.data('height-with-alert', iframeHeight)
         $(e.target).children('div').first().removeClass('screenreader-only')
-        const alertHeight = $(e.target).outerHeight(true)
+        const alertHeight = $(e.target).outerHeight(true) || 0
         this.$iframe
           .css('height', iframeHeight - alertHeight - 4 + 'px')
           .css('width', iframeWidth - 4 + 'px')

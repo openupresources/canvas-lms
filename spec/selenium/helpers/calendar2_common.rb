@@ -76,14 +76,14 @@ module Calendar2Common
     rrule = "FREQ=DAILY;INTERVAL=1;COUNT=3"
   )
     rr = RRule::Rule.new(rrule, dtstart: start_at, tzid: Time.zone.tzinfo.name)
-    event_attributes = { title: title, rrule: rrule, series_uuid: SecureRandom.uuid }
+    event_attributes = { title:, rrule:, series_uuid: SecureRandom.uuid }
     dtstart_list = rr.all
-
-    dtstart_list.map do |dtstart|
+    dtstart_list.each_with_index do |dtstart, i|
       event_attributes["start_at"] = dtstart.iso8601
       event_attributes["end_at"] = (dtstart + duration).iso8601
       event_attributes["context_code"] = context.asset_string
       event = context.calendar_events.build(event_attributes)
+      event.series_head = true if i == 0
       event.updating_user = @teacher
       event.save!
     end
@@ -134,7 +134,7 @@ module Calendar2Common
       @course.assignments.create!(
         title: "assignment",
         points_possible: 10,
-        due_at: Time.zone.now + 5.minutes,
+        due_at: 5.minutes.from_now,
         submission_types: "online_text_entry",
         only_visible_to_overrides: true
       )
@@ -270,12 +270,13 @@ module Calendar2Common
   end
 
   def test_timed_calendar_event_in_tz(time_zone, start_time = "6:30 AM", end_time = "6:30 PM")
+    puts ">>> TZ #{time_zone}, #{Time.zone}"
     @user.time_zone = time_zone
     @user.save!
     @date = @user.time_zone.now.beginning_of_day
     new_date = @date
     new_date =
-      new_date.to_date.mday == "15" ? new_date.change({ day: 20 }) : new_date.change({ day: 15 })
+      (new_date.to_date.mday == "15") ? new_date.change({ day: 20 }) : new_date.change({ day: 15 })
     create_timed_calendar_event(new_date, start_time, end_time)
     event_title_on_calendar.click
     expect(
@@ -302,11 +303,11 @@ module Calendar2Common
     @date = @user.time_zone.now.beginning_of_day
     new_date = @date
     new_date =
-      new_date.to_date.mday == "15" ? new_date.change({ day: 20 }) : new_date.change({ day: 15 })
+      (new_date.to_date.mday == "15") ? new_date.change({ day: 20 }) : new_date.change({ day: 15 })
     input_timed_calendar_event_fields(new_date, start_time, end_time)
     expect_new_page_load { edit_calendar_event_form_more_options.click }
     expect(more_options_date_field.property("value")).to eq(
-      format_date_for_view(new_date, "%Y-%m-%d")
+      format_date_for_view(new_date, :medium)
     )
     expect(more_options_start_time_field.property("value")).to eq(start_time)
     expect(more_options_end_time_field.property("value")).to eq(end_time)
@@ -354,8 +355,8 @@ module Calendar2Common
       should_add_date: with_date,
       should_add_location: with_location,
       should_duplicate: with_duplicates,
-      date: date,
-      use_current_course_calendar: use_current_course_calendar
+      date:,
+      use_current_course_calendar:
     )
   end
 
@@ -510,6 +511,10 @@ module Calendar2Common
     f("#FindAppointmentButton")
   end
 
+  def appointment_group_tab_button
+    f(".edit_appointment_group_option")
+  end
+
   # return the parent of the <input> since you can't click the input
   def event_series_this_event
     f("[name='which'][value='one']").find_element(xpath: "./..")
@@ -572,15 +577,19 @@ module Calendar2Common
   end
 
   def edit_calendar_event_form_more_options
-    f("a[data-testid='edit-calendar-event-more-options-button']")
+    f("button[data-testid='edit-calendar-event-more-options-button']")
   end
 
   def edit_calendar_event_form_submit_button
     f("button[type='submit']")
   end
 
+  def more_options_title_field
+    f("#calendar_event_title")
+  end
+
   def more_options_date_field
-    f("input[placeHolder='Date']")
+    f("#calendar_event_date")
   end
 
   def more_options_start_time_field
@@ -597,6 +606,10 @@ module Calendar2Common
 
   def more_options_submit_button
     f("button[type='submit']")
+  end
+
+  def more_options_error_box
+    f(".errorBox:not(#error_box_template)")
   end
 
   def event_content
@@ -617,5 +630,27 @@ module Calendar2Common
 
   def calendar_flash_alert_message_button
     f(".flashalert-message button")
+  end
+
+  def context_selector_button
+    f(".select-calendar-container .ag_contexts_selector")
+  end
+
+  def context_checkbox(course_id)
+    f(".ag-contexts input[id='option_course_#{course_id}']")
+  end
+
+  def close_context_selector_button
+    f(".ag_contexts_done")
+  end
+
+  def select_context_in_context_selector(course_id)
+    context_selector_button.click
+    context_checkbox(course_id).click
+    close_context_selector_button.click
+  end
+
+  def allow_observer_signup_checkbox
+    f("#observer-signup-option")
   end
 end

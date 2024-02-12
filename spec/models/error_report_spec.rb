@@ -24,7 +24,7 @@ describe ErrorReport do
       message = "he" +
                 255.chr +
                 "llo"
-      data = { extra: { message: message } }
+      data = { extra: { message: } }
       expect { described_class.log_exception_from_canvas_errors("my error", data) }
         .to_not raise_error
     end
@@ -56,14 +56,25 @@ describe ErrorReport do
 
     it "plugs together with Canvas::Errors::Info to log the user" do
       req = instance_double("request", request_method_symbol: "GET", format: "html")
-      allow(Canvas::Errors::Info).to receive(:useful_http_env_stuff_from_request)
-        .and_return({})
-      allow(Canvas::Errors::Info).to receive(:useful_http_headers).and_return({})
+      allow(Canvas::Errors::Info).to receive_messages(useful_http_env_stuff_from_request: {},
+                                                      useful_http_headers: {})
       user = instance_double("User", global_id: 5)
       err = Exception.new("error")
       info = Canvas::Errors::Info.new(req, Account.default, user, {})
       report = described_class.log_exception_from_canvas_errors(err, info.to_h)
       expect(report.user_id).to eq 5
+    end
+
+    it "doesn't save the error report when we're out of region" do
+      req = instance_double("request", request_method_symbol: "GET", format: "html")
+      allow(Canvas::Errors::Info).to receive_messages(useful_http_env_stuff_from_request: {},
+                                                      useful_http_headers: {})
+      user = instance_double("User", global_id: 5)
+      err = Exception.new("error")
+      info = Canvas::Errors::Info.new(req, Account.default, user, {})
+      expect(Shard.current).to receive(:in_current_region?).and_return(false)
+      report = described_class.log_exception_from_canvas_errors(err, info.to_h)
+      expect(report).to be_nil
     end
   end
 
@@ -102,7 +113,7 @@ describe ErrorReport do
     report.assign_data(Canvas::Errors::Info.useful_http_env_stuff_from_request(req))
     expect(report.data["QUERY_STRING"]).to eq "?access_token=[FILTERED]&pseudonym[password]=[FILTERED]"
 
-    expected_uri = "https://www.instructure.example.com?"\
+    expected_uri = "https://www.instructure.example.com?" \
                    "access_token=[FILTERED]&pseudonym[password]=[FILTERED]"
     expect(report.data["REQUEST_URI"]).to eq(expected_uri)
     expect(report.data["path_parameters"]).to eq({ api_key: "[FILTERED]" }.inspect)
@@ -131,25 +142,25 @@ describe ErrorReport do
     it "allows a 'normal' URL" do
       report = described_class.new
       report.url = "https://canvas.instructure.com/courses/1?enrollment_uuid=abc"
-      expect(report.safe_url?).to eq true
+      expect(report.safe_url?).to be true
     end
 
     it "sanitizes javascript" do
       report = described_class.new
       report.url = "javascript:window.close()"
-      expect(report.safe_url?).to eq false
+      expect(report.safe_url?).to be false
     end
 
     it "sanitizes ftp" do
       report = described_class.new
       report.url = "ftp://badserver.com/somewhere"
-      expect(report.safe_url?).to eq false
+      expect(report.safe_url?).to be false
     end
 
     it "sanitizes something that's not a URI at all" do
       report = described_class.new
       report.url = "<bogus>"
-      expect(report.safe_url?).to eq false
+      expect(report.safe_url?).to be false
     end
   end
 end

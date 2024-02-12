@@ -25,7 +25,7 @@ describe Lti::IMS::ResultsController do
   include_context "advantage services context"
 
   let(:assignment) do
-    opts = { course: course, points_possible: 5 }
+    opts = { course:, points_possible: 5 }
     if tool.present?
       opts[:submission_types] = "external_tool"
       opts[:external_tool_tag_attributes] = {
@@ -38,7 +38,7 @@ describe Lti::IMS::ResultsController do
   end
   let(:context) { course }
   let(:unknown_context_id) { (Course.maximum(:id) || 0) + 1 }
-  let(:json) { JSON.parse(response.body) }
+  let(:json) { response.parsed_body }
   let(:params_overrides) do
     {
       course_id: context_id,
@@ -49,7 +49,7 @@ describe Lti::IMS::ResultsController do
 
   let(:result) do
     lti_result_model(
-      assignment: assignment,
+      assignment:,
       line_item: assignment.line_items.first,
       result_score: 0.5,
       result_maximum: 1
@@ -63,7 +63,7 @@ describe Lti::IMS::ResultsController do
       3.times do
         lti_result_model(
           line_item: result.line_item,
-          assignment: assignment,
+          assignment:,
           result_score: 0.5,
           result_maximum: 1
         )
@@ -86,7 +86,7 @@ describe Lti::IMS::ResultsController do
     context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
       it "uses the Account#domain in the line item id" do
         course.root_account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-        allow_any_instance_of(Account).to receive(:domain).and_return("canonical.host")
+        expect_any_instance_of(Account).to receive(:environment_specific_domain).at_least(:once).and_return("canonical.host")
         send_request
         expect(json.first["id"]).to start_with(
           "http://canonical.host/api/lti/courses/#{course.id}/line_items/"
@@ -97,7 +97,7 @@ describe Lti::IMS::ResultsController do
     context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
       it "uses the host domain in the line item id" do
         course.root_account.disable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-        allow_any_instance_of(Account).to receive(:domain).and_return("canonical.host")
+        allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
         send_request
         expect(json.first["id"]).to start_with(
           "http://test.host/api/lti/courses/#{course.id}/line_items/"
@@ -123,7 +123,7 @@ describe Lti::IMS::ResultsController do
 
         it "returns the user result" do
           send_request
-          expect(json.map { |res| res["userId"] }).to eq [result.user.lti_id]
+          expect(json.pluck("userId")).to eq [result.user.lti_id]
         end
       end
 
@@ -146,7 +146,7 @@ describe Lti::IMS::ResultsController do
       end
 
       context "with user not in course" do
-        let(:params_overrides) { super().merge(user_id: student_in_course(course: course, active_all: true).user.id) }
+        let(:params_overrides) { super().merge(user_id: student_in_course(course:, active_all: true).user.id) }
 
         it "returns empty array" do
           send_request
@@ -155,7 +155,7 @@ describe Lti::IMS::ResultsController do
       end
 
       context "with user not a student" do
-        let(:params_overrides) { super().merge(user_id: ta_in_course(course: course, active_all: true).user.id) }
+        let(:params_overrides) { super().merge(user_id: ta_in_course(course:, active_all: true).user.id) }
 
         it "returns empty array" do
           send_request
@@ -225,7 +225,7 @@ describe Lti::IMS::ResultsController do
     end
 
     context "when result requested not in line_item" do
-      let(:params_overrides) { super().merge(id: result.id, line_item_id: line_item_model(assignment: assignment, with_resource_link: true).id) }
+      let(:params_overrides) { super().merge(id: result.id, line_item_id: line_item_model(assignment:, with_resource_link: true).id) }
 
       it "returns a 404" do
         send_request

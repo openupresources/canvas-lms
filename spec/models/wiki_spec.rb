@@ -29,8 +29,8 @@ describe Wiki do
       @course.default_view = "wiki"
       @wiki.unset_front_page!
 
-      expect(@wiki.has_front_page?).to eq false
-      expect(@wiki.front_page_url).to eq nil
+      expect(@wiki.has_front_page?).to be false
+      expect(@wiki.front_page_url).to be_nil
       expect(@wiki.course.default_view).to eq @wiki.course.default_home_page
     end
   end
@@ -39,9 +39,9 @@ describe Wiki do
     it "sets front_page_url" do
       @wiki.unset_front_page!
       new_url = "ponies4ever"
-      expect(@wiki.set_front_page_url!(new_url)).to eq true
+      expect(@wiki.set_front_page_url!(new_url)).to be true
 
-      expect(@wiki.has_front_page?).to eq true
+      expect(@wiki.has_front_page?).to be true
       expect(@wiki.front_page_url).to eq new_url
     end
   end
@@ -52,7 +52,7 @@ describe Wiki do
       @wiki.set_front_page_url!(new_url)
 
       page = @wiki.front_page
-      expect(page.new_record?).to eq true
+      expect(page.new_record?).to be true
       expect(page.url).to eq new_url
     end
 
@@ -179,6 +179,33 @@ describe Wiki do
 
     it "finds page by ID specifically with page_id:N" do
       expect(@wiki.find_page("page_id:#{@page1.id}")).to eq @page1
+    end
+  end
+
+  context "find_page by lookup" do
+    before :once do
+      Account.site_admin.enable_feature!(:permanent_page_links)
+      @page1 = @course.wiki_pages.create!(title: "Current Page")
+      @lookup1 = @page1.current_lookup
+      @lookup2 = WikiPageLookup.create!(slug: "old-url", wiki_page: @page1, root_account_id: @page1.root_account_id, context_id: @page1.context_id, context_type: @page1.context_type)
+    end
+
+    it "finds page by title" do
+      expect(@wiki.find_page("Current Page")).to eq @page1
+    end
+
+    it "finds page by stale url" do
+      expect(@wiki.find_page("old-url")).to eq @page1
+    end
+
+    it "doesn't include deleted page" do
+      @page1.destroy
+      expect(@wiki.find_page("Current Page")).to be_nil
+    end
+
+    it "can find deleted page if requested" do
+      @page1.destroy
+      expect(@wiki.find_page("Current Page", include_deleted: true)).to eq @page1
     end
   end
 

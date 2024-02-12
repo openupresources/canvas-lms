@@ -17,23 +17,23 @@
  */
 
 import axios from '@canvas/axios'
-import {camelize} from 'convert-case'
+import {camelizeProperties} from '@canvas/convert-case'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {createClient, gql} from '@canvas/apollo'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import type {FinalGradeOverrideMap} from './grading.d'
 
 const I18n = useI18nScope('finalGradeOverrideApi')
-
-export function getFinalGradeOverrides(
-  courseId: string
-): Promise<void | {finalGradeOverrides: FinalGradeOverrideMap}> {
+type FinalGradeOverrideResult = {
+  finalGradeOverrides: FinalGradeOverrideMap
+}
+export function getFinalGradeOverrides(courseId: string): Promise<void | FinalGradeOverrideResult> {
   const url = `/courses/${courseId}/gradebook/final_grade_overrides`
 
   return axios
     .get<{final_grade_overrides: {[studentId: string]: any}}>(url)
     .then(response => {
-      const data = {finalGradeOverrides: {}}
+      const data: FinalGradeOverrideResult = {finalGradeOverrides: {}}
 
       for (const studentId in response.data.final_grade_overrides) {
         const responseOverrides = response.data.final_grade_overrides[studentId]
@@ -46,14 +46,14 @@ export function getFinalGradeOverrides(
         } = (data.finalGradeOverrides[studentId] = {})
 
         if (responseOverrides.course_grade) {
-          studentOverrides.courseGrade = camelize(responseOverrides.course_grade)
+          studentOverrides.courseGrade = camelizeProperties(responseOverrides.course_grade)
         }
 
         if (responseOverrides.grading_period_grades) {
           studentOverrides.gradingPeriodGrades = {}
 
           for (const gradingPeriodId in responseOverrides.grading_period_grades) {
-            studentOverrides.gradingPeriodGrades[gradingPeriodId] = camelize(
+            studentOverrides.gradingPeriodGrades[gradingPeriodId] = camelizeProperties(
               responseOverrides.grading_period_grades[gradingPeriodId]
             )
           }
@@ -71,7 +71,11 @@ export function getFinalGradeOverrides(
     })
 }
 
-export function updateFinalGradeOverride(enrollmentId, gradingPeriodId, grade) {
+export function updateFinalGradeOverride(
+  enrollmentId: string,
+  gradingPeriodId?: string,
+  grade?: {percentage: number}
+): any {
   const gradingPeriodQuery = gradingPeriodId ? `gradingPeriodId: ${gradingPeriodId}` : ''
 
   const mutation = gql`
@@ -82,23 +86,27 @@ export function updateFinalGradeOverride(enrollmentId, gradingPeriodId, grade) {
         overrideScore: ${grade && grade.percentage}
       }) {
         grades {
+          customGradeStatusId
           overrideScore
         }
       }
     }
   `
 
-  return createClient()
-    .mutate({mutation})
-    .then(response => {
-      const {overrideScore} = response.data.setOverrideScore.grades
-      return overrideScore != null ? {percentage: overrideScore} : null
-    })
-    .catch((/* error */) => {
-      showFlashAlert({
-        message: I18n.t('There was a problem overriding the grade.'),
-        type: 'error',
-        err: null,
+  return (
+    createClient()
+      .mutate({mutation})
+      // @ts-expect-error
+      .then(response => {
+        const {overrideScore, customGradeStatusId} = response.data.setOverrideScore.grades
+        return overrideScore != null ? {percentage: overrideScore, customGradeStatusId} : null
       })
-    })
+      .catch((/* error */) => {
+        showFlashAlert({
+          message: I18n.t('There was a problem overriding the grade.'),
+          type: 'error',
+          err: null,
+        })
+      })
+  )
 }

@@ -28,8 +28,7 @@ shared_examples_for "Quiz Submissions API Restricted Endpoints" do
     allow(Quizzes::Quiz).to receive(:lockdown_browser_plugin_enabled?).and_return true
 
     fake_plugin = Object.new
-    allow(fake_plugin).to receive(:authorized?).and_return false
-    allow(fake_plugin).to receive(:base).and_return fake_plugin
+    allow(fake_plugin).to receive_messages(authorized?: false, base: fake_plugin)
 
     allow(subject).to receive(:ldb_plugin).and_return fake_plugin
     allow(Canvas::LockdownBrowser).to receive(:plugin).and_return fake_plugin
@@ -72,7 +71,9 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
 
   def qs_api_index(raw = false, data = {})
     url = "/api/v1/courses/#{@course.id}/quizzes/#{@quiz.id}/submissions.json"
-    params = { controller: "quizzes/quiz_submissions_api", action: "index", format: "json",
+    params = { controller: "quizzes/quiz_submissions_api",
+               action: "index",
+               format: "json",
                course_id: @course.id.to_s,
                quiz_id: @quiz.id.to_s }
     if raw
@@ -206,7 +207,7 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
       json = qs_api_index
       expect(json["quiz_submissions"].size).to eq 1
       # checking for the new field added in JSON response as part of fix CNVS-19664
-      expect(json["quiz_submissions"].first["overdue_and_needs_submission"]).to eq false
+      expect(json["quiz_submissions"].first["overdue_and_needs_submission"]).to be false
     end
 
     it "is accessible by the owner student" do
@@ -237,7 +238,7 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
       expect(json["quiz_submissions"].length).to eq 1
       expect(json["quiz_submissions"].first["started_at"]).to be_truthy
       expect(json["quiz_submissions"].first["workflow_state"]).to eq "untaken"
-      expect(json["quiz_submissions"].first["finished_at"]).to eq nil
+      expect(json["quiz_submissions"].first["finished_at"]).to be_nil
     end
 
     it "shows most recent attemps of quiz to teacher" do
@@ -404,8 +405,10 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
         json = qs_api_show
         expect(json["quiz_submissions"][0]).to have_key("result_url")
         expected_url = course_quiz_history_url(
-          @course, @quiz,
-          quiz_submission_id: @quiz_submission.id, version: @quiz_submission.version_number
+          @course,
+          @quiz,
+          quiz_submission_id: @quiz_submission.id,
+          version: @quiz_submission.version_number
         )
         expect(json["quiz_submissions"][0]["result_url"]).to eq expected_url
 

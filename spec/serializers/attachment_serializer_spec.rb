@@ -20,7 +20,7 @@
 describe AttachmentSerializer do
   subject do
     AttachmentSerializer.new(attachment, {
-                               controller: controller,
+                               controller:,
                                scope: User.new
                              })
   end
@@ -55,8 +55,7 @@ describe AttachmentSerializer do
     }
 
     ActiveModel::FakeController.new(options).tap do |controller|
-      allow(controller).to receive(:session).and_return Object.new
-      allow(controller).to receive(:context).and_return context
+      allow(controller).to receive_messages(session: Object.new, context:)
     end
   end
 
@@ -66,8 +65,20 @@ describe AttachmentSerializer do
 
   it "includes the output of the legacy serializer" do
     expected_keys = %w[
-      id content-type display_name filename url size created_at updated_at
-      unlock_at locked hidden lock_at hidden_for_user thumbnail_url
+      id
+      content-type
+      display_name
+      filename
+      url
+      size
+      created_at
+      updated_at
+      unlock_at
+      locked
+      hidden
+      lock_at
+      hidden_for_user
+      thumbnail_url
     ]
 
     expect(json.keys.map(&:to_s) & expected_keys).to match_array expected_keys

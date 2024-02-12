@@ -44,7 +44,7 @@ describe AdheresToPolicy::InstanceMethods do
   it "is able to check a policy" do
     some_instance = some_class.new
     some_instance.user = 1
-    expect(some_instance.grants_right?(1, :read)).to eq true
+    expect(some_instance.grants_right?(1, :read)).to be true
   end
 
   it "allows multiple forms of can statements" do
@@ -242,7 +242,7 @@ describe AdheresToPolicy::InstanceMethods do
       expect(Rails.cache).to receive(:delete).with(%r{/write$})
 
       sample = sample_class.new
-      expect(sample.grants_right?(1, :read)).to eq true
+      expect(sample.grants_right?(1, :read)).to be true
       sample.clear_permissions_cache(1)
     end
   end
@@ -264,13 +264,46 @@ describe AdheresToPolicy::InstanceMethods do
 
     it "checks the policy" do
       sample = sample_class.new
-      expect(sample.grants_any_right?(1, :read, :write)).to eq true
-      expect(sample.grants_any_right?(1, :asdf)).to eq false
+      expect(sample.grants_any_right?(1, :read, :write)).to be true
+      expect(sample.grants_any_right?(1, :asdf)).to be false
     end
 
     it "returns false if no specific ones are sought" do
       sample = sample_class.new
-      expect(sample.grants_any_right?(1)).to eq false
+      expect(sample.grants_any_right?(1)).to be false
+    end
+
+    context "with justifications" do
+      let(:actor_class) do
+        Class.new do
+          extend AdheresToPolicy::ClassMethods
+
+          set_policy do
+            given { |actor| actor == "allowed actor" || AdheresToPolicy::JustifiedFailure.new(:wrong_actor) }
+            can :read
+
+            given { |actor| actor == "allowed actor" }
+            can :read_more
+          end
+        end
+      end
+
+      it "returns true/false by default" do
+        non_context = actor_class.new
+        expect(non_context.grants_any_right?("allowed actor", :read, :read_more)).to be true
+        expect(non_context.grants_any_right?("disallowed actor", :read, :read_more)).to be false
+      end
+
+      it "returns detailed information if requested and denied" do
+        non_context = actor_class.new
+        expect(non_context.grants_any_right?("allowed actor", :read, :read_more, with_justifications: true).success?).to be true
+        reasoned_failure = non_context.grants_any_right?("disallowed actor", :read, :read_more, with_justifications: true)
+        expect(reasoned_failure.success?).to be false
+        expect(reasoned_failure.justifications.first.justification).to eq(:wrong_actor)
+        reasonless_failure = non_context.grants_any_right?("disallowed actor", :read_more, with_justifications: true)
+        expect(reasonless_failure.success?).to be false
+        expect(reasonless_failure.justifications.length).to eq(0)
+      end
     end
   end
 
@@ -291,14 +324,48 @@ describe AdheresToPolicy::InstanceMethods do
 
     it "checks the policy" do
       sample = sample_class.new
-      expect(sample.grants_all_rights?(1, :read, :write)).to eq false
-      expect(sample.grants_all_rights?(2, :read, :write)).to eq true
-      expect(sample.grants_all_rights?(3, :read, :asdf)).to eq false
+      expect(sample.grants_all_rights?(1, :read, :write)).to be false
+      expect(sample.grants_all_rights?(2, :read, :write)).to be true
+      expect(sample.grants_all_rights?(3, :read, :asdf)).to be false
     end
 
     it "returns false if no specific ones are sought" do
       sample = sample_class.new
-      expect(sample.grants_all_rights?(1)).to eq false
+      expect(sample.grants_all_rights?(1)).to be false
+    end
+
+    context "with justifications" do
+      let(:actor_class) do
+        Class.new do
+          extend AdheresToPolicy::ClassMethods
+
+          set_policy do
+            given { |actor| actor == "allowed actor" || AdheresToPolicy::JustifiedFailure.new(:wrong_actor) }
+            can :read and can :read_more
+
+            given { |actor| actor == "another allowed actor" }
+            can :read
+          end
+        end
+      end
+
+      it "returns true/false by default" do
+        non_context = actor_class.new
+        expect(non_context.grants_all_rights?("allowed actor", :read, :read_more)).to be true
+        expect(non_context.grants_all_rights?("another allowed actor", :read, :read_more)).to be false
+        expect(non_context.grants_all_rights?("disallowed actor", :read, :read_more)).to be false
+      end
+
+      it "returns detailed information if requested and denied" do
+        non_context = actor_class.new
+        expect(non_context.grants_all_rights?("allowed actor", :read, :read_more, with_justifications: true).success?).to be true
+        single_failure = non_context.grants_all_rights?("another allowed actor", :read, :read_more, with_justifications: true)
+        expect(single_failure.success?).to be false
+        expect(single_failure.justifications.first.justification).to eq(:wrong_actor)
+        full_failure = non_context.grants_all_rights?("disallowed actor", :read, :read_more, with_justifications: true)
+        expect(full_failure.success?).to be false
+        expect(full_failure.justifications.first.justification).to eq(:wrong_actor)
+      end
     end
   end
 
@@ -347,24 +414,24 @@ describe AdheresToPolicy::InstanceMethods do
 
     it "checks the policy" do
       non_context = actor_class.new
-      expect(non_context.grants_right?("allowed actor", :read)).to eq true
-      expect(non_context.grants_right?("allowed actor", :asdf)).to eq false
+      expect(non_context.grants_right?("allowed actor", :read)).to be true
+      expect(non_context.grants_right?("allowed actor", :asdf)).to be false
     end
 
     it "returns false if no specific ones are sought" do
       non_context = actor_class.new
-      expect(non_context.grants_right?("allowed actor")).to eq false
+      expect(non_context.grants_right?("allowed actor")).to be false
     end
 
     it "returns false if no user is provided" do
       non_context = actor_class.new
-      expect(non_context.grants_right?("allowed actor", :read)).to eq true
-      expect(non_context.grants_right?(nil, :read)).to eq false
+      expect(non_context.grants_right?("allowed actor", :read)).to be true
+      expect(non_context.grants_right?(nil, :read)).to be false
     end
 
     it "raises argument exception if anything other then one right is provided" do
       non_context = actor_class.new
-      expect(non_context.grants_right?("allowed actor", :read)).to eq true
+      expect(non_context.grants_right?("allowed actor", :read)).to be true
       expect do
         non_context.grants_right?("allowed actor", :asdf, :read)
       end.to raise_exception ArgumentError
@@ -379,7 +446,7 @@ describe AdheresToPolicy::InstanceMethods do
         user = user_class
         actor = actor_class.new
 
-        expect(AdheresToPolicy::Cache).to receive(:fetch).twice.with(/permissions/, an_instance_of(Hash)).and_return([])
+        expect(AdheresToPolicy::Cache).to receive(:fetch).twice.with(/permissions/, an_instance_of(Hash)).and_return([AdheresToPolicy::Failure.instance])
         actor.rights_status(user)
         # cache lookups for "nobody" as well
         actor.rights_status(nil)
@@ -439,7 +506,7 @@ describe AdheresToPolicy::InstanceMethods do
         AdheresToPolicy.configuration.blacklist = [".read"]
         expect(AdheresToPolicy::Cache).to receive(:fetch)
           .with(an_instance_of(String), a_hash_including(use_rails_cache: false))
-          .and_return([])
+          .and_return([AdheresToPolicy::Failure.instance])
         instance.granted_rights(instance)
       end
 
@@ -454,10 +521,10 @@ describe AdheresToPolicy::InstanceMethods do
         instance = klass.new
 
         allow(AdheresToPolicy::Cache).to receive(:write)
-          .with(/read/, true, an_instance_of(Hash))
+          .with(/read/, AdheresToPolicy::Success.instance, an_instance_of(Hash))
 
         expect(AdheresToPolicy::Cache).to receive(:write)
-          .with(/write/, true, an_instance_of(Hash))
+          .with(/write/, AdheresToPolicy::Success.instance, an_instance_of(Hash))
         instance.grants_right?("", :read)
       end
 
@@ -473,10 +540,10 @@ describe AdheresToPolicy::InstanceMethods do
         instance = klass.new
 
         allow(AdheresToPolicy::Cache).to receive(:write)
-          .with(/read/, true, an_instance_of(Hash))
+          .with(/read/, AdheresToPolicy::Success.instance, an_instance_of(Hash))
 
         expect(AdheresToPolicy::Cache).to receive(:write)
-          .with(/write/, true, a_hash_including(use_rails_cache: false))
+          .with(/write/, AdheresToPolicy::Success.instance, a_hash_including(use_rails_cache: false))
         instance.grants_right?("", :read)
       end
 
@@ -520,9 +587,11 @@ describe AdheresToPolicy::InstanceMethods do
           .with(/update/, a_hash_including(use_rails_cache: true))
           .twice
           .and_yield
+          .and_return([AdheresToPolicy::Failure.instance])
         expect(AdheresToPolicy::Cache).to receive(:fetch)
           .with(/create/, a_hash_including(use_rails_cache: false))
           .twice
+          .and_return([AdheresToPolicy::Failure.instance])
         instance.grants_right?("foobar", :update)
         instance.grants_right?("foobar", :update)
       end
@@ -544,8 +613,35 @@ describe AdheresToPolicy::InstanceMethods do
           .with(/create/, a_hash_including(use_rails_cache: false))
           .and_yield
         expect(AdheresToPolicy::Cache).to receive(:write)
-          .with(/update/, true, a_hash_including(use_rails_cache: false))
+          .with(/update/, AdheresToPolicy::Success.instance, a_hash_including(use_rails_cache: false))
         instance.grants_right?("foobar", :create)
+      end
+    end
+
+    context "with justifications" do
+      let(:actor_class) do
+        Class.new do
+          extend AdheresToPolicy::ClassMethods
+
+          set_policy do
+            given { |actor| actor == "allowed actor" || AdheresToPolicy::JustifiedFailure.new(:wrong_actor) }
+            can :read
+          end
+        end
+      end
+
+      it "returns true/false by default" do
+        non_context = actor_class.new
+        expect(non_context.grants_right?("allowed actor", :read)).to be true
+        expect(non_context.grants_right?("disallowed actor", :read)).to be false
+      end
+
+      it "returns detailed information if requested" do
+        non_context = actor_class.new
+        expect(non_context.grants_right?("allowed actor", :read, with_justifications: true).success?).to be true
+        full_failure = non_context.grants_right?("disallowed actor", :read, with_justifications: true)
+        expect(full_failure.success?).to be false
+        expect(full_failure.justifications.first.justification).to eq(:wrong_actor)
       end
     end
   end

@@ -33,7 +33,7 @@ module Canvas
           db: local_cache_conf[:redis_db]
         )
         @debounced_clear = ::Redis::Scripting::Script.new(File.expand_path("debounced_clear.lua", __dir__))
-        super(redis: redis)
+        super(redis:)
       end
 
       # canvas redis is patched to disallow "flush" operations,
@@ -51,20 +51,6 @@ module Canvas
           # debounce key is set and will do nothing
           @debounced_clear.run(redis, ["flush_debounce"], [30])
         end
-      end
-
-      def write_set(hash, ttl: nil)
-        opts = { expires_in: ttl }
-        ms = 1000 * Benchmark.realtime do
-          redis.pipelined do # send more commands before awaiting answer
-            redis.multi do # make everything atomic in here
-              hash.each do |k, v|
-                write(k, v, opts)
-              end
-            end
-          end
-        end
-        Rails.logger.debug("  #{"LOCAL REDIS (%.2fms)" % [ms]}  write_set {#{hash.keys.join(",")}}")
       end
     end
   end

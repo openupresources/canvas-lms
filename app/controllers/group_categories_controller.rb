@@ -119,7 +119,7 @@ class GroupCategoriesController < ApplicationController
     respond_to do |format|
       format.json do
         if authorized_action(@context, @current_user, [:manage_groups, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS])
-          path = send("api_v1_#{@context.class.to_s.downcase}_group_categories_url")
+          path = send(:"api_v1_#{@context.class.to_s.downcase}_group_categories_url")
           paginated_categories = Api.paginate(@categories, self, path)
           includes = ["progress_url"]
           includes.concat(params[:includes]) if params[:includes]
@@ -333,7 +333,7 @@ class GroupCategoriesController < ApplicationController
           if @group_category.root_account.grants_right?(@current_user, :manage_sis)
             @group_category.sis_source_id = sis_id
 
-            DueDateCacher.with_executing_user(@current_user) do
+            SubmissionLifecycleManager.with_executing_user(@current_user) do
               @group_category.save!
             end
           else
@@ -635,7 +635,7 @@ class GroupCategoriesController < ApplicationController
       json = memberships.group_by(&:group_id).map do |group_id, new_members|
         { id: group_id, new_members: new_members.map { |m| m.user.group_member_json(@context) } }
       end
-      render json: json
+      render json:
     else
       @group_category.assign_unassigned_members_in_background(by_section, updating_user: @current_user)
       render json: progress_json(@group_category.current_progress, @current_user, session)
@@ -646,7 +646,7 @@ class GroupCategoriesController < ApplicationController
     args = api_request? ? params : (params[:category] || {})
     @group_category = GroupCategories::ParamsPolicy.new(@group_category, @context).populate_with(args)
 
-    DueDateCacher.with_executing_user(@current_user) do
+    SubmissionLifecycleManager.with_executing_user(@current_user) do
       unless @group_category.save
         render json: @group_category.errors, status: :bad_request
         return false
@@ -663,7 +663,7 @@ class GroupCategoriesController < ApplicationController
         new_group_category.sis_source_id = nil
         new_group_category.name = params[:name]
         begin
-          DueDateCacher.with_executing_user(@current_user) do
+          SubmissionLifecycleManager.with_executing_user(@current_user) do
             new_group_category.save!
             group_category.clone_groups_and_memberships(new_group_category)
           end

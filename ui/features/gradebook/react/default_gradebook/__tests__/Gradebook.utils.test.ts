@@ -22,56 +22,69 @@ import {
   doesSubmissionNeedGrading,
   doFiltersMatch,
   findFilterValuesOfType,
+  filterStudentBySectionFn,
   getAssignmentColumnId,
   getAssignmentGroupColumnId,
   getCustomColumnId,
   getDefaultSettingKeyForColumnType,
   getGradeAsPercent,
   getStudentGradeForColumn,
+  isGradedOrExcusedSubmissionUnposted,
   maxAssignmentCount,
   onGridKeyDown,
   otherGradingPeriodAssignmentIds,
   sectionList,
+  getLabelForFilter,
+  formatGradingPeriodTitleForDisplay,
 } from '../Gradebook.utils'
 import {isDefaultSortOrder, localeSort} from '../Gradebook.sorting'
 import {createGradebook} from './GradebookSpecHelper'
 import {fireEvent, screen, waitFor} from '@testing-library/dom'
-import type {FilterPreset} from '../gradebook.d'
-import type {Submission} from '../../../../../api.d'
+import type {FilterPreset, Filter} from '../gradebook.d'
+import type {SlickGridKeyboardEvent} from '../grid.d'
+import type {Submission, Student, Enrollment, GradingPeriod} from '../../../../../api.d'
+import {enrollment, student, enrollmentFilter, appliedFilters, student2} from './fixtures'
 
 const unsubmittedSubmission: Submission = {
   anonymous_id: 'dNq5T',
   assignment_id: '32',
   attempt: 1,
   cached_due_date: null,
+  custom_grade_status_id: null,
   drop: undefined,
   entered_grade: null,
   entered_score: null,
   excused: false,
-  grade: null,
-  gradeLocked: false,
   grade_matches_current_submission: true,
-  gradingType: 'points',
+  grade: null,
+  graded_at: null,
+  gradeLocked: false,
   grading_period_id: '2',
-  has_postable_comments: false,
+  grading_type: 'points',
+  gradingType: 'points',
   has_originality_report: false,
+  has_postable_comments: false,
   hidden: false,
   id: '160',
-  late: false,
   late_policy_status: null,
+  late: false,
   missing: false,
   points_deducted: null,
   posted_at: null,
+  provisional_grade_id: '3',
   rawGrade: null,
   redo_request: false,
   score: null,
   seconds_late: 0,
   similarityInfo: null,
+  submission_comments: [],
   submission_type: 'online_text_entry',
   submitted_at: new Date(),
   url: null,
   user_id: '28',
+  word_count: null,
   workflow_state: 'unsubmitted',
+  updated_at: new Date().toString(),
 }
 
 const ungradedSubmission: Submission = {
@@ -102,6 +115,11 @@ const gradedSubmission: Submission = {
   rawGrade: '5',
   score: 5,
   workflow_state: 'graded',
+}
+
+const gradedPostedSubmission: Submission = {
+  ...gradedSubmission,
+  posted_at: new Date(),
 }
 
 describe('getGradeAsPercent', () => {
@@ -142,8 +160,8 @@ describe('getStudentGradeForColumn', () => {
 })
 
 describe('onGridKeyDown', () => {
-  let grid
-  let columns
+  let grid: any
+  let columns: any
 
   beforeEach(() => {
     columns = [
@@ -158,37 +176,40 @@ describe('onGridKeyDown', () => {
   })
 
   it('skips SlickGrid default behavior when pressing "enter" on a "student" cell', () => {
-    const event = {which: 13, originalEvent: {skipSlickGridDefaults: undefined}}
+    const event = {
+      which: 13,
+      originalEvent: {skipSlickGridDefaults: undefined},
+    } as any
     onGridKeyDown(event, {grid, cell: 0, row: 0}) // 0 is the index of the 'student' column
     expect(event.originalEvent.skipSlickGridDefaults).toStrictEqual(true)
   })
 
   it('does not skip SlickGrid default behavior when pressing other keys on a "student" cell', function () {
-    const event = {which: 27, originalEvent: {}}
+    const event = {which: 27, originalEvent: {}} as SlickGridKeyboardEvent
     onGridKeyDown(event, {grid, cell: 0, row: 0}) // 0 is the index of the 'student' column
     // skipSlickGridDefaults is not applied
     expect('skipSlickGridDefaults' in event.originalEvent).toBeFalsy()
   })
 
   it('does not skip SlickGrid default behavior when pressing "enter" on other cells', function () {
-    const event = {which: 27, originalEvent: {}}
+    const event = {which: 27, originalEvent: {}} as SlickGridKeyboardEvent
     onGridKeyDown(event, {grid, cell: 1, row: 0}) // 1 is the index of the 'assignment' column
     // skipSlickGridDefaults is not applied
     expect('skipSlickGridDefaults' in event.originalEvent).toBeFalsy()
   })
 
   it('does not skip SlickGrid default behavior when pressing "enter" off the grid', function () {
-    const event = {which: 27, originalEvent: {}}
-    onGridKeyDown(event, {grid, cell: undefined, row: undefined})
+    const event = {which: 27, originalEvent: {}} as SlickGridKeyboardEvent
+    onGridKeyDown(event, {grid, cell: null, row: null})
     // skipSlickGridDefaults is not applied
     expect('skipSlickGridDefaults' in event.originalEvent).toBeFalsy()
   })
 })
 
 describe('confirmViewUngradedAsZero', () => {
-  let onAccepted
+  let onAccepted: () => void
 
-  const confirm = currentValue => {
+  const confirm = (currentValue: boolean) => {
     document.body.innerHTML = '<div id="confirmation_dialog_holder" />'
     confirmViewUngradedAsZero({currentValue, onAccepted})
   }
@@ -294,7 +315,7 @@ describe('getDefaultSettingKeyForColumnType', () => {
     const value = 0
     gradebook.gridData.rows[0].someProperty = value
     gradebook.gridData.rows[1].someProperty = value
-    const sortFn = row => row.someProperty
+    const sortFn = (row: any) => row.someProperty
     gradebook.sortRowsWithFunction(sortFn)
     const [firstRow, secondRow] = gradebook.gridData.rows
 
@@ -496,5 +517,271 @@ describe('otherGradingPeriodAssignmentIds', () => {
       otherGradingPeriodIds: ['2'],
       otherAssignmentIds: ['3', '4', '5', '6', '7', '8', '9', '10'],
     })
+  })
+})
+
+describe('isGradedOrExcusedSubmissionUnposted', () => {
+  it('returns true if submission is graded or excused but not posted', () => {
+    expect(isGradedOrExcusedSubmissionUnposted(gradedSubmission)).toStrictEqual(true)
+  })
+
+  it('returns false if submission is graded or excused and posted', () => {
+    expect(isGradedOrExcusedSubmissionUnposted(gradedPostedSubmission)).toStrictEqual(false)
+  })
+
+  it('returns false if submission is ungraded', () => {
+    expect(isGradedOrExcusedSubmissionUnposted(ungradedSubmission)).toStrictEqual(false)
+  })
+})
+
+describe('filterStudentBySectionFn', () => {
+  describe('section filtering', () => {
+    let modifiedStudents: Student[]
+    const enrollmentFilterTest = {...enrollmentFilter}
+    const appliedFilterTest = [...appliedFilters]
+    beforeEach(() => {
+      const enrollment1: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section1',
+        enrollment_state: 'active',
+      }
+      const enrollment2: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section1',
+        enrollment_state: 'active',
+      }
+      const enrollment3: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section2',
+        enrollment_state: 'active',
+      }
+      const modifiedStudent1: Student = {...student, name: 'Jim Doe', enrollments: [enrollment1]}
+      const modifiedStudent2: Student = {
+        ...student,
+        name: 'Bob Jim',
+        enrollments: [enrollment2, enrollment3],
+      }
+      modifiedStudents = [modifiedStudent1, modifiedStudent2]
+    })
+    it('students appear in the correct sections when switching between filters', () => {
+      appliedFilterTest[0].value = 'section1'
+      const filteredStudentsSection1 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection1.length).toBe(2)
+      appliedFilterTest[0].value = 'section2'
+      const filteredStudentsSection2 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection2[0].name).toBe('Bob Jim')
+    })
+  })
+
+  describe('enrollment filters', () => {
+    let modifiedStudents: Student[]
+    const enrollmentFilterTest = {...enrollmentFilter}
+    const appliedFilterTest = [...appliedFilters]
+    beforeEach(() => {
+      const enrollment1: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section1',
+        enrollment_state: 'completed',
+      }
+      const enrollment2: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section1',
+        enrollment_state: 'inactive',
+      }
+      const modifiedStudent1: Student = {...student, name: 'Jim Doe', enrollments: [enrollment1]}
+      const modifiedStudent2: Student = {...student, name: 'Bob Jim', enrollments: [enrollment2]}
+      modifiedStudents = [modifiedStudent1, modifiedStudent2]
+    })
+    it('student appears in section 1 with a completed enrollment when the concluded enrollment filter is on ', () => {
+      enrollmentFilterTest.concluded = true
+      appliedFilterTest[0].value = 'section1'
+      const filteredStudentsSection1 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection1.length).toBe(1)
+      expect(filteredStudentsSection1[0].name).toBe('Jim Doe')
+    })
+    it('student appears in section 1 with a inactive enrollment when the inactive enrollment filter is on ', () => {
+      enrollmentFilterTest.inactive = true
+      enrollmentFilterTest.concluded = false
+      appliedFilterTest[0].value = 'section1'
+      const filteredStudentsSection1 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection1.length).toBe(1)
+      expect(filteredStudentsSection1[0].name).toBe('Bob Jim')
+    })
+    it('both students appear in section 1 when concluded and inactive enrollment filters are both on ', () => {
+      enrollmentFilterTest.inactive = true
+      enrollmentFilterTest.concluded = true
+      appliedFilterTest[0].value = 'section1'
+      const filteredStudentsSection1 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection1.length).toBe(2)
+    })
+  })
+
+  describe('dual enrollment', () => {
+    const enrollmentFilterTest = {...enrollmentFilter}
+    const appliedFilterTest = [...appliedFilters]
+    let modifiedStudents: Student[]
+    const enrollment3: Enrollment = {
+      ...enrollment,
+      course_section_id: 'section2',
+      enrollment_state: 'active',
+    }
+    const modifiedStudent2: Student = {...student2, enrollments: [enrollment3]}
+    beforeEach(() => {
+      const enrollment1: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section1',
+        enrollment_state: 'active',
+      }
+      const enrollment2: Enrollment = {
+        ...enrollment,
+        course_section_id: 'section2',
+        enrollment_state: 'completed',
+      }
+      const modifiedStudent: Student = {...student, enrollments: [enrollment1, enrollment2]}
+      modifiedStudents = [modifiedStudent]
+    })
+    it('dual enrollment student appears in section 1 with an active enrollment ', () => {
+      appliedFilterTest[0].value = 'section1'
+      const filteredStudentsSection1 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilterTest, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection1[0].name).toBe('Jim Doe')
+    })
+
+    it('dual enrollment student does not appear section 2 with a concluded enrollment ', () => {
+      appliedFilterTest[0].value = 'section2'
+      const filteredStudentsSection2 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilterTest, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection2.length).toBe(0)
+    })
+
+    it('dual enrollment student appears in section 2 with a concluded enrollment when the concluded enrollment filter is on ', () => {
+      enrollmentFilterTest.concluded = true
+      appliedFilterTest[0].value = 'section2'
+      const filteredStudentsSection2 = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilterTest, enrollmentFilterTest)
+      )
+      expect(filteredStudentsSection2[0].name).toBe('Jim Doe')
+    })
+
+    it('filteredStudents include all students when appliedFilters includes multiple sections when multiselect_gradebook_filters_enabled is true', () => {
+      modifiedStudents.push(modifiedStudent2)
+      ENV.GRADEBOOK_OPTIONS = {multiselect_gradebook_filters_enabled: true}
+      const appliedFilters: Filter[] = [
+        {
+          id: '1',
+          type: 'section',
+          created_at: '',
+          value: 'section1',
+        },
+        {
+          id: '1',
+          type: 'section',
+          created_at: '',
+          value: 'section2',
+        },
+      ]
+      const filteredStudents = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudents.length).toBe(2)
+    })
+
+    it('filteredStudents does not include all students when appliedFilters includes multiple sections when multiselect_gradebook_filters_enabled is false', () => {
+      modifiedStudents.push(modifiedStudent2)
+      ENV.GRADEBOOK_OPTIONS = {multiselect_gradebook_filters_enabled: false}
+      const appliedFilters: Filter[] = [
+        {
+          id: '1',
+          type: 'section',
+          created_at: '',
+          value: 'section1',
+        },
+        {
+          id: '1',
+          type: 'section',
+          created_at: '',
+          value: 'section2',
+        },
+      ]
+      const filteredStudents = modifiedStudents.filter(
+        filterStudentBySectionFn(appliedFilters, enrollmentFilterTest)
+      )
+      expect(filteredStudents.length).toBe(1)
+    })
+  })
+
+  describe('filter start and end date pill display', () => {
+    ENV.TIMEZONE = 'Asia/Tokyo'
+
+    const startFilter: Filter = {
+      id: '1',
+      type: 'start-date',
+      created_at: '',
+      value: '2023-12-13T16:00:00.000Z',
+    }
+
+    const endFilter: Filter = {
+      id: '1',
+      type: 'end-date',
+      created_at: '',
+      value: '2023-12-15T16:00:00.000Z',
+    }
+
+    it('takes the UTC filter start-date and converts it to user local time for filter pill display', () => {
+      const result = getLabelForFilter(startFilter, [], [], [], [], {}, [])
+      expect(result).toEqual('Start Date 12/14/2023')
+    })
+
+    it('takes the UTC filter end-date and converts it to user local time for filter pill display', () => {
+      const result = getLabelForFilter(endFilter, [], [], [], [], {}, [])
+      expect(result).toEqual('End Date 12/16/2023')
+    })
+  })
+})
+
+describe('formatGradingPeriodTitleForDisplay', () => {
+  ENV.GRADEBOOK_OPTIONS = {grading_periods_filter_dates_enabled: true}
+  const gp: GradingPeriod = {
+    id: '1',
+    title: 'GP1',
+    startDate: new Date('2021-01-01'),
+    endDate: new Date('2021-01-31'),
+    closeDate: new Date('2021-02-01'),
+  }
+
+  it('returns null if handed a null grading period', () => {
+    const result = formatGradingPeriodTitleForDisplay(null)
+    expect(result).toBeNull()
+  })
+
+  it('returns null if handed an undefined grading period', () => {
+    const result = formatGradingPeriodTitleForDisplay(undefined)
+    expect(result).toBeNull()
+  })
+
+  // TODO: remove "with the feature flag" from the test description when the feature flag is removed
+  it('returns the grading period title with the start, end, and close dates with the feature flag', () => {
+    ENV.GRADEBOOK_OPTIONS = {grading_periods_filter_dates_enabled: true}
+    const result = formatGradingPeriodTitleForDisplay(gp)
+    expect(result).toEqual('GP1: 1/1/21 - 1/31/21 | 2/1/21')
+  })
+
+  // TODO: remove this test when we remove the feature flag
+  it('returns only the grading period title without the feature flag', () => {
+    ENV.GRADEBOOK_OPTIONS = {grading_periods_filter_dates_enabled: false}
+    const result = formatGradingPeriodTitleForDisplay(gp)
+    expect(result).toEqual('GP1')
   })
 })

@@ -31,7 +31,8 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
         "tool_profiles" => [{ "title" => "a1", "migration_id" => "a1" }],
         "outcomes" => [{ "title" => "a1", "migration_id" => "a1" }],
         "file_map" => { "oi" => { "title" => "a1", "migration_id" => "a1" } },
-        "assignments" => [{ "title" => "a1", "migration_id" => "a1" }, { "title" => "a2", "migration_id" => "a2", "assignment_group_migration_id" => "a1" }],
+        "assignments" => [{ "title" => "a1", "migration_id" => "a1" },
+                          { "title" => "a2", "migration_id" => "a2", "assignment_group_migration_id" => "a1" }],
         "assignment_groups" => [{ "title" => "a1", "migration_id" => "a1" }],
         "calendar_events" => [],
         "course" => {
@@ -41,14 +42,16 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
         }
       }
       @migration = double
-      allow(@migration).to receive(:migration_type).and_return("common_cartridge_importer")
-      allow(@migration).to receive(:overview_attachment).and_return(@migration)
-      allow(@migration).to receive(:open).and_return(@migration)
-      allow(@migration).to receive(:shard).and_return("1")
-      allow(@migration).to receive(:cache_key).and_return("1")
+      allow(@migration).to receive_messages(
+        migration_type: "common_cartridge_importer",
+        overview_attachment: @migration,
+        open: @migration,
+        shard: "1",
+        cache_key: "1",
+        read: @overview.to_json,
+        context: course_model
+      )
       allow(@migration).to receive(:close)
-      allow(@migration).to receive(:read).and_return(@overview.to_json)
-      allow(@migration).to receive(:context).and_return(course_model)
       @formatter = Canvas::Migration::Helpers::SelectiveContentFormatter.new(@migration, "https://example.com", global_identifiers: true)
     end
 
@@ -119,7 +122,10 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
 
     it "groups assignments into assignment groups" do
       expect(@formatter.get_content_list("assignments")).to eq [
-        { :type => "assignment_groups", :property => "copy[assignment_groups][id_a1]", :title => "a1", :migration_id => "a1",
+        { :type => "assignment_groups",
+          :property => "copy[assignment_groups][id_a1]",
+          :title => "a1",
+          :migration_id => "a1",
           "sub_items" => [{ type: "assignments", property: "copy[assignments][id_a2]", title: "a2", migration_id: "a2" }] },
         { type: "assignments", property: "copy[assignments][id_a1]", title: "a1", migration_id: "a1" }
       ]
@@ -242,10 +248,10 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
       @group = Group.create!(name: "group1", group_category: @category, context: @course)
       @announcement = announcement_model
       @migration = double
-      allow(@migration).to receive(:migration_type).and_return("course_copy_importer")
-      allow(@migration).to receive(:source_course).and_return(@course)
       export = @course.content_exports.create!(export_type: ContentExport::COURSE_COPY)
-      allow(@migration).to receive(:content_export).and_return(export)
+      allow(@migration).to receive_messages(migration_type: "course_copy_importer",
+                                            source_course: @course,
+                                            content_export: export)
       @course_outcome = outcome_model(title: "zebra")
       @account_outcome = outcome_model(outcome_context: @course.account, title: "alpaca")
       @out_group1 = outcome_group_model(title: "striker")
@@ -262,9 +268,20 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
       expect(formatter.get_content_list("announcements").length).to eq 1
     end
 
+    it "lists blueprint_settings when appropriate" do
+      allow(@migration).to receive_messages(user: account_admin_user, context: course_model)
+      allow(MasterCourses::MasterTemplate).to receive(:is_master_course?).and_return(true)
+      expect(formatter.get_content_list).to include({
+                                                      property: "copy[all_blueprint_settings]",
+                                                      title: "Blueprint Settings",
+                                                      type: "blueprint_settings"
+                                                    })
+    end
+
     context "with selectable_outcomes_in_course_copy disabled" do
       before do
         @course.root_account.disable_feature!(:selectable_outcomes_in_course_copy)
+        allow(@migration).to receive(:context).and_return(course_model)
       end
 
       it "lists top-level items" do
@@ -288,6 +305,7 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
     context "with selectable_outcomes_in_course_copy enabled" do
       before do
         @course.root_account.enable_feature!(:selectable_outcomes_in_course_copy)
+        allow(@migration).to receive(:context).and_return(course_model)
       end
 
       it "lists top-level items" do
@@ -355,6 +373,8 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
         @course.calendar_events.create!.destroy
         @course.rubrics.create!.destroy
       end
+
+      before { allow(@migration).to receive(:context).and_return(course_model) }
 
       it "ignores in top-level list" do
         expect(formatter.get_content_list).to eq [{ type: "course_settings", property: "copy[all_course_settings]", title: "Course Settings" },

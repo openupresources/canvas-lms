@@ -17,9 +17,9 @@
  */
 import I18n from '@canvas/i18n'
 import $ from 'jquery'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/util/templateData' /* fillTemplateData */
-import 'jqueryui/datepicker'
+import 'jqueryui-unpatched/datepicker'
 import moment from 'moment'
 
 function makeDate(date) {

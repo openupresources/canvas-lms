@@ -28,7 +28,7 @@ class InfoController < ApplicationController
   end
 
   def message_redirect
-    m = AssetSignature.find_by(Message, params[:id])
+    m = AssetSignature.find_by_signature(Message, params[:id])
     if m&.url
       redirect_to m.url
     else
@@ -84,7 +84,7 @@ class InfoController < ApplicationController
       format.json do
         render json:
                                { status: "canvas ok",
-                                 asset_urls: asset_urls,
+                                 asset_urls:,
                                  revision: Canvas.revision,
                                  installation_uuid: Canvas.installation_uuid }
       end
@@ -211,22 +211,23 @@ class InfoController < ApplicationController
     components = HealthChecks.process_readiness_checks(true)
     readiness_response = render_readiness_json(components, true)
 
-    status = readiness_response[:status] == 503 ? readiness_response[:status] : status_code
+    status = (readiness_response[:status] == 503) ? readiness_response[:status] : status_code
 
     response = {
       readiness: components,
-      critical: critical,
-      secondary: secondary,
+      critical:,
+      secondary:,
     }
 
     HealthChecks.send_to_statsd(response, { cluster: Shard.current.database_server_id })
 
     render json: {
-      status: status,
-      readiness: readiness_response,
-      critical: components_to_hash(critical),
-      secondary: components_to_hash(secondary),
-    }, status: status
+             status:,
+             readiness: readiness_response,
+             critical: components_to_hash(critical),
+             secondary: components_to_hash(secondary),
+           },
+           status:
   end
 
   def components_to_hash(components)
@@ -234,7 +235,7 @@ class InfoController < ApplicationController
       status = value[:status] ? 200 : 503
       message = value[:message]
       time = value[:time]
-      { name: name, status: status, message: message, response_time_ms: time }
+      { name:, status:, message:, response_time_ms: time }
     end
   end
 end

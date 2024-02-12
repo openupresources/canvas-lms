@@ -107,8 +107,9 @@ RSpec.describe SubmissionCommentsController do
 
   describe "DELETE 'destroy'" do
     it "deletes the comment" do
-      course_with_teacher_logged_in(active_all: true)
+      course_with_teacher(active_all: true)
       submission_comment_model(author: @user)
+      user_session(@teacher)
       delete "destroy", params: { id: @submission_comment.id }, format: "json"
       expect(response).to be_successful
     end
@@ -137,8 +138,8 @@ RSpec.describe SubmissionCommentsController do
 
       let(:audit_events) do
         AnonymousOrModerationEvent.where(
-          assignment: assignment,
-          submission: submission
+          assignment:,
+          submission:
         ).order(:id)
       end
       let(:last_event) { audit_events.last }
@@ -208,7 +209,7 @@ RSpec.describe SubmissionCommentsController do
         :update,
         params: @test_params.merge(submission_comment: { comment: updated_comment })
       )
-      comment = JSON.parse(response.body).dig("submission_comment", "comment")
+      comment = response.parsed_body.dig("submission_comment", "comment")
       expect(comment).to eq updated_comment
     end
 
@@ -218,20 +219,20 @@ RSpec.describe SubmissionCommentsController do
         :update,
         params: @test_params.merge(submission_comment: { comment: updated_comment })
       )
-      edited_at = JSON.parse(response.body).dig("submission_comment", "edited_at")
+      edited_at = response.parsed_body.dig("submission_comment", "edited_at")
       expect(edited_at).to be_present
     end
 
     it "returns strings for numeric values when passed the json+canvas-string-ids header" do
       request.headers["HTTP_ACCEPT"] = "application/json+canvas-string-ids"
       patch :update, params: @test_params
-      id = JSON.parse(response.body).dig("submission_comment", "id")
+      id = response.parsed_body.dig("submission_comment", "id")
       expect(id).to be_a String
     end
 
     it "does not set the edited_at if the comment is not updated" do
       patch :update, params: @test_params
-      edited_at = JSON.parse(response.body).dig("submission_comment", "edited_at")
+      edited_at = response.parsed_body.dig("submission_comment", "edited_at")
       expect(edited_at).to be_nil
     end
 
@@ -262,8 +263,8 @@ RSpec.describe SubmissionCommentsController do
 
       let(:audit_events) do
         AnonymousOrModerationEvent.where(
-          assignment: assignment,
-          submission: submission
+          assignment:,
+          submission:
         ).order(:id)
       end
       let(:last_event) { audit_events.last }
@@ -273,26 +274,6 @@ RSpec.describe SubmissionCommentsController do
       end
 
       context "when an assignment is auditable" do
-        it "creates an event when a non-draft comment is edited" do
-          expect { patch(:update, params: { id: comment.id, submission_comment: { comment: "update!" } }) }
-            .to change(audit_events, :count).by(1)
-        end
-
-        it "sets the user_id of the event to the editing user" do
-          patch(:update, params: { id: comment.id, submission_comment: { comment: "update!!" } })
-          expect(last_event.user_id).to eq student.id
-        end
-
-        it 'sets the event_type of the event to "submission_comment_updated"' do
-          patch(:update, params: { id: comment.id, submission_comment: { comment: "update!!!" }, format: :json })
-          expect(last_event.event_type).to eq "submission_comment_updated"
-        end
-
-        it "includes the ID of the updated comment in the payload" do
-          patch(:update, params: { id: comment.id, submission_comment: { comment: "update!!!!" } })
-          expect(last_event.payload["id"]).to eq comment.id
-        end
-
         it "does not create an event when a comment is saved as a draft" do
           expect do
             patch(:update, params: { id: draft_comment.id, submission_comment: { comment: "update!!!!!" } })
@@ -312,20 +293,6 @@ RSpec.describe SubmissionCommentsController do
             expect(last_event.payload["comment"]).to eq "this is NO LONGER a draft"
           end
         end
-
-        it "captures changes to the comment field" do
-          new_text = "update!!!!!!"
-          patch(:update, params: { id: comment.id, submission_comment: { comment: new_text }, format: :json })
-
-          expect(last_event.payload["comment"]).to eq ["initial comment", new_text]
-        end
-      end
-
-      it "does not create an event when the assignment is not auditable" do
-        assignment.update!(anonymous_grading: false)
-        expect do
-          patch(:update, params: { id: comment.id, submission_comment: { comment: "update!!!!!!!" } })
-        end.not_to change(audit_events, :count)
       end
     end
   end

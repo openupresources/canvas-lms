@@ -68,9 +68,17 @@ module MasterCourses::Restrictor
       end
 
       def restrict_assignment_columns
-        restrict_columns :settings, %i[assignment_group_id grading_type omit_from_final_grade submission_types
-                                       group_category group_category_id grade_group_students_individually
-                                       peer_reviews moderated_grading peer_reviews_due_at allowed_attempts]
+        restrict_columns :settings, %i[assignment_group_id
+                                       grading_type
+                                       omit_from_final_grade
+                                       submission_types
+                                       group_category
+                                       group_category_id
+                                       grade_group_students_individually
+                                       peer_reviews
+                                       moderated_grading
+                                       peer_reviews_due_at
+                                       allowed_attempts]
         restrict_columns :due_dates, [:due_at]
         restrict_columns :availability_dates, [:lock_at, :unlock_at]
         restrict_columns :points, [:points_possible]
@@ -85,8 +93,15 @@ module MasterCourses::Restrictor
       @skip_downstream_changes = true
     end
 
+    def downstream_changes?(migration, column)
+      migration.for_master_course_import? &&
+        migration.master_course_subscription.content_tag_for(self)&.downstream_changes&.include?(column)
+    end
+
     def check_for_restricted_column_changes
-      return true if @importing_migration || !is_child_content? || !check_restrictions?
+      return true if !check_restrictions? || skip_restrictions?
+
+      return true if is_a?(Lti::LineItem) && !Account.site_admin.feature_enabled?(:blueprint_line_item_support) # hopefully remove when the FF is retired
 
       locked_columns = []
       self.class.base_class.restricted_column_settings.each do |type, columns|
@@ -118,6 +133,10 @@ module MasterCourses::Restrictor
         raise "invalid edit type"
       end
     end
+
+    def skip_restrictions?
+      @importing_migration || @skip_downstream_changes || !is_child_content? # don't mark changes on import
+    end
   end
 
   def check_restrictions?
@@ -125,7 +144,7 @@ module MasterCourses::Restrictor
   end
 
   def mark_downstream_changes(changed_columns = nil)
-    return if @importing_migration || @skip_downstream_changes || !is_child_content? # don't mark changes on import
+    return if skip_restrictions?
 
     changed_columns ||= saved_changes.keys & self.class.base_class.restricted_column_settings.values.flatten
     state_column = is_a?(Attachment) ? "file_state" : "workflow_state"
@@ -210,7 +229,7 @@ module MasterCourses::Restrictor
 
     locked_types = []
     self.class.base_class.restricted_column_settings.each do |type, columns|
-      if !child_content_restrictions[type] && (child_tag.downstream_changes & columns).any?
+      if !child_content_restrictions[type] && child_tag.downstream_changes.intersect?(columns)
         locked_types << type
       end
     end
@@ -246,7 +265,7 @@ module MasterCourses::Restrictor
     if @importing_migration
       @importing_migration.master_course_subscription.master_template.find_preloaded_restriction(migration_id) # for extra speeds on import
     else
-      MasterCourses::MasterContentTag.where(migration_id: migration_id).pluck(:restrictions).first
+      MasterCourses::MasterContentTag.where(migration_id:).pluck(:restrictions).first
     end
   end
 

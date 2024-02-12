@@ -19,7 +19,8 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import '@canvas/keycodes'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery-keycodes'
 import type GridSupport from '../react/default_gradebook/GradebookGrid/GridSupport/index'
 
 type KeyBinding = {
@@ -133,14 +134,17 @@ export default class GradebookKeyboardNav {
     return false
   }
 
-  haveLocation(usePrevActiveLocation: boolean) {
+  haveLocation(usePrevActiveLocation: boolean = false) {
     if (this.gridSupport.state.getActiveLocation().cell != null) {
       return true
     }
     return usePrevActiveLocation && this.prevActiveLocation != null
   }
 
-  preprocessKeydown(handler, usePrevActiveLocation: boolean) {
+  preprocessKeydown(
+    handler: (e: KeyboardEvent) => void,
+    usePrevActiveLocation: boolean = false
+  ): (e: KeyboardEvent) => void {
     return e => {
       if (!this.shouldHandleEvent(e) || !this.haveLocation(usePrevActiveLocation)) {
         return
@@ -210,7 +214,7 @@ export default class GradebookKeyboardNav {
     return header
   }
 
-  sortOnHeader() {
+  sortOnHeader(_event: Event) {
     this.options.toggleDefaultSort(this.currentColumnId())
     const activeLocation = this.gridSupport.state.getActiveLocation()
     if (this.currentColumnType() === 'student' && activeLocation.region === 'body') {
@@ -229,7 +233,7 @@ export default class GradebookKeyboardNav {
     this.getHeaderFromActiveCell().querySelector('.Gradebook__ColumnHeaderAction button')?.click()
   }
 
-  gotoAssignment() {
+  gotoAssignment(_event: Event) {
     if (this.currentColumnType() !== 'assignment') {
       return
     }
@@ -237,7 +241,7 @@ export default class GradebookKeyboardNav {
     window.location = url
   }
 
-  showSubmissionTray() {
+  showSubmissionTray(_event: Event) {
     if (!(this.currentRegion() === 'body' && this.currentColumnType() === 'assignment')) {
       return
     }

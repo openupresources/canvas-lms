@@ -18,7 +18,8 @@
 
 import $ from 'jquery'
 import authenticity_token from '@canvas/authenticity-token'
-import INST from 'browser-sniffer'
+
+if (!('INST' in window)) window.INST = {}
 
 const DONE_READY_STATE = 4
 
@@ -55,7 +56,7 @@ $.ajaxJSON = function (url, submit_type, data = {}, success, error, options) {
       const text = xhr.responseText.replace(/(<([^>]+)>)/gi, '')
       data = {message: text}
       try {
-        data = $.parseJSON(xhr.responseText)
+        data = JSON.parse(xhr.responseText)
       } catch (e) {
         // no-op
       }
@@ -141,7 +142,7 @@ $.ajaxJSON.isUnauthenticated = function (xhr) {
 
   let json_data
   try {
-    json_data = $.parseJSON(xhr.responseText)
+    json_data = JSON.parse(xhr.responseText)
   } catch (e) {
     // no-op
   }

@@ -18,15 +18,15 @@
 
 export const RESPONSE_ACCOUNT_1 = [
   {
-    id: '1',
+    id: 1,
     name: 'University',
     parent_account_id: null,
     root_account_id: '0',
     visible: true,
-    sub_account_count: 24,
+    sub_account_count: 4,
   },
   {
-    id: '11',
+    id: 11,
     name: 'Big Account',
     parent_account_id: '1',
     root_account_id: '1',
@@ -34,15 +34,15 @@ export const RESPONSE_ACCOUNT_1 = [
     sub_account_count: 15,
   },
   {
-    id: '4',
+    id: 4,
     name: 'CPMS',
     parent_account_id: '1',
     root_account_id: '1',
     visible: true,
-    sub_account_count: 2,
+    sub_account_count: 1,
   },
   {
-    id: '6',
+    id: 6,
     name: 'Elementary',
     parent_account_id: '1',
     root_account_id: '1',
@@ -50,7 +50,7 @@ export const RESPONSE_ACCOUNT_1 = [
     sub_account_count: 1,
   },
   {
-    id: '3',
+    id: 3,
     name: 'Manually-Created Courses',
     parent_account_id: '1',
     root_account_id: '1',
@@ -61,7 +61,7 @@ export const RESPONSE_ACCOUNT_1 = [
 
 export const RESPONSE_ACCOUNT_3 = [
   {
-    id: '3',
+    id: 3,
     name: 'Manually-Created Courses',
     parent_account_id: '1',
     root_account_id: '1',
@@ -72,7 +72,7 @@ export const RESPONSE_ACCOUNT_3 = [
 
 export const RESPONSE_ACCOUNT_4 = [
   {
-    id: '4',
+    id: 4,
     name: 'CPMS',
     parent_account_id: '1',
     root_account_id: '1',
@@ -80,11 +80,44 @@ export const RESPONSE_ACCOUNT_4 = [
     sub_account_count: 1,
   },
   {
-    id: '5',
+    id: 5,
     name: 'CS',
     parent_account_id: '4',
     root_account_id: '1',
     visible: true,
+    sub_account_count: 0,
+  },
+]
+
+export const RESPONSE_ACCOUNT_5 = [
+  {
+    id: 1,
+    name: 'Manually-Created Courses',
+    parent_account_id: null,
+    root_account_id: '1',
+    visible: true,
     sub_account_count: 1,
+    auto_subscribe: true,
+  },
+  {
+    id: 8,
+    name: 'Another sub-account',
+    parent_account_id: '1',
+    root_account_id: '1',
+    visible: true,
+    sub_account_count: 0,
+    auto_subscribe: false,
+  },
+]
+
+export const RESPONSE_ACCOUNT_6 = [
+  {
+    id: 3,
+    name: 'Manually-Created Courses',
+    parent_account_id: '1',
+    root_account_id: '1',
+    visible: true,
+    sub_account_count: 1,
+    auto_subscribe: false,
   },
 ]

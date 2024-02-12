@@ -27,6 +27,20 @@ require "rails/test_unit/railtie"
 
 Bundler.require(*Rails.groups)
 
+debug_launch = lambda do
+  if ENV["RUBY_DEBUG_OPEN"]
+    require "debug/session"
+    next unless defined?(DEBUGGER__)
+
+    DEBUGGER__.open(nonstop: ENV["RUBY_DEBUG_NONSTOP"])
+  elsif ENV["RUBY_DEBUG_START"]
+    require "debug/start"
+  end
+end
+
+Spring.after_fork(&debug_launch) if defined?(Spring)
+debug_launch.call if !defined?(Passenger) && Rails.env.development?
+
 module CanvasRails
   class Application < Rails::Application
     config.autoloader = :zeitwerk
@@ -44,6 +58,8 @@ module CanvasRails
     config.action_dispatch.default_headers["Referrer-Policy"] = "no-referrer-when-downgrade"
     config.action_controller.forgery_protection_origin_check = true
     ActiveSupport.to_time_preserves_timezone = true
+    # Ensure switchman gets the new version before the main initialize_cache initializer runs
+    config.active_support.cache_format_version = ActiveSupport.cache_format_version = 7.0
 
     config.app_generators do |c|
       c.test_framework :rspec
@@ -77,9 +93,9 @@ module CanvasRails
       log_config["daemon_ident"] ||= "canvas-lms-daemon"
       facilities = 0
       (log_config["facilities"] || []).each do |facility|
-        facilities |= Syslog.const_get "LOG_#{facility.to_s.upcase}"
+        facilities |= Syslog.const_get :"LOG_#{facility.to_s.upcase}"
       end
-      ident = ENV["RUNNING_AS_DAEMON"] == "true" ? log_config["daemon_ident"] : log_config["app_ident"]
+      ident = (ENV["RUNNING_AS_DAEMON"] == "true") ? log_config["daemon_ident"] : log_config["app_ident"]
       opts[:include_pid] = true if log_config["include_pid"] == true
       config.logger = SyslogWrapper.new(ident, facilities, opts)
       config.logger.level = log_level
@@ -97,6 +113,7 @@ module CanvasRails
     config.active_record.observers = %i[cacher stream_item_cache live_events_observer]
 
     config.active_support.encode_big_decimal_as_string = false
+    config.active_support.remove_deprecated_time_with_zone_name = true
 
     config.paths["lib"].eager_load!
     config.paths.add("app/middleware", eager_load: true, autoload_once: true)
@@ -152,12 +169,22 @@ module CanvasRails
         end
       end
 
-      def initialize(connection, logger, connection_parameters, config)
-        unless config.key?(:prepared_statements)
-          config = config.dup
-          config[:prepared_statements] = false
+      if Rails.version < "7.1"
+        def initialize(connection, logger, connection_parameters, config)
+          unless config.key?(:prepared_statements)
+            config = config.dup
+            config[:prepared_statements] = false
+          end
+          super(connection, logger, connection_parameters, config)
         end
-        super(connection, logger, connection_parameters, config)
+      else
+        def initialize(config)
+          unless config.key?(:prepared_statements)
+            config = config.dup
+            config[:prepared_statements] = false
+          end
+          super(config)
+        end
       end
 
       def connect
@@ -165,7 +192,11 @@ module CanvasRails
         hosts.each_with_index do |host, index|
           connection_parameters = @connection_parameters.dup
           connection_parameters[:host] = host
-          @connection = PG::Connection.connect(connection_parameters)
+          if Rails.version < "7.1"
+            @connection = PG::Connection.connect(connection_parameters)
+          else
+            @raw_connection = PG::Connection.connect(connection_parameters)
+          end
 
           configure_connection
 
@@ -209,7 +240,7 @@ module CanvasRails
           super
         else
           # Any is eager, so we must map first or we won't run on all keys
-          SUPPORTED_VERSIONS.map do |version|
+          SUPPORTED_RAILS_VERSIONS.map do |version|
             super(key, (options || {}).merge(explicit_version: version.delete(".")))
           end.any?
         end
@@ -308,8 +339,19 @@ module CanvasRails
       def self.generate_key(*); end
     end
 
-    def key_generator
+    def key_generator(...)
       DummyKeyGenerator
+    end
+
+    # # This also depends on secret_key_base and is not a feature we use or currently intend to support
+    unless Rails.version < "7.1"
+      initializer "canvas.ignore_generated_token_verifier", before: "active_record.generated_token_verifier" do
+        config.after_initialize do
+          ActiveSupport.on_load(:active_record) do
+            self.generated_token_verifier = "UNUSED"
+          end
+        end
+      end
     end
 
     initializer "canvas.init_dynamic_settings", before: "canvas.extend_shard" do
@@ -333,7 +375,7 @@ module CanvasRails
 
     initializer "canvas.extend_shard", before: "active_record.initialize_database" do
       # have to do this before the default shard loads
-      Switchman::Shard.serialize :settings, Hash
+      Switchman::Shard.serialize :settings, type: Hash
       Switchman.cache = -> { MultiCache.cache }
     end
 

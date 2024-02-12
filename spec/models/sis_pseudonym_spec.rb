@@ -26,8 +26,8 @@ describe SisPseudonym do
 
   def pseud_params(unique_id, account = Account.default)
     {
-      account: account,
-      unique_id: unique_id,
+      account:,
+      unique_id:,
       password: "asdfasdf",
       password_confirmation: "asdfasdf"
     }
@@ -108,7 +108,7 @@ describe SisPseudonym do
     e.sis_pseudonym_id = @p.id
     e.save!
     section = course1.course_sections.create
-    e2 = course1.enroll_user(u, "StudentEnrollment", enrollment_state: "active", section: section, allow_multiple_enrollments: true)
+    e2 = course1.enroll_user(u, "StudentEnrollment", enrollment_state: "active", section:, allow_multiple_enrollments: true)
     e2.sis_pseudonym_id = @p2.id
     e2.save!
     expect(SisPseudonym.for(u, e)).to eq @p
@@ -167,38 +167,63 @@ describe SisPseudonym do
 
   it "includes a pseudonym from a trusted account" do
     pseudonym = account2.pseudonyms.create!(user: u, unique_id: "user") { |p| p.sis_user_id = "abc" }
-    allow(account1).to receive(:trust_exists?).and_return(true)
-    allow(account1).to receive(:trusted_account_ids).and_return([account2.id])
+    allow(account1).to receive_messages(trust_exists?: true, trusted_account_ids: [account2.id])
     expect(SisPseudonym.for(u, account1)).to be_nil
     expect(SisPseudonym.for(u, account1, type: :trusted)).to eq(pseudonym)
   end
 
   context "with multiple acceptable sis pseudonyms" do
     before do
-      u.pseudonyms.create!(pseud_params("user2@example.com")) do |p|
-        p.workflow_state = "active"
-        p.sis_user_id = "SIS1"
-      end
+      ldap_ap = Account.default.authentication_providers.create!(auth_type: "ldap")
+      cas_ap = Account.default.authentication_providers.create!(auth_type: "cas")
+
       u.pseudonyms.create!(pseud_params("alphabet@example.com")) do |p|
         p.workflow_state = "active"
-        p.sis_user_id = "SIS2"
+        p.sis_user_id = "SIS1"
+        p.authentication_provider = cas_ap
       end
       u.pseudonyms.create!(pseud_params("zebra@example.com")) do |p|
         p.workflow_state = "active"
+        p.sis_user_id = "SIS2"
+      end
+      u.pseudonyms.create!(pseud_params("alphabet@example.com")) do |p|
+        p.workflow_state = "active"
         p.sis_user_id = "SIS3"
+        p.authentication_provider = ldap_ap
       end
       u.reload # to clear psuedonyms collection for sure
     end
 
-    it "finds the alphabetically first pseudonym when the pseudonyms aren't loaded" do
-      found_pseudonym = SisPseudonym.for(u, Account.default)
-      expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+    context "when association cache is not loaded" do
+      it "finds the alphabetically first pseudonym" do
+        found_pseudonym = SisPseudonym.for(u, Account.default)
+        expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+      end
+
+      it "sorts pseudonyms with matching unique_ids by position" do
+        found_pseudonym = SisPseudonym.for(u, Account.default)
+        expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+        expect(found_pseudonym.position).to eq(1)
+        expect(found_pseudonym.authentication_provider.auth_type).to eq("cas")
+      end
     end
 
-    it "uses the sames pseudonym when the pseudonyms have been loaded" do
-      u.pseudonyms # to get pseudonyms collection pre-loaded
-      found_pseudonym = SisPseudonym.for(u, Account.default)
-      expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+    context "when association cache is loaded" do
+      before do
+        u.pseudonyms # to get pseudonyms collection pre-loaded
+      end
+
+      it "finds the same alphabetically first pseudonym as if the cache was not primed" do
+        found_pseudonym = SisPseudonym.for(u, Account.default)
+        expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+      end
+
+      it "sorts pseudonyms with matching unique_ids by position" do
+        found_pseudonym = SisPseudonym.for(u, Account.default)
+        expect(found_pseudonym.unique_id).to eq("alphabet@example.com")
+        expect(found_pseudonym.position).to eq(1)
+        expect(found_pseudonym.authentication_provider.auth_type).to eq("cas")
+      end
     end
   end
 

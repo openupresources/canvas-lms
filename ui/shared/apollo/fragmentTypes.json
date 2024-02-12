@@ -24,6 +24,9 @@
             "name": "AdhocStudents"
           },
           {
+            "name": "Course"
+          },
+          {
             "name": "Group"
           },
           {
@@ -93,6 +96,9 @@
             "name": "Course"
           },
           {
+            "name": "CustomGradeStatus"
+          },
+          {
             "name": "Discussion"
           },
           {
@@ -118,6 +124,9 @@
           },
           {
             "name": "GradingPeriod"
+          },
+          {
+            "name": "GradingPeriodGroup"
           },
           {
             "name": "Group"
@@ -198,6 +207,9 @@
             "name": "Section"
           },
           {
+            "name": "StandardGradeStatus"
+          },
+          {
             "name": "Submission"
           },
           {
@@ -208,6 +220,9 @@
           },
           {
             "name": "Term"
+          },
+          {
+            "name": "UsageRights"
           },
           {
             "name": "User"
@@ -300,6 +315,9 @@
             "name": "Course"
           },
           {
+            "name": "CustomGradeStatus"
+          },
+          {
             "name": "Discussion"
           },
           {
@@ -313,6 +331,12 @@
           },
           {
             "name": "GradingPeriod"
+          },
+          {
+            "name": "GradingPeriodGroup"
+          },
+          {
+            "name": "GradingStandard"
           },
           {
             "name": "Group"
@@ -378,10 +402,16 @@
             "name": "Section"
           },
           {
+            "name": "StandardGradeStatus"
+          },
+          {
             "name": "Submission"
           },
           {
             "name": "Term"
+          },
+          {
+            "name": "UsageRights"
           },
           {
             "name": "User"
@@ -481,6 +511,9 @@
           },
           {
             "name": "GradingPeriod"
+          },
+          {
+            "name": "GradingPeriodGroup"
           },
           {
             "name": "Group"

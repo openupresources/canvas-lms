@@ -50,7 +50,7 @@ describe "student k5 dashboard" do
     it "provides the homeroom dashboard tabs on dashboard" do
       get "/"
 
-      expect(retrieve_welcome_text).to match(/Welcome,/)
+      expect(welcome_title).to be_present
       expect(homeroom_tab).to be_displayed
       expect(schedule_tab).to be_displayed
       expect(grades_tab).to be_displayed
@@ -66,7 +66,7 @@ describe "student k5 dashboard" do
       driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
       wait_for_ajaximations
 
-      expect(retrieve_welcome_text).to match(/Welcome,/)
+      expect(welcome_title).to be_present
       expect(homeroom_tab).to be_displayed
     end
   end
@@ -125,8 +125,8 @@ describe "student k5 dashboard" do
     it "shows subject course on dashboard" do
       get "/"
 
-      expect(element_exists?(course_card_selector(@course_name))).to eq(false)
-      expect(element_exists?(course_card_selector(@subject_course_title))).to eq(true)
+      expect(element_exists?(course_card_selector(@course_name))).to be(false)
+      expect(element_exists?(course_card_selector(@subject_course_title))).to be(true)
     end
 
     it "shows latest announcement on subject course card" do
@@ -170,7 +170,7 @@ describe "student k5 dashboard" do
       driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
       wait_for_ajaximations
 
-      expect(retrieve_welcome_text).to match(/Welcome,/)
+      expect(welcome_title).to be_present
       expect(homeroom_tab).to be_displayed
     end
   end
@@ -225,6 +225,7 @@ describe "student k5 dashboard" do
     end
 
     it "shows two dashes and empty progress bar if no grades are available for a course" do
+      skip "FOO-3525 (10/6/2023)"
       get "/#grades"
 
       expect(subject_grade("--")).to be_displayed
@@ -232,6 +233,7 @@ describe "student k5 dashboard" do
     end
 
     it "show the progress bar with the appropriate progress" do
+      skip "FOO-3525 (10/6/2023)"
       assignment.grade_student(@student, grader: @homeroom_teacher, score: math_subject_grade, points_deducted: 0)
 
       get "/#grades"
@@ -357,7 +359,7 @@ describe "student k5 dashboard" do
       expect(k5_app_buttons[0].text).to eq lti_resource_name
     end
 
-    it "shows course modal to choose which LTI resource context when button clicked", ignore_js_errors: true do
+    it "shows course modal to choose which LTI resource context when button clicked", :ignore_js_errors do
       second_course_title = "Second Course"
       course_with_student(
         active_course: 1,

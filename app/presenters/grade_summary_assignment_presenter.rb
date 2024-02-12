@@ -19,6 +19,7 @@
 
 class GradeSummaryAssignmentPresenter
   include TextHelper
+  include GradeDisplay
   attr_reader :assignment, :submission, :originality_reports
 
   def initialize(summary, current_user, assignment, submission)
@@ -84,7 +85,7 @@ class GradeSummaryAssignmentPresenter
   end
 
   def is_assignment?
-    assignment.class.to_s == "Assignment"
+    assignment.instance_of?(Assignment)
   end
 
   def has_no_group_weight?
@@ -99,12 +100,22 @@ class GradeSummaryAssignmentPresenter
     submission&.submission_type == "online_quiz" && submission&.workflow_state == "pending_review"
   end
 
+  def custom_grade_status?
+    return false unless Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
+
+    submission&.custom_grade_status_id?
+  end
+
+  def custom_grade_status_id
+    submission&.custom_grade_status_id
+  end
+
   def original_points
     has_no_score_display? ? "" : submission.published_score
   end
 
   def unchangeable?
-    (!@summary.editable? || assignment.special_class)
+    !@summary.editable? || assignment.special_class
   end
 
   def has_comments?
@@ -153,7 +164,6 @@ class GradeSummaryAssignmentPresenter
     classes << special_class
     classes << "excused" if excused?
     classes << "extended" if extended?
-    classes << "feedback_visibility_ff" if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
     classes.join(" ")
   end
 
@@ -195,7 +205,7 @@ class GradeSummaryAssignmentPresenter
 
   def published_grade
     if is_letter_graded_or_gpa_scaled? && !submission.published_grade.nil?
-      "(#{submission.published_grade})"
+      "(#{replace_dash_with_minus(submission.published_grade)})"
     else
       ""
     end
@@ -245,14 +255,14 @@ class GradeSummaryAssignmentPresenter
       # Just render the old-style fake box-and whiskers plot (box edges are high and low with middle at mean)
       # if flag off or we don't have the new statistics
       GradeSummaryGraph.new(
-        high: high,
-        low: low,
-        lower_q: lower_q,
-        upper_q: upper_q,
-        median: median,
-        mean: mean,
+        high:,
+        low:,
+        lower_q:,
+        upper_q:,
+        median:,
+        mean:,
         points_possible: assignment.points_possible,
-        score: score,
+        score:,
         legacy: !show_advanced_statistics?(median)
       )
     end
@@ -322,7 +332,8 @@ class GradeSummaryAssignmentPresenter
 
     def title
       if legacy
-        I18n.t("#grade_summary.graph_title", "Mean %{mean}, High %{high}, Low %{low}",
+        I18n.t("#grade_summary.graph_title",
+               "Mean %{mean}, High %{high}, Low %{low}",
                {
                  mean: I18n.n(mean), high: I18n.n(high), low: I18n.n(low)
                })

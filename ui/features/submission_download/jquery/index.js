@@ -16,17 +16,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import INST from 'browser-sniffer'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape, {raw} from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON'
 import 'jqueryui/dialog'
-import 'jqueryui/progressbar'
+import 'jqueryui-unpatched/progressbar'
 
 const I18n = useI18nScope('submissions')
 
 const MAX_RETRIES = 3
+
+if (!('INST' in window)) window.INST = {}
 
 INST.downloadSubmissions = function (url, onClose) {
   let retryCount = 0
@@ -66,9 +67,7 @@ INST.downloadSubmissions = function (url, onClose) {
             })
             const link = `<a href="${htmlEscape(url)}"><b>${htmlEscape(linkText)}</b></a>`
 
-            $('#download_submissions_dialog .status').html(
-              `${htmlEscape(message)}<br>${$.raw(link)}`
-            )
+            $('#download_submissions_dialog .status').html(`${htmlEscape(message)}<br>${raw(link)}`)
             $('#download_submissions_dialog .status_loader').css('visibility', 'hidden')
 
             window.location.href = url

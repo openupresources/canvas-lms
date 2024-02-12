@@ -75,7 +75,7 @@ module ConditionalRelease
                                }
                              end
             student_record = {
-              score: score,
+              score:,
               submission_id: submission[:id],
               user: user_details
             }
@@ -89,7 +89,7 @@ module ConditionalRelease
         ranges.each do |r|
           r[:scoring_range] = r[:scoring_range].as_json(include_root: false, except: [:root_account_id, :deleted_at]) # can't rely on normal json serialization
         end
-        { rule: rule, ranges: ranges, enrolled: users_by_id.count }
+        { rule:, ranges:, enrolled: users_by_id.count }
       end
 
       def student_details(rule, student_id)
@@ -111,7 +111,7 @@ module ConditionalRelease
         trigger_score = percent_from_points(trigger_points, trigger_points_possible)
 
         {
-          rule: rule,
+          rule:,
           trigger_assignment: assignment_detail(trigger_assignment, trigger_submission),
           follow_on_assignments: follow_on_assignment_ids.map do |id|
             assignment_detail(
@@ -125,7 +125,8 @@ module ConditionalRelease
 
       def percent_from_points(points, points_possible)
         return points.to_f / points_possible.to_f if points.present? && points_possible.to_f.nonzero?
-        return points.to_f / 100 if points.present? # mirror Canvas rule
+
+        points.to_f / 100 if points.present? # mirror Canvas rule
       end
 
       private
@@ -134,9 +135,9 @@ module ConditionalRelease
         score = submission ? percent_from_points(submission.score, assignment.points_possible) : nil
         detail = {
           assignment: { id: assignment.id, course_id: assignment.context_id, name: assignment.title, submission_types: assignment.submission_types_array, grading_type: assignment.grading_type },
-          submission: { id: submission.id, score: submission.score, grade: submission.grade, submitted_at: submission.submitted_at },
-          score: score
+          score:
         }
+        detail[:submission] = { id: submission.id, score: submission.score, grade: submission.grade, submitted_at: submission.submitted_at } if submission
         detail[:trend] = compute_trend(trend_score, score) if trend_score
         detail
       end

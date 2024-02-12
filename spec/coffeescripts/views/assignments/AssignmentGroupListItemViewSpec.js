@@ -18,8 +18,8 @@
 
 import Backbone from '@canvas/backbone'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentGroupListItemView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListItemView.coffee'
-import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView.coffee'
+import AssignmentGroupListItemView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListItemView'
+import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import elementToggler from '../../../../ui/boot/initializers/activateElementToggler'
@@ -209,6 +209,7 @@ QUnit.module('AssignmentGroupListItemView as a teacher', {
     fakeENV.setup({
       current_user_roles: ['teacher'],
       URLS: {sort_url: 'test'},
+      current_user_is_admin: false,
     })
 
     this.model = createAssignmentGroup()

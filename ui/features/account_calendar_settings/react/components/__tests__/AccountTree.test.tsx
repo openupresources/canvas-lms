@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {render, act} from '@testing-library/react'
+import {render, act, waitFor} from '@testing-library/react'
 import fetchMock from 'fetch-mock'
 
 import {AccountTree} from '../AccountTree'
@@ -28,6 +28,10 @@ const defaultProps = {
   visibilityChanges: [],
   onAccountToggled: jest.fn(),
   showSpinner: false,
+  subscriptionChanges: [],
+  onAccountSubscriptionToggled: jest.fn(),
+  onAccountExpandedToggled: () => {},
+  expandedAccounts: [1],
 }
 
 beforeEach(() => {
@@ -41,18 +45,18 @@ afterEach(() => {
 
 describe('AccountTree', () => {
   it('loads and displays an account tree', async () => {
-    const {findByRole, getByRole, getByText} = render(<AccountTree {...defaultProps} />)
-    expect(await findByRole('button', {name: 'University, 24 accounts'})).toBeInTheDocument()
+    const {findByText, getByText} = render(<AccountTree {...defaultProps} />)
+    expect(await findByText('University, 5 accounts')).toBeInTheDocument()
     expect(getByText('University')).toBeInTheDocument()
     expect(getByText('Manually-Created Courses')).toBeInTheDocument()
-    expect(getByRole('button', {name: 'Big Account, 15 accounts'})).toBeInTheDocument()
-    expect(getByRole('button', {name: 'CPMS, 2 accounts'})).toBeInTheDocument()
-    expect(getByRole('button', {name: 'Elementary, 1 accounts'})).toBeInTheDocument()
+    expect(getByText('Big Account, 16 accounts')).toBeInTheDocument()
+    expect(getByText('CPMS, 2 accounts')).toBeInTheDocument()
+    expect(getByText('Elementary, 2 accounts')).toBeInTheDocument()
   })
 
   it('checks accounts only where calendar is visible', async () => {
     const {findByRole, getByRole} = render(<AccountTree {...defaultProps} />)
-    expect(await findByRole('button', {name: 'University, 24 accounts'})).toBeInTheDocument()
+    expect(await findByRole('button', {name: 'University, 5 accounts'})).toBeInTheDocument()
     const universityCheckbox = getByRole('checkbox', {name: 'Show account calendar for University'})
     const mccCheckbox = getByRole('checkbox', {
       name: 'Show account calendar for Manually-Created Courses',
@@ -68,7 +72,7 @@ describe('AccountTree', () => {
     const {findByRole, getByRole} = render(
       <AccountTree {...defaultProps} onAccountToggled={onAccountToggled} />
     )
-    expect(await findByRole('button', {name: 'University, 24 accounts'})).toBeInTheDocument()
+    expect(await findByRole('button', {name: 'University, 5 accounts'})).toBeInTheDocument()
     const universityCheckbox = getByRole('checkbox', {name: 'Show account calendar for University'})
     expect(onAccountToggled).not.toHaveBeenCalled()
     act(() => universityCheckbox.click())
@@ -80,12 +84,27 @@ describe('AccountTree', () => {
     expect(getByText('Loading accounts')).toBeInTheDocument()
   })
 
-  it('expands tree when a parent account is selected', async () => {
-    const {findByRole, getByRole, findByText} = render(<AccountTree {...defaultProps} />)
+  it('asks to expand tree when a parent account is selected', async () => {
+    const onAccountExpandedToggled = jest.fn()
+    const {findByRole} = render(
+      <AccountTree {...defaultProps} onAccountExpandedToggled={onAccountExpandedToggled} />
+    )
     const cpmsButton = await findByRole('button', {name: 'CPMS, 2 accounts'})
     act(() => cpmsButton.click())
-    expect(await findByText('CPMS')).toBeInTheDocument()
-    expect(await getByRole('button', {name: 'CS, 1 accounts'})).toBeInTheDocument()
+    expect(onAccountExpandedToggled).toHaveBeenCalledWith(4, true)
+  })
+
+  it('expands expanded nodes of the tree', async () => {
+    const {getByText} = render(<AccountTree {...defaultProps} expandedAccounts={[1, 4]} />)
+    await waitFor(() => {
+      expect(fetchMock.calls().length).toBe(2)
+    })
+    await waitFor(() => {
+      expect(getByText('University (5)')).toBeInTheDocument() // this is the parent account
+      expect(getByText('CPMS')).toBeInTheDocument() // this is a child account
+      expect(getByText('CPMS (2)')).toBeInTheDocument() // this is a child account with children
+      expect(getByText('CS')).toBeInTheDocument() // this is a child of CPMS
+    })
   })
 
   it('loads multiple pages properly if needed', async () => {
@@ -101,7 +120,13 @@ describe('AccountTree', () => {
       RESPONSE_ACCOUNT_1.slice(3, 5)
     )
     const {findByRole, getByRole} = render(<AccountTree {...defaultProps} />)
-    expect(await findByRole('button', {name: 'University, 24 accounts'})).toBeInTheDocument()
-    expect(getByRole('button', {name: 'Elementary, 1 accounts'})).toBeInTheDocument()
+    expect(await findByRole('button', {name: 'University, 5 accounts'})).toBeInTheDocument()
+    expect(getByRole('button', {name: 'Elementary, 2 accounts'})).toBeInTheDocument()
+  })
+
+  it('shows subscription dropdown', async () => {
+    const {findByRole, queryAllByTestId} = render(<AccountTree {...defaultProps} />)
+    expect(await findByRole('button', {name: 'University, 5 accounts'})).toBeInTheDocument()
+    expect(queryAllByTestId('subscription-dropdown')[0]).toBeInTheDocument()
   })
 })

@@ -29,7 +29,7 @@ describe "Gradebook view options menu" do
 
   before(:once) do
     gradebook_data_setup
-    @first_assignment.update(due_at: Time.zone.now - 1.day)
+    @first_assignment.update(due_at: 1.day.ago)
     @first_assignment.unpublish!
     module1 = @course.context_modules.create!(name: "module1")
     module2 = @course.context_modules.create!(name: "module2")
@@ -39,8 +39,8 @@ describe "Gradebook view options menu" do
     Account.site_admin.enable_feature!(:enhanced_gradebook_filters)
     Account.site_admin.enable_feature!(:view_ungraded_as_zero)
     Account.site_admin.enable_feature!(:gradebook_show_first_last_names)
-    @course.root_account.settings[:allow_gradebook_show_first_last_names] = true
-    @course.root_account.save!
+    @course.account.settings[:allow_gradebook_show_first_last_names] = true
+    @course.account.save!
   end
 
   before do

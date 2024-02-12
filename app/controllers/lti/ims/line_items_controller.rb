@@ -147,7 +147,7 @@ module Lti
           assignment,
           context,
           tool,
-          line_item_params.merge(resource_link: resource_link)
+          line_item_params.merge(resource_link:)
         )
 
         render json: LineItemsSerializer.new(new_line_item, line_item_id(new_line_item)),
@@ -242,7 +242,15 @@ module Lti
       def destroy
         head :unauthorized and return if line_item.coupled
 
-        line_item.destroy!
+        if line_item.assignment_line_item?
+          # assignment owns the lifecycle of line items
+          # and resource links
+          line_item.assignment.destroy!
+        else
+          # this is an extra non-default line item and can be
+          # safely deleted on its own
+          line_item.destroy!
+        end
         head :no_content
       end
 
@@ -266,7 +274,7 @@ module Lti
       def line_item_id(line_item)
         if line_item.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
           lti_line_item_show_url(
-            host: line_item.root_account.domain,
+            host: line_item.root_account.environment_specific_domain,
             course_id: params[:course_id],
             id: line_item.id
           )
@@ -290,8 +298,8 @@ module Lti
         return if line_item_params.values_at(*attr_mapping.keys).all?(&:blank?)
 
         a = line_item.assignment
-        attr_mapping.each do |param_name, assigment_attr_name|
-          a.send("#{assigment_attr_name}=", line_item_params[param_name]) if line_item_params.key?(param_name)
+        attr_mapping.each do |param_name, assignment_attr_name|
+          a.send(:"#{assignment_attr_name}=", line_item_params[param_name]) if line_item_params.key?(param_name)
         end
         a.save!
       end
@@ -310,7 +318,7 @@ module Lti
                       .joins(rlid.present? ? { line_items: :resource_link } : :line_items)
                       .where(
                         {
-                          context: context,
+                          context:,
                           lti_line_items: { client_id: developer_key.global_id }
                         }.merge!(rlid.present? ? { lti_resource_links: { resource_link_uuid: rlid } } : {})
                       )

@@ -29,13 +29,22 @@ module Api::V1::UserProfile
 
     json = user_json(user, current_user, session, "avatar_url", context)
     # don't unintentionally include stuff added to user_json
-    json.slice! :id, :name, :short_name, :sortable_name, :sis_user_id,
-                :sis_login_id, :login_id, :avatar_url, :integration_id, :pronouns
+    json.slice! :id,
+                :name,
+                :short_name,
+                :sortable_name,
+                :sis_user_id,
+                :sis_login_id,
+                :login_id,
+                :avatar_url,
+                :integration_id,
+                :pronouns
 
     json[:title] = profile.title
     json[:bio] = profile.bio
     json[:primary_email] = user.email if user.grants_right?(current_user, :read_email_addresses)
     json[:login_id] ||= user.primary_pseudonym.try(:unique_id)
+    json[:sis_user_id] ||= user.primary_pseudonym.try(:sis_user_id) if user.grants_right?(current_user, :read_sis)
     json[:integration_id] ||= user.primary_pseudonym.try(:integration_id)
     zone = user.time_zone || @domain_root_account.try(:default_time_zone) || Time.zone
     json[:time_zone] = zone.tzinfo.name
@@ -46,6 +55,7 @@ module Api::V1::UserProfile
       json[:calendar] = { ics: "#{feeds_calendar_url(user.feed_code)}.ics" }
       json[:lti_user_id] = user.lti_context_id if user.lti_context_id.present?
       json[:k5_user] = k5_user?
+      json[:use_classic_font_in_k5] = use_classic_font?
     end
 
     if includes.include? "user_services"
@@ -73,7 +83,9 @@ module Api::V1::UserProfile
   end
 
   def user_service_json(user_service, current_user, session)
-    api_json(user_service, current_user, session,
+    api_json(user_service,
+             current_user,
+             session,
              only: %w[service visible],
              methods: %(service_user_link))
   end

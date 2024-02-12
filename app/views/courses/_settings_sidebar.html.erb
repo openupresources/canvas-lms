@@ -43,7 +43,7 @@
     </div>
   <% end %>
 
-  <%= external_tools_menu_items(@course_settings_sub_navigation_tools, {link_class: "Button Button--link Button--link--has-divider Button--course-settings course-settings-sub-navigation-lti", settings_key: :course_settings_sub_navigation}) %>
+  <%= external_tools_menu_items(@course_settings_sub_navigation_tools, {link_class: "Button Button--link Button--link--has-divider Button--course-settings course-settings-sub-navigation-lti", settings_key: :course_settings_sub_navigation, remove_space_between_icon_and_text: true}) %>
   <% if can_do(@context, @current_user, :read_reports) %>
     <%= link_to context_url(@context, :context_statistics_url), :class => ' Button Button--link Button--link--has-divider Button--course-settings' do %>
       <i class="icon-stats"></i><%= t('links.stats', 'Course Statistics') %>
@@ -135,16 +135,16 @@
     <tbody>
       <% @all_roles.each do |base_role| %>
         <tr>
-          <td><%= base_role[:plural_label] %>:</td>
+          <th><%= base_role[:plural_label] %>:</th>
           <td><%= n(user_count(base_role[:count])) %></td>
         </tr>
         <% base_role[:custom_roles].each do |cr|
            next if skip_custom_role?(cr)
         %>
           <tr>
-            <td>
+            <th>
               <%= cr[:label] %><% if cr[:workflow_state] == 'inactive' %> (<%= t('role.inactive', 'inactive') %>)<% end %>:
-            </td>
+            </th>
             <td><%= n(user_count(cr[:count])) %></td>
           </tr>
         <% end %>

@@ -32,7 +32,7 @@ describe Course do
       # TODO: pull this out into smaller tests... right now I'm using
       # the whole example JSON from Bracken because the formatting is
       # somewhat in flux
-      json = File.open(File.join(IMPORT_JSON_DIR, "import_from_migration.json")).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
       data = JSON.parse(json).with_indifferent_access
       data["all_files_export"] = {
         "file_path" => File.join(IMPORT_JSON_DIR, "import_from_migration_small.zip")
@@ -102,7 +102,7 @@ describe Course do
       expect(page).not_to be_nil
       expect(page.migration_id).to eq("1865116206002")
       expect(page.body).not_to be_nil
-      expect(page.body.scan(/<li>/).length).to eq(4)
+      expect(page.body.scan("<li>").length).to eq(4)
       expect(page.body).to match(/Orientation/)
       expect(page.body).to match(/Orientation Quiz/)
       file = @course.attachments.where(migration_id: "1865116527002").first
@@ -196,7 +196,7 @@ describe Course do
       # files
       expect(@course.attachments.length).to eq(4)
       @course.attachments.each do |f|
-        expect(File).to be_exist(f.full_filename)
+        expect(File).to exist(f.full_filename)
       end
       file = @course.attachments.where(migration_id: "1865116044002").first
       expect(file).not_to be_nil
@@ -206,6 +206,15 @@ describe Course do
       expect(file).not_to be_nil
       expect(file.filename).to eq("dropbox.zip")
       expect(file.folder.full_name).to eq("course files/Course Content/Orientation/WebCT specific and old stuff")
+
+      expect(migration.migration_settings[:attachment_path_id_lookup]).to eq(
+        {
+          "Course Content/Orientation/Ins and Outs/Eres directions.htm" => @course.attachments.find_by(display_name: "Eres directions.htm").migration_id,
+          "Course Content/Orientation/WebCT specific and old stuff/dropbox.zip" => file.migration_id,
+          "Pictures/banner_kandinsky.jpg" => @course.attachments.find_by(display_name: "banner_kandinsky.jpg").migration_id,
+          "Writing Assignments/Examples/theatre_example.htm" => @course.attachments.find_by(display_name: "theatre_example.htm").migration_id,
+        }
+      )
     end
 
     def build_migration(import_course, params, copy_options = {})
@@ -217,7 +226,7 @@ describe Course do
     end
 
     def setup_import(import_course, filename, migration)
-      json = File.open(File.join(IMPORT_JSON_DIR, filename)).read
+      json = File.read(File.join(IMPORT_JSON_DIR, filename))
       data = JSON.parse(json).with_indifferent_access
       Importers::CourseContentImporter.import_content(
         import_course,
@@ -283,23 +292,23 @@ describe Course do
       expect(migration.workflow_state).to eq("imported")
     end
 
-    it "runs DueDateCacher never if no assignments are imported" do
+    it "runs SubmissionLifecycleManager never if no assignments are imported" do
       params = { copy: { "everything" => true } }
       migration = build_migration(@course, params)
       @course.reload # seems to be holding onto saved_changes for some reason
 
-      expect(DueDateCacher).not_to receive(:recompute_course)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course)
       setup_import(@course, "assessments.json", migration)
       expect(migration.workflow_state).to eq("imported")
     end
 
-    it "runs DueDateCacher once if assignments with dates are imported" do
+    it "runs SubmissionLifecycleManager once if assignments with dates are imported" do
       params = { copy: { "everything" => true } }
       migration = build_migration(@course, params)
       @course.reload
 
-      expect(DueDateCacher).to receive(:recompute_course).once
-      json = File.open(File.join(IMPORT_JSON_DIR, "assignment.json")).read
+      expect(SubmissionLifecycleManager).to receive(:recompute_course).once
+      json = File.read(File.join(IMPORT_JSON_DIR, "assignment.json"))
       @data = { "assignments" => JSON.parse(json) }.with_indifferent_access
       Importers::CourseContentImporter.import_content(
         @course, @data, migration.migration_settings[:migration_ids_to_import], migration
@@ -395,20 +404,35 @@ describe Course do
       it "is set to true when originally true" do
         import_data = { course: { enable_course_paces: "true" } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
-        expect(@course.enable_course_paces).to eq true
+        expect(@course.enable_course_paces).to be true
       end
 
       it "is set to false when originally true, but with the FF off" do
         import_data = { course: { enable_course_paces: "true" } }.with_indifferent_access
         @course.root_account.disable_feature!(:course_paces)
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
-        expect(@course.enable_course_paces).to eq false
+        expect(@course.enable_course_paces).to be false
       end
 
       it "is set to false when originally false" do
         import_data = { course: { enable_course_paces: "false" } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
-        expect(@course.enable_course_paces).to eq false
+        expect(@course.enable_course_paces).to be false
+      end
+    end
+
+    describe "import_blueprint_settings" do
+      it "runs blueprint importer if set to do so" do
+        migration = ContentMigration.create!(context: @course, user: account_admin_user, source_course: @course, migration_settings: { import_blueprint_settings: true })
+        expect(Importers::BlueprintSettingsImporter).to receive(:process_migration).once
+        Importers::CourseContentImporter.import_content(@course, {}, nil, migration)
+      end
+
+      it "skips the blueprint importer if the user lacks proper permission" do
+        usr = account_admin_user_with_role_changes(role_changes: { manage_master_courses: false })
+        migration = ContentMigration.create!(context: @course, user: usr, source_course: @course, migration_settings: { import_blueprint_settings: true })
+        expect(Importers::BlueprintSettingsImporter).not_to receive(:process_migration)
+        Importers::CourseContentImporter.import_content(@course, {}, nil, migration)
       end
     end
   end
@@ -416,7 +440,7 @@ describe Course do
   describe "shift_date_options" do
     it "defaults options[:time_zone] to the root account's time zone" do
       account = Account.default.sub_accounts.create!
-      course_with_teacher(account: account)
+      course_with_teacher(account:)
       @course.root_account.default_time_zone = "America/New_York"
       @course.start_at = 1.month.ago
       @course.conclude_at = 1.month.from_now
@@ -430,8 +454,10 @@ describe Course do
       course_factory
       @course.root_account.default_time_zone = Time.zone
       options = Importers::CourseContentImporter.shift_date_options(@course, {
-                                                                      old_start_date: "2014-3-2", old_end_date: "2014-4-26",
-                                                                      new_start_date: "2014-5-11", new_end_date: "2014-7-5"
+                                                                      old_start_date: "2014-3-2",
+                                                                      old_end_date: "2014-4-26",
+                                                                      new_start_date: "2014-5-11",
+                                                                      new_end_date: "2014-7-5"
                                                                     })
       unlock_at = DateTime.new(2014, 3, 23, 0, 0)
       due_at    = DateTime.new(2014, 3, 29, 23, 59)
@@ -480,18 +506,21 @@ describe Course do
 
   describe "import_media_objects" do
     before do
-      attachment_model(uploaded_data: stub_file_data("test.m4v", "asdf", "video/mp4"))
+      @kmh = double(KalturaMediaFileHandler)
+      allow(KalturaMediaFileHandler).to receive(:new).and_return(@kmh)
+      MediaObject.create!(media_id: "maybe")
+      attachment_model(uploaded_data: stub_file_data("test.m4v", "asdf", "video/mp4"), media_entry_id: "maybe")
     end
 
     it "waits for media objects on canvas cartridge import" do
       migration = double(canvas_import?: true)
-      expect(MediaObject).to receive(:add_media_files).with([@attachment], true)
+      expect(@kmh).to receive(:add_media_files).with([@attachment], true)
       Importers::CourseContentImporter.import_media_objects([@attachment], migration)
     end
 
     it "does not wait for media objects on other import" do
       migration = double(canvas_import?: false)
-      expect(MediaObject).to receive(:add_media_files).with([@attachment], false)
+      expect(@kmh).to receive(:add_media_files).with([@attachment], false)
       Importers::CourseContentImporter.import_media_objects([@attachment], migration)
     end
   end
@@ -543,7 +572,7 @@ describe Course do
     it "logs content migration in audit logs" do
       course_factory
 
-      json = File.open(File.join(IMPORT_JSON_DIR, "assessments.json")).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "assessments.json"))
       data = JSON.parse(json).with_indifferent_access
 
       params = { "copy" => { "quizzes" => { "i7ed12d5eade40d9ee8ecb5300b8e02b2" => true } } }
@@ -567,7 +596,7 @@ describe Course do
       @module = @course.context_modules.create! name: "test"
       @module.add_item(type: "context_module_sub_header", title: "blah")
       @params = { "copy" => { "assignments" => { "1865116198002" => true } } }
-      json = File.open(File.join(IMPORT_JSON_DIR, "import_from_migration.json")).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
       @data = JSON.parse(json).with_indifferent_access
     end
 
@@ -626,7 +655,7 @@ describe Course do
         assignments: { "1865116014002" => true },
         quizzes: { "1865116160002" => true }
       } }.with_indifferent_access
-      json = File.open(File.join(IMPORT_JSON_DIR, "import_from_migration.json")).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
       @data = JSON.parse(json).with_indifferent_access
       @migration = @course.content_migrations.build
       @migration.migration_settings[:migration_ids_to_import] = @params
@@ -677,13 +706,52 @@ describe Course do
     expect(migration.migration_issues.count).to eq 1 # should ignore the sanitized one
     expect(migration.migration_issues.first.fix_issue_html_url).to eq "/courses/#{@course.id}/assignments/#{broken_assmt.id}"
   end
+
+  describe "metrics logging" do
+    subject { Importers::CourseContentImporter.import_content(@course, {}, {}, migration) }
+
+    before do
+      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:timing)
+    end
+
+    before :once do
+      course_factory
+    end
+
+    let(:migration) { @course.content_migrations.create! migration_type: "atypeofmigration" }
+
+    it "logs import successes" do
+      subject
+      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_success").once
+    end
+
+    it "logs import duration" do
+      subject
+      expect(InstStatsd::Statsd).to have_received(:timing).with("content_migrations.import_duration", anything, {
+                                                                  tags: { migration_type: "atypeofmigration" }
+                                                                }).once
+    end
+
+    it "logs import failures" do
+      allow(Auditors::Course).to receive(:record_copied).and_raise("Something went wrong at the last minute")
+      expect { subject }.to raise_error("Something went wrong at the last minute")
+      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_failure").once
+    end
+
+    it "Does not log duration on failures" do
+      allow(Auditors::Course).to receive(:record_copied).and_raise("Something went wrong at the last minute")
+      expect { subject }.to raise_error("Something went wrong at the last minute")
+      expect(InstStatsd::Statsd).to_not have_received(:timing).with("content_migrations.import_failure")
+    end
+  end
 end
 
 def from_file_path(path, course)
   list = path.split("/").reject(&:empty?)
   filename = list.pop
   folder = Folder.assert_path(list.join("/"), course)
-  file = folder.file_attachments.build(display_name: filename, filename: filename, content_type: "text/plain")
+  file = folder.file_attachments.build(display_name: filename, filename:, content_type: "text/plain")
   file.uploaded_data = StringIO.new("fake data")
   file.context = course
   file.save!

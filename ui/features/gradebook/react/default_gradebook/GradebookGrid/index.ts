@@ -107,6 +107,12 @@ export default class GradebookGrid {
     }
   }
 
+  invalidateRows(indexes: string[]) {
+    if (this.grid) {
+      this.grid.invalidateRows(indexes)
+    }
+  }
+
   render() {
     if (this.grid) {
       this.grid.render()
@@ -126,6 +132,12 @@ export default class GradebookGrid {
       const columnIndex = this.columns.getIndexOfColumn(columnId)
       const rowIndex = this.gridData.rows.findIndex(row => row.id === studentId)
       this.grid.updateCell(rowIndex, columnIndex)
+    }
+  }
+
+  updateRowCount() {
+    if (this.grid) {
+      this.grid.updateRowCount()
     }
   }
 }

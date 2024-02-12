@@ -17,9 +17,9 @@
  */
 
 import React from 'react'
-import {render, fireEvent, waitFor} from '@testing-library/react'
+import {render, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ProxyUploadModal, {ProxyUploadModalProps} from '../ProxyUploadModal'
+import ProxyUploadModal, {type ProxyUploadModalProps} from '../ProxyUploadModal'
 
 const defaultProps: ProxyUploadModalProps = {
   student: {
@@ -44,6 +44,10 @@ function renderComponent(overrideProps = {}) {
 }
 
 describe('ProxyUploadModal', () => {
+  beforeAll(() => {
+    global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
+  })
+
   it('renders', () => {
     const {getByText} = renderComponent()
     expect(getByText('Upload File')).toBeInTheDocument()

@@ -74,7 +74,50 @@ describe GradingStandard do
 
         expect(standard).to be_valid
       end
+
+      it "is valid when scaling_factor other than 1 is set for a points based scheme" do
+        standard.data = [["A", 0.9], ["B", 0.8], ["C", 0.7], ["D", 0.0]]
+        standard.points_based = true
+        standard.scaling_factor = 4.0
+        expect(standard).to be_valid
+      end
+
+      it "is invalid when scaling_factor other than 1 is set for a non points based scheme" do
+        standard.data = [["A", 0.9], ["B", 0.8], ["C", 0.7], ["D", 0.0]]
+        standard.scaling_factor = 4.0
+        expect(standard).not_to be_valid
+      end
     end
+  end
+
+  it "defaults scaling_factor to 1.0" do
+    grading_standard = @course.grading_standards.build({ title: "My Scheme Title",
+                                                         data: GradingStandard.default_grading_standard })
+    grading_standard.save
+    expect(grading_standard.scaling_factor).to eq 1.0
+  end
+
+  it "scaling_factor persists and retrieves" do
+    grading_standard = @course.grading_standards.build({ title: "My Scheme Title",
+                                                         data: GradingStandard.default_grading_standard,
+                                                         scaling_factor: 4.0 })
+    grading_standard.save
+    expect(grading_standard.scaling_factor).to eq 4.0
+  end
+
+  it "defaults points_based properly" do
+    grading_standard = @course.grading_standards.build({ title: "My Scheme Title",
+                                                         data: GradingStandard.default_grading_standard })
+    grading_standard.save
+    expect(grading_standard.points_based).to be false
+  end
+
+  it "points_based persists and retrieves" do
+    grading_standard = @course.grading_standards.build({ title: "My Scheme Title",
+                                                         data: GradingStandard.default_grading_standard,
+                                                         points_based: true })
+    grading_standard.save
+    expect(grading_standard.points_based).to be true
   end
 
   it "strips trailing whitespaces from scheme names" do
@@ -222,18 +265,34 @@ describe GradingStandard do
 
     it "returns a score in the proper range for letter grades" do
       score = @gs.grade_to_score("B")
-      expect(score).to eql(86.0)
+      expect(score).to eq 86.0
     end
 
     it "returns nil when no grade matches" do
       score = @gs.grade_to_score("Z")
-      expect(score).to eql(nil)
+      expect(score).to be_nil
     end
 
     it "does not return more than 3 decimal digits" do
       score = @gs.grade_to_score("A-")
       decimal_part = score.to_s.split(".")[1]
       expect(decimal_part.length).to be <= 3
+    end
+
+    context "points-based scheme" do
+      before do
+        @gs = GradingStandard.new(context: @course)
+        @gs.data = [["Exceeds Mastery", 0.75], ["Mastery", 0.5], ["Near Mastery", 0.25], ["Below Mastery", 0]]
+        @gs.points_based = true
+        @gs.scaling_factor = 4.0
+        @gs.save!
+      end
+
+      it "returns a score that is 0.1 less than the next upper bound" do
+        score = @gs.grade_to_score("Near Mastery")
+        expect(score).to eq 47.5
+        expect(score / (100 / @gs.scaling_factor)).to eq 1.9
+      end
     end
   end
 
@@ -254,14 +313,57 @@ describe GradingStandard do
                    "M" => 0.0 }
     end
 
+    let(:en_dash) { "-" }
+    let(:minus) { "−" }
+
+    it "matches trailing en-dash to trailing en-dash" do
+      @gs.data = {
+        "A" => 0.94,
+        "A#{en_dash}" => 0.90,
+        "B" => 0.88
+      }
+      idx = @gs.place_in_scheme("A#{en_dash}")
+      expect(idx).to eq 1
+    end
+
+    it "matches trailing minus to trailing en-dash" do
+      @gs.data = {
+        "A" => 0.94,
+        "A#{en_dash}" => 0.90,
+        "B" => 0.88
+      }
+      idx = @gs.place_in_scheme("A#{minus}")
+      expect(idx).to eq 1
+    end
+
+    it "does not match minus (with no preceding character) to en-dash" do
+      @gs.data = {
+        "A" => 0.94,
+        en_dash => 0.90,
+        "B" => 0.88
+      }
+      idx = @gs.place_in_scheme(minus)
+      expect(idx).to be_nil
+    end
+
+    it "does not match non-trailing minus to non-trailing en-dash" do
+      @gs.data = {
+        "A" => 0.94,
+        "A#{en_dash}B" => 0.90,
+        "B" => 0.88
+      }
+      idx = @gs.place_in_scheme("A#{minus}B")
+      expect(idx).to be_nil
+    end
+
     it "matches alphabetical keys regardless of case" do
       idx = @gs.place_in_scheme("m")
-      expect(idx).to eql(11)
+      expect(idx).to be(11)
     end
 
     it "matches numeric keys" do
       idx = @gs.place_in_scheme(4)
-      expect(idx).to eql(0)
+      expect(idx).to be(0)
     end
 
     it "does not confuse letters and zeros" do
@@ -304,7 +406,9 @@ describe GradingStandard do
     context "with assignment link" do
       before(:once) do
         @assignment = @course.assignments.create!(title: "hi",
-                                                  grading_type: "letter_grade", grading_standard_id: @gs.id, submission_types: ["online_text_entry"])
+                                                  grading_type: "letter_grade",
+                                                  grading_standard_id: @gs.id,
+                                                  submission_types: ["online_text_entry"])
       end
 
       context "without submissions" do
@@ -348,15 +452,15 @@ describe GradingStandard do
         end
 
         it "is able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@root_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@sub_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is able to manage course level grading standards" do
-          expect(@course_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@course_standard.grants_right?(@admin, :manage)).to be(true)
         end
       end
 
@@ -366,29 +470,29 @@ describe GradingStandard do
         end
 
         it "is not able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@admin, :manage)).to eq(false)
+          expect(@root_account_standard.grants_right?(@admin, :manage)).to be(false)
         end
 
         it "is able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@sub_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is not able to manage course level grading standards, when the course is under the root-account" do
-          expect(@course_standard.grants_right?(@admin, :manage)).to eq(false)
+          expect(@course_standard.grants_right?(@admin, :manage)).to be(false)
         end
       end
 
       context "teacher" do
         it "is not able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@teacher, :manage)).to eq(false)
+          expect(@root_account_standard.grants_right?(@teacher, :manage)).to be(false)
         end
 
         it "is not able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@teacher, :manage)).to eq(false)
+          expect(@sub_account_standard.grants_right?(@teacher, :manage)).to be(false)
         end
 
         it "is able to manage course level grading standards" do
-          expect(@course_standard.grants_right?(@teacher, :manage)).to eq(true)
+          expect(@course_standard.grants_right?(@teacher, :manage)).to be(true)
         end
       end
     end
@@ -410,15 +514,15 @@ describe GradingStandard do
         end
 
         it "is able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@root_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@sub_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is able to manage course level grading standards" do
-          expect(@course_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@course_standard.grants_right?(@admin, :manage)).to be(true)
         end
       end
 
@@ -428,29 +532,29 @@ describe GradingStandard do
         end
 
         it "is not able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@admin, :manage)).to eq(false)
+          expect(@root_account_standard.grants_right?(@admin, :manage)).to be(false)
         end
 
         it "is able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@sub_account_standard.grants_right?(@admin, :manage)).to be(true)
         end
 
         it "is able to manage course level grading standards, when the course is under the sub-account" do
-          expect(@course_standard.grants_right?(@admin, :manage)).to eq(true)
+          expect(@course_standard.grants_right?(@admin, :manage)).to be(true)
         end
       end
 
       context "teacher" do
         it "is not able to manage root-account level grading standards" do
-          expect(@root_account_standard.grants_right?(@teacher, :manage)).to eq(false)
+          expect(@root_account_standard.grants_right?(@teacher, :manage)).to be(false)
         end
 
         it "is not able to manage sub-account level grading standards" do
-          expect(@sub_account_standard.grants_right?(@teacher, :manage)).to eq(false)
+          expect(@sub_account_standard.grants_right?(@teacher, :manage)).to be(false)
         end
 
         it "is able to manage course level grading standards" do
-          expect(@course_standard.grants_right?(@teacher, :manage)).to eq(true)
+          expect(@course_standard.grants_right?(@teacher, :manage)).to be(true)
         end
       end
     end
@@ -458,28 +562,92 @@ describe GradingStandard do
 
   describe "root account ID" do
     let_once(:root_account) { Account.create! }
-    let_once(:subaccount) { Account.create(root_account: root_account) }
+    let_once(:subaccount) { Account.create(root_account:) }
     let_once(:course) { Course.create!(account: subaccount) }
 
     let_once(:data) { [["A", 94], ["F", 0]] }
 
     context "when this grading standard is associated with a course" do
       it "is set to the course's root account ID" do
-        grading_standard = course.grading_standards.create!(workflow_state: "active", data: data)
+        grading_standard = course.grading_standards.create!(workflow_state: "active", data:)
         expect(grading_standard.root_account_id).to eq root_account.id
       end
     end
 
     context "when this grading standard is associated with an account" do
       it "is set to the account's ID if the account is a root account" do
-        grading_standard = subaccount.grading_standards.create!(workflow_state: "active", data: data)
+        grading_standard = subaccount.grading_standards.create!(workflow_state: "active", data:)
         expect(grading_standard.root_account_id).to eq root_account.id
       end
 
       it "is set to the account's root account ID if the account is not a root account" do
-        grading_standard = root_account.grading_standards.create!(workflow_state: "active", data: data)
+        grading_standard = root_account.grading_standards.create!(workflow_state: "active", data:)
         expect(grading_standard.root_account_id).to eq root_account.id
       end
+    end
+  end
+
+  describe "accounts" do
+    let_once(:root_account) { Account.create! }
+    let_once(:subaccount) { Account.create(root_account:) }
+    let_once(:course) { Course.create!(account: root_account) }
+
+    let_once(:data) { [["A", 94], ["F", 0]] }
+
+    context "when deleted" do
+      it "removes association on account" do
+        grading_standard = GradingStandard.new(context: subaccount, workflow_state: "active", data:)
+        subaccount.grading_standard = grading_standard
+        subaccount.save!
+
+        expect { grading_standard.destroy }.to change { subaccount.reload.grading_standard_id }.from(grading_standard.id).to(nil)
+      end
+    end
+  end
+
+  describe "#unarchive!" do
+    let_once(:data) { [["A", 94], ["F", 0]] }
+    let(:grading_standard) { GradingStandard.create(context: Account.default, workflow_state: "archived", data:) }
+
+    it "let to unarchive" do
+      expect { grading_standard.unarchive! }.to change { grading_standard.workflow_state }.from("archived").to("active")
+      expect(grading_standard.halted?)
+        .to be(false)
+      expect(grading_standard.halted_because)
+        .to be_nil
+    end
+
+    it "does not change workflow_state to active if the current workflow_state is deleted" do
+      grading_standard.update(workflow_state: "deleted")
+      grading_standard.unarchive!
+      expect(grading_standard.workflow_state).to eq("deleted")
+      expect(grading_standard.halted?)
+        .to be(true)
+      expect(grading_standard.halted_because)
+        .to_not be_nil
+    end
+  end
+
+  describe "#archive!" do
+    let_once(:data) { [["A", 94], ["F", 0]] }
+    let(:grading_standard) { GradingStandard.create(context: Account.default, workflow_state: "active", data:) }
+
+    it "let to archive" do
+      expect { grading_standard.archive! }.to change { grading_standard.workflow_state }.from("active").to("archived")
+      expect(grading_standard.halted?)
+        .to be(false)
+      expect(grading_standard.halted_because)
+        .to be_nil
+    end
+
+    it "does not change workflow_state to archive if the current workflow_state is deleted" do
+      grading_standard.update(workflow_state: "deleted")
+      grading_standard.archive!
+      expect(grading_standard.workflow_state).to eq("deleted")
+      expect(grading_standard.halted?)
+        .to be(true)
+      expect(grading_standard.halted_because)
+        .to_not be_nil
     end
   end
 end

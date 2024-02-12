@@ -28,9 +28,9 @@ describe SubmissionList do
     expect { @sl = SubmissionList.new(-1) }.to raise_error(ArgumentError, "Must provide a course.")
   end
 
-  it "provides a dictionary in 'list'" do
+  it "provides a hash in 'list'" do
     course_model
-    expect(SubmissionList.new(@course).list).to be_is_a(Hashery::Dictionary)
+    expect(SubmissionList.new(@course).list).to be_a(Hash)
   end
 
   it "creates keys in the data when versions of submissions existed" do
@@ -96,7 +96,7 @@ describe SubmissionList do
       SubmissionList.days(@course).each do |day|
         expect(day).to be_is_a(OpenStruct)
         expect(day.send(:table).keys.size).to eql(available_keys.size)
-        available_keys.each { |k| expect(day.send(:table)).to be_include(k) }
+        available_keys.each { |k| expect(day.send(:table)).to include(k) }
         expect(day.graders).to be_is_a(Array)
         expect(day.date).to be_is_a(Date)
       end
@@ -108,7 +108,7 @@ describe SubmissionList do
         day.graders.each do |grader|
           expect(grader).to be_is_a(OpenStruct)
           expect(grader.send(:table).keys.size).to eql(available_keys.size)
-          available_keys.each { |k| expect(grader.send(:table).keys).to be_include(k) }
+          available_keys.each { |k| expect(grader.send(:table).keys).to include(k) }
           expect(grader.grader_id).to be_is_a(Numeric)
           expect(grader.assignments).to be_is_a(Array)
           expect(grader.name).to be_is_a(String)
@@ -135,7 +135,7 @@ describe SubmissionList do
           grader.assignments.each do |assignment|
             expect(assignment).to be_is_a(OpenStruct)
             expect(assignment.send(:table).keys.size).to eql(available_keys.size)
-            available_keys.each { |k| expect(assignment.send(:table).keys).to be_include(k) }
+            available_keys.each { |k| expect(assignment.send(:table).keys).to include(k) }
             expect(assignment.submission_count).to eql(assignment.submissions.size)
             expect(assignment.name).to be_is_a(String)
             expect(assignment.name).to eql(assignment.submissions[0].assignment_name)
@@ -149,15 +149,43 @@ describe SubmissionList do
     context "submissions" do
       it "is able to loop on submissions" do
         available_keys = %i[
-          assignment_id assignment_name attachment_id attachment_ids
-          body course_id created_at current_grade current_graded_at
-          current_grader grade_matches_current_submission graded_at
-          graded_on grader grader_id group_id id new_grade
-          new_graded_at new_grader previous_grade previous_graded_at
-          previous_grader processed published_grade
-          published_score safe_grader_id score student_entered_score
-          student_user_id submission_id student_name submission_type
-          updated_at url user_id workflow_state
+          assignment_id
+          assignment_name
+          attachment_id
+          attachment_ids
+          body
+          course_id
+          created_at
+          current_grade
+          current_graded_at
+          current_grader
+          grade_matches_current_submission
+          graded_at
+          graded_on
+          grader
+          grader_id
+          group_id
+          id
+          new_grade
+          new_graded_at
+          new_grader
+          previous_grade
+          previous_graded_at
+          previous_grader
+          processed
+          published_grade
+          published_score
+          safe_grader_id
+          score
+          student_entered_score
+          student_user_id
+          submission_id
+          student_name
+          submission_type
+          updated_at
+          url
+          user_id
+          workflow_state
         ]
 
         SubmissionList.days(@course).each do |day|
@@ -166,7 +194,7 @@ describe SubmissionList do
               assignment.submissions.each do |submission|
                 expect(submission).to be_is_a(OpenStruct)
                 expect(submission.send(:table).keys.size).to eql(available_keys.size)
-                available_keys.each { |k| expect(submission.send(:table).keys).to be_include(k) }
+                available_keys.each { |k| expect(submission.send(:table).keys).to include(k) }
               end
             end
           end
@@ -196,9 +224,10 @@ describe SubmissionList do
 
       @points = 15.0
 
-      @question = double(id: 1, question_data: { id: 1,
-                                                 regrade_option: "full_credit",
-                                                 points_possible: @points },
+      @question = double(id: 1,
+                         question_data: { id: 1,
+                                          regrade_option: "full_credit",
+                                          points_possible: @points },
                          quiz_group: nil)
 
       @question_regrade = double(quiz_question: @question,
@@ -259,8 +288,8 @@ describe SubmissionList do
 
     context "when the grade is not blank" do
       let!(:grade_assignment) do
-        assignment.grade_student student, { grade: 5, grader: grader }
-        assignment.grade_student student, { grade: 3, grader: grader }
+        assignment.grade_student(student, { grade: 5, grader: })
+        assignment.grade_student student, { grade: 3, grader: }
       end
 
       it "remembers the 'Before' grade" do
@@ -278,9 +307,9 @@ describe SubmissionList do
 
     context "when the grade is blank" do
       let!(:grade_assignment) do
-        assignment.grade_student student, { grade: 6, grader: grader }
-        assignment.grade_student student, { grade: 7, grader: grader }
-        assignment.grade_student student, { grade: "", grader: grader }
+        assignment.grade_student(student, { grade: 6, grader: })
+        assignment.grade_student(student, { grade: 7, grader: })
+        assignment.grade_student student, { grade: "", grader: }
       end
 
       it "remembers the 'Before' grade" do

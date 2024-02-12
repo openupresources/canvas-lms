@@ -27,7 +27,7 @@ module Lti
 
     let(:account) { Account.create }
     let(:resource_handler) do
-      ResourceHandler.create(resource_type_code: "code", name: "resource name", tool_proxy: tool_proxy)
+      ResourceHandler.create(resource_type_code: "code", name: "resource name", tool_proxy:)
     end
 
     describe "#launch_definitions" do
@@ -47,7 +47,7 @@ module Lti
             url: "https://www.test.tool.com",
             consumer_key: "key",
             shared_secret: "secret",
-            settings: settings
+            settings:
           )
         end
 
@@ -85,7 +85,7 @@ module Lti
           end
         end
 
-        context "whith a message type that does not allow content selection" do
+        context "with a message type that does not allow content selection" do
           it "does not set selection properties" do
             expect(subject.dig(:placements, :assignment_selection, :selection_width)).to be_nil
           end
@@ -141,6 +141,7 @@ module Lti
                                    name: tool.label_for(placements.first, I18n.locale),
                                    description: tool.description,
                                    domain: nil,
+                                   url: "http://www.example.com/basic_lti",
                                    placements: {
                                      link_selection: {
                                        message_type: "basic-lti-launch-request",
@@ -157,7 +158,9 @@ module Lti
       end
 
       it "uses localized labels" do
-        tool = account.context_external_tools.new(name: "bob", consumer_key: "test", shared_secret: "secret",
+        tool = account.context_external_tools.new(name: "bob",
+                                                  consumer_key: "test",
+                                                  shared_secret: "secret",
                                                   url: "http://example.com")
 
         assignment_selection = {
@@ -194,6 +197,7 @@ module Lti
                                    name: tool.name,
                                    description: tool.description,
                                    domain: nil,
+                                   url: "http://www.example.com/basic_lti",
                                    placements: {
                                      assignment_selection: {
                                        message_type: "basic-lti-launch-request",
@@ -231,8 +235,8 @@ module Lti
         expect(definitions.count).to eq 2
         external_tool = definitions.find { |d| d[:definition_type] == "ContextExternalTool" }
         message_handler = definitions.find { |d| d[:definition_type] == "Lti::MessageHandler" }
-        expect(message_handler).to_not be nil
-        expect(external_tool).to_not be nil
+        expect(message_handler).to_not be_nil
+        expect(external_tool).to_not be_nil
       end
 
       context "pagination" do
@@ -249,11 +253,39 @@ module Lti
           placements = %w[assignment_selection link_selection resource_selection]
           collection = described_class.bookmarked_collection(account, placements)
           per_page = 3
-          page1 = collection.paginate(per_page: per_page)
-          page2 = collection.paginate(page: page1.next_page, per_page: per_page)
+          page1 = collection.paginate(per_page:)
+          page2 = collection.paginate(page: page1.next_page, per_page:)
           expect(page1.count).to eq 3
           expect(page2.count).to eq 3
           expect(page1.first).to_not eq page2.first
+        end
+      end
+    end
+
+    describe "#launch definitions with a launch placement type" do
+      subject do
+        Lti::AppLaunchCollator.launch_definitions(
+          [tool],
+          [placement]
+        ).first
+      end
+
+      context "with assignment_edit placement" do
+        let(:placement) { :assignment_edit }
+        let(:tool) do
+          new_valid_external_tool(account)
+        end
+
+        it "retains the launch_height property" do
+          tool.assignment_edit = {
+            enabled: true,
+            url: "https://www.test.tool.com",
+            message_type: "LtiResourceLinkRequest",
+            launch_width: 300,
+            launch_height: 300
+          }
+          tool.save!
+          expect(subject.dig(:placements, :assignment_edit, :launch_height)).to eq 300
         end
       end
     end

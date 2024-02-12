@@ -22,11 +22,11 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
   attr_accessor :instance_debugging
 
   def self.sti_name
-    self == OpenIDConnect ? "openid_connect" : super
+    (self == OpenIDConnect) ? "openid_connect" : super
   end
 
   def self.display_name
-    self == OpenIDConnect ? "OpenID Connect" : super
+    (self == OpenIDConnect) ? "OpenID Connect" : super
   end
 
   def self.open_id_connect_params
@@ -112,11 +112,15 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
     { scope: scope_for_options }
   end
 
+  def client_options
+    super.merge(auth_scheme: :request_body)
+  end
+
   private
 
   def claims(token)
     token.options[:claims] ||= begin
-      jwt_string = token.params["id_token"]
+      jwt_string = token.params["id_token"] || token.token
       debug_set(:id_token, jwt_string) if instance_debugging
       id_token = {} if jwt_string.blank?
 
@@ -145,15 +149,27 @@ class AuthenticationProvider::OpenIDConnect < AuthenticationProvider::OAuth2
     ([login_attribute] + federated_attributes.map { |_canvas_attribute, details| details["attribute"] }).uniq
   end
 
-  PROFILE_CLAIMS = %w[name family_name given_name middle_name nickname preferred_username
-                      profile picture website gender birthdate zoneinfo locale updated_at].freeze
+  PROFILE_CLAIMS = %w[name
+                      family_name
+                      given_name
+                      middle_name
+                      nickname
+                      preferred_username
+                      profile
+                      picture
+                      website
+                      gender
+                      birthdate
+                      zoneinfo
+                      locale
+                      updated_at].freeze
   def scope_for_options
     result = (scope || "").split
 
     result.unshift("openid")
     claims = requested_claims
     # see http://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims
-    result << "profile" unless (claims & PROFILE_CLAIMS).empty?
+    result << "profile" if claims.intersect?(PROFILE_CLAIMS)
     result << "email" if claims.include?("email") || claims.include?("email_verified")
     result << "address" if claims.include?("address")
     result << "phone" if claims.include?("phone_number") || claims.include?("phone_number_verified")

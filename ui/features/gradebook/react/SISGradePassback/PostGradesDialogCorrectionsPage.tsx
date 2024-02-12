@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2014 - present Instructure, Inc.
  *
@@ -16,7 +17,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {each, filter} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import React from 'react'
 import assignmentUtils from './assignmentUtils'
@@ -45,8 +46,11 @@ class PostGradesDialogCorrectionsPage extends React.Component<Props> {
   }
 
   ignoreErrors = () => {
-    const assignments = assignmentUtils.withErrors(this.props.store.getAssignments())
-    _.each(assignments, a => this.props.store.updateAssignment(a.id, {please_ignore: true}))
+    // TODO: fix this as Array<AssignmentWithOverride> cast
+    const assignments = assignmentUtils.withErrors(
+      this.props.store.getAssignments() as Array<AssignmentWithOverride>
+    )
+    each(assignments, a => this.props.store.updateAssignment(a.id, {please_ignore: true}))
   }
 
   ignoreErrorsThenProceed = () => {
@@ -58,7 +62,7 @@ class PostGradesDialogCorrectionsPage extends React.Component<Props> {
   invalidAssignmentsForCorrection = assignments => {
     const original_error_assignments = assignmentUtils.withOriginalErrors(assignments)
     const invalid_assignments: AssignmentWithOverride[] = []
-    _.each(assignments, a => {
+    each(assignments, a => {
       if (original_error_assignments.length > 0 && this.props.store.validCheck(a)) {
         // no-op
       } else if (original_error_assignments.length === 0 && this.props.store.validCheck(a)) {
@@ -71,7 +75,7 @@ class PostGradesDialogCorrectionsPage extends React.Component<Props> {
   }
 
   render() {
-    const assignments = _.filter(
+    const assignments = filter(
       this.props.store.getAssignments(),
       a =>
         typeof a.overrides === 'undefined' ||

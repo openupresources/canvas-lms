@@ -58,7 +58,7 @@ class PageView < ActiveRecord::Base
       p.export_columns.each do |c|
         v = p.send(c)
         if !v.nil? && v.respond_to?(:force_encoding)
-          p.send("#{c}=", v.force_encoding(Encoding::UTF_8))
+          p.send(:"#{c}=", v.force_encoding(Encoding::UTF_8))
         end
       end
     end
@@ -80,9 +80,9 @@ class PageView < ActiveRecord::Base
 
   def token
     CanvasSecurity::PageViewJwt.generate({
-                                           request_id: request_id,
+                                           request_id:,
                                            user_id: Shard.global_id_for(user_id),
-                                           created_at: created_at
+                                           created_at:
                                          })
   end
 
@@ -92,7 +92,7 @@ class PageView < ActiveRecord::Base
   end
 
   def ensure_account
-    self.account_id ||= (context_type == "Account" ? context_id : context.account_id) rescue nil
+    self.account_id ||= ((context_type == "Account") ? context_id : context.account_id) rescue nil
     self.account_id ||= (context.is_a?(Account) ? context : context.account) if context
   end
 
@@ -292,7 +292,9 @@ class PageView < ActiveRecord::Base
 
   def self.pv4_client
     ConfigFile.cache_object("pv4") do |config|
-      Pv4Client.new(config["uri"], config["access_token"])
+      creds = Rails.application.credentials.pv4_creds
+
+      Pv4Client.new(config["uri"], creds&.dig(Rails.env.to_sym, :access_token))
     end
   end
 
@@ -327,7 +329,7 @@ class PageView < ActiveRecord::Base
   end
 
   class << self
-    def transaction(*args, &block)
+    def transaction(*args, &)
       if PageView.cassandra?
         # Rails 3 autosave associations re-assign the attributes;
         # for sharding to work, the page view's shard has to be
@@ -335,7 +337,7 @@ class PageView < ActiveRecord::Base
         # done by the transaction, which we're skipping. so
         # manually do that here
         if current_scope
-          current_scope.activate(&block)
+          current_scope.activate(&)
         else
           yield
         end
@@ -384,8 +386,10 @@ class PageView < ActiveRecord::Base
 
     exptime = Setting.get("page_views_active_user_exptime", 1.day.to_s).to_i
     bucket = PageView.user_count_bucket_for_time(self.created_at)
-    Canvas.redis.sadd(bucket, user.global_id)
-    Canvas.redis.expire(bucket, exptime)
+    Canvas.redis.pipelined(bucket, failsafe: nil) do |pipeline|
+      pipeline.sadd(bucket, user.global_id)
+      pipeline.expire(bucket, exptime)
+    end
   end
 
   # to_csv uses these methods, see lib/ext/array.rb

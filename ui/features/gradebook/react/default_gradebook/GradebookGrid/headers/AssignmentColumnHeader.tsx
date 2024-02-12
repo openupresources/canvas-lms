@@ -23,7 +23,7 @@ import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {IconButton} from '@instructure/ui-buttons'
 import {IconMoreSolid, IconOffLine} from '@instructure/ui-icons'
 import {Grid} from '@instructure/ui-grid'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Menu} from '@instructure/ui-menu'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {ApolloProvider} from 'react-apollo'
@@ -34,11 +34,7 @@ import ColumnHeader from './ColumnHeader'
 import SecondaryDetailLine from './SecondaryDetailLine'
 import {Link} from '@instructure/ui-link'
 import {Text} from '@instructure/ui-text'
-import type {
-  CamelizedAssignment,
-  CamelizedSubmission,
-  PartialStudent,
-} from '@canvas/grading/grading.d'
+import type {CamelizedAssignment, PartialStudent} from '@canvas/grading/grading.d'
 
 const {Separator: MenuSeparator, Item: MenuItem, Group: MenuGroup} = Menu as any
 
@@ -54,7 +50,10 @@ function labelForPostGradesAction(postGradesAction) {
   return I18n.t('No grades to post')
 }
 
-function labelForHideGradesAction(hideGradesAction) {
+function labelForHideGradesAction(hideGradesAction: {
+  hasGradesOrCommentsToHide: boolean
+  hasGradesOrPostableComments: boolean
+}) {
   if (hideGradesAction.hasGradesOrCommentsToHide) {
     return I18n.t('Hide grades')
   } else if (hideGradesAction.hasGradesOrPostableComments) {
@@ -82,17 +81,11 @@ export type AssignmentColumnHeaderProps = {
     onSelect: (cb: any) => void
   }
   enterGradesAsSetting: any
-  getCurrentlyShownStudents: () => {
-    id: string
-    name: string
-    sortableName: string
-    isInactive: boolean
-    isTestStudent: boolean
-    submission: CamelizedSubmission
-  }[]
+  getCurrentlyShownStudents: () => PartialStudent[]
   hideGradesAction: {
+    hasGradesOrPostableComments: boolean
     hasGradesOrCommentsToHide: boolean
-    onSelect: () => void
+    onSelect: (cb: any) => void
   }
   messageAttachmentUploadFolderId: string
   onMenuDismiss: () => void
@@ -108,12 +101,13 @@ export type AssignmentColumnHeaderProps = {
     onSelect: (cb: any) => Promise<void>
   }
   showGradePostingPolicyAction: {
-    onSelect: (cb: any) => Promise<void>
+    onSelect: (cb: any) => void
   }
   sortBySetting: {
     direction: string
     disabled: boolean
     isSortColumn: boolean
+    onSortByExcused: () => void
     onSortByGradeAscending: () => void
     onSortByGradeDescending: () => void
     onSortByLate: () => void
@@ -123,7 +117,6 @@ export type AssignmentColumnHeaderProps = {
   }
   submissionsLoaded: boolean
   showMessageStudentsWithObserversDialog: boolean
-  showUnpostedMenuItem: boolean
   onSendMessageStudentsWho: (args: {recipientsIds: string[]; subject: string; body: string}) => void
   userId: string
 }
@@ -192,7 +185,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
     // this is because the onToggle handler in ColumnHeader.js is going to get
     // called synchronously, before the SetState takes effect, and it needs to
     // know to skipFocusOnClose
-    // @ts-ignore
+    // @ts-expect-error
     this.state.skipFocusOnClose = true
 
     this.setState({skipFocusOnClose: true}, () => action.onSelect(this.focusAtEnd))
@@ -233,7 +226,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
   }
 
   showMessageStudentsWhoDialog = async () => {
-    // @ts-ignore
+    // @ts-expect-error
     this.state.skipFocusOnClose = true
     this.setState({skipFocusOnClose: true})
 
@@ -300,7 +293,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
     const assignment = this.props.assignment
 
     return (
-      <ApplyTheme
+      <InstUISettingsProvider
         theme={{smallPaddingHorizontal: '0', smallFontSize: '0.75rem', smallHeight: '1rem'}}
       >
         <Link ref={this.bindAssignmentLink} href={assignment.htmlUrl} isWithinText={false}>
@@ -308,7 +301,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
             <span className="assignment-name">{assignment.name}</span>
           </Text>
         </Link>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     )
   }
 
@@ -377,15 +370,21 @@ export default class AssignmentColumnHeader extends ColumnHeader<
               {I18n.t('Late')}
             </MenuItem>
 
-            {this.props.showUnpostedMenuItem && (
-              <MenuItem
-                selected={selectedSortSetting === 'unposted'}
-                disabled={sortBySetting.disabled}
-                onSelect={sortBySetting.onSortByUnposted}
-              >
-                {I18n.t('Unposted')}
-              </MenuItem>
-            )}
+            <MenuItem
+              selected={selectedSortSetting === 'excused'}
+              disabled={sortBySetting.disabled}
+              onSelect={sortBySetting.onSortByExcused}
+            >
+              {I18n.t('Excused')}
+            </MenuItem>
+
+            <MenuItem
+              selected={selectedSortSetting === 'unposted'}
+              disabled={sortBySetting.disabled}
+              onSelect={sortBySetting.onSortByUnposted}
+            >
+              {I18n.t('Unposted')}
+            </MenuItem>
           </MenuGroup>
         </Menu>
 

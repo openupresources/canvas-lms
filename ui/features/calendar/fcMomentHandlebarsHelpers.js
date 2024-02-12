@@ -16,14 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import tz from '@canvas/timezone'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import * as tz from '@canvas/datetime'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import _Handlebars from 'handlebars/runtime'
 
 const Handlebars = _Handlebars.default // because this version of handlebars has old, messed up es6 transpilation
 
 // This file is to add the methods that depend on '../util/fcUtil'
-// as registered handelbars helpers. These are not in ui/shared/handlebars-helpers/index.coffee
+// as registered handelbars helpers. These are not in ui/shared/handlebars-helpers/index.js
 // because otherwise everypage would load fullcalendar.js (which fcUtil depends on).
 // So anything that depends on these helpers in their handlbars needs to make sure
 // to require this file first, so they are available as helpers.

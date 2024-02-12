@@ -55,7 +55,7 @@ class Login::SamlController < ApplicationController
       flash[:delegated_message] = if @domain_root_account.auth_discovery_url
                                     t("Canvas did not recognize your identity provider")
                                   elsif response.issuer
-                                    t("Canvas is not configured to receive logins from %{issuer}.", issuer: issuer)
+                                    t("Canvas is not configured to receive logins from %{issuer}.", issuer:)
                                   else
                                     t("The institution you logged in from is not configured on this account.")
                                   end
@@ -87,7 +87,7 @@ class Login::SamlController < ApplicationController
 
     assertion = response.assertions.first
     # yes, they could be _that_ busted that we put a dangling rescue here.
-    provider_attributes = assertion&.attribute_statements&.first&.to_h || {} rescue {}
+    provider_attributes = assertion&.attribute_statements&.first.to_h rescue {}
     subject_name_id = assertion&.subject&.name_id
     unique_id = if aac.login_attribute == "NameID"
                   subject_name_id&.id
@@ -331,8 +331,8 @@ class Login::SamlController < ApplicationController
       private_key = AuthenticationProvider::SAML.private_key
       private_key = nil if aac.sig_alg.nil?
       forward_url = SAML2::Bindings::HTTPRedirect.encode(logout_response,
-                                                         relay_state: relay_state,
-                                                         private_key: private_key,
+                                                         relay_state:,
+                                                         private_key:,
                                                          sig_alg: aac.sig_alg)
 
       redirect_to(forward_url)

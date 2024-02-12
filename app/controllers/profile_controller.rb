@@ -90,6 +90,11 @@
 #           "description": "Optional: Whether or not the user is a K5 user. This field is nil if the user settings are not for the user making the request.",
 #           "example": true,
 #           "type": "boolean"
+#         },
+#         "use_classic_font_in_k5": {
+#           "description": "Optional: Whether or not the user should see the classic font on the dashboard. Only applies if k5_user is true. This field is nil if the user settings are not for the user making the request.",
+#           "example": false,
+#           "type": "boolean"
 #         }
 #       }
 #     }
@@ -255,7 +260,11 @@ class ProfileController < ApplicationController
     }
 
     js_bundle :account_notification_settings
-    render html: "", layout: true
+    respond_to do |format|
+      format.html do
+        render html: "", layout: true
+      end
+    end
   end
 
   def communication_update
@@ -345,8 +354,18 @@ class ProfileController < ApplicationController
     respond_to do |format|
       user_params = if params[:user]
                       params[:user]
-                        .permit(:name, :short_name, :sortable_name, :time_zone, :show_user_services, :gender,
-                                :avatar_image, :subscribe_to_emails, :locale, :bio, :birthdate, :pronouns)
+                        .permit(:name,
+                                :short_name,
+                                :sortable_name,
+                                :time_zone,
+                                :show_user_services,
+                                :gender,
+                                :avatar_image,
+                                :subscribe_to_emails,
+                                :locale,
+                                :bio,
+                                :birthdate,
+                                :pronouns)
                     else
                       {}
                     end
@@ -434,7 +453,7 @@ class ProfileController < ApplicationController
       params[:link_urls].zip(params[:link_titles])
                         .reject { |url, title| url.blank? && title.blank? }
                         .each do |url, title|
-        new_link = @profile.links.build url: url, title: title
+        new_link = @profile.links.build(url:, title:)
         # since every time we update links, we delete and recreate everything,
         # deleting invalid link records will make sure the rest of the
         # valid ones still save
@@ -463,7 +482,7 @@ class ProfileController < ApplicationController
     else
       respond_to do |format|
         format.html { redirect_to user_profile_path(@user) } # FIXME: need to go to edit path
-        format.json { render json: @profile.errors, status: :bad_request }  # NOTE: won't send back @user validation errors (i.e. short_name)
+        format.json { render json: @profile.errors, status: :bad_request } # NOTE: won't send back @user validation errors (i.e. short_name)
       end
     end
   end
@@ -492,7 +511,7 @@ class ProfileController < ApplicationController
   end
 
   def content_shares
-    raise not_found unless @current_user.can_view_content_shares?
+    return not_found unless @current_user.can_view_content_shares?
 
     @user ||= @current_user
     set_active_tab "content_shares"
@@ -525,6 +544,6 @@ class ProfileController < ApplicationController
 end
 
 def instructure_misc_plugin_available?
-  Object.const_defined?("InstructureMiscPlugin")
+  Object.const_defined?(:InstructureMiscPlugin)
 end
 private :instructure_misc_plugin_available?

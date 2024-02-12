@@ -30,7 +30,7 @@ describe "conversations new" do
   end
 
   # the js errors caught in here are captured by VICE-2507
-  context "when react_inbox feature flag is ON", ignore_js_errors: true do
+  context "when react_inbox feature flag is ON", :ignore_js_errors do
     before do
       Account.default.set_feature_flag! :react_inbox, "on"
     end
@@ -49,6 +49,15 @@ describe "conversations new" do
         @convo.add_message(@teacher, "second Message")
       end
 
+      it "returns to conversations list on button click" do
+        get "/conversations"
+        f("div[data-testid='conversation']").click
+        wait_for_ajaximations
+        fj("button:contains('Return to test in Conversation List')").click
+        wait_for_ajaximations
+        expect(fj("button:contains('Open Conversation')")).to be_present
+      end
+
       it "forwards conversations via the top bar menu" do
         get "/conversations"
         f("div[data-testid='conversation']").click
@@ -58,8 +67,8 @@ describe "conversations new" do
         expect(messages[0].text).to include "#{@teacher.name}, #{@s[0].name}, #{@s[1].name}"
         f("span[data-testid='desktop-message-action-header'] button[data-testid='settings']").click
         fj("li:contains('Forward')").click
-        ff("input[aria-label='Address Book']")[1].click
-        fj("div[data-testid='address-book-item']:contains('Students')").click
+        ff("input[aria-label='Search']")[1].click
+        fj("div[data-testid='address-book-item']:contains('Users')").click
         fj("div[data-testid='address-book-item']:contains('#{@s[2].name}')").click
         f("textarea[data-testid='message-body']").send_keys "forwarding to you"
         fj("button:contains('Send')").click
@@ -85,8 +94,8 @@ describe "conversations new" do
         expect(fj("span:contains('second Message')")).to be_present
         expect(fj("span:contains('hi there')")).to be_present
 
-        ff("input[aria-label='Address Book']")[1].click
-        fj("div[data-testid='address-book-item']:contains('Students')").click
+        ff("input[aria-label='Search']")[1].click
+        fj("div[data-testid='address-book-item']:contains('Users')").click
         fj("div[data-testid='address-book-item']:contains('#{@s[2].name}')").click
         f("textarea[data-testid='message-body']").send_keys "forwarding to you"
         fj("button:contains('Send')").click
@@ -123,8 +132,8 @@ describe "conversations new" do
         expect(fj("span:contains('second Message')")).to be_present
         expect(f("span[data-testid='compose-modal-desktop']")).not_to contain_jqcss("span:contains('hi there')")
 
-        ff("input[aria-label='Address Book']")[1].click
-        fj("div[data-testid='address-book-item']:contains('Students')").click
+        ff("input[aria-label='Search']")[1].click
+        fj("div[data-testid='address-book-item']:contains('Users')").click
         fj("div[data-testid='address-book-item']:contains('#{@s[2].name}')").click
         f("textarea[data-testid='message-body']").send_keys "forwarding to you"
         fj("button:contains('Send')").click
@@ -210,6 +219,27 @@ describe "conversations new" do
         driver.switch_to.alert.accept
         expect(fj("span:contains('Message unarchived!')")).to be_present
       end
+
+      it "hides selected message while loading" do
+        other_student = User.create!(name: "Luke Skywalker")
+        @course.enroll_student(other_student).update_attribute(:workflow_state, "active")
+
+        conversation = other_student.initiate_conversation(
+          [@teacher],
+          nil,
+          subject: "Hello!",
+          context_type: "Course",
+          context_id: @course.id
+        )
+        conversation.add_message("Test")
+
+        get "/conversations"
+        ff("div[data-testid='conversation']")[0].click
+        f("input[data-testid='mailbox-select']").click
+        f("span[value='sent']").click
+
+        expect(fj("span:contains('No Conversations Selected')")).to be_present
+      end
     end
 
     context "conversation with a message from a hard-deleted user" do
@@ -236,6 +266,109 @@ describe "conversations new" do
         expect(conversation_list_item.text).to include "DELETED USER,"
         expect(messages.count).to eq 2
         expect(messages[0].text).to include "DELETED USER, #{@s[0].name}"
+      end
+    end
+
+    context "conversation participant with a null conversation" do
+      before do
+        @participant = conversation(@teacher, @s[0], @s[1], body: "hi there", workflow_state: "unread")
+        @convo = @participant.conversation
+        @convo.update_attribute(:subject, "test")
+        @conversation_participants = @convo.conversation_participants
+        @convo.conversation_messages[0].conversation_message_participants.delete_all
+        @convo.conversation_messages[0].delete
+        @convo.delete
+      end
+
+      it "does not crash when opening inbox" do
+        get "/conversations"
+
+        # The page should load with no conversations
+        expect(fj("span:contains('No Conversations Selected')")).to be_present
+
+        # Verify that the orphaned state exists
+        expect(@conversation_participants[0].reload).to be_truthy
+        expect(@conversation_participants[0].conversation_id).to be_truthy
+        expect { Conversation.find(@conversation_participants[0].conversation_id) }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    context "course selection" do
+      it "resets the course selection when the reset button is clicked" do
+        get "/conversations"
+        f("[data-testid='course-select']").click
+        wait_for_ajaximations
+
+        f("##{@course.asset_string}").click
+        wait_for_ajaximations
+        expect(f("[data-testid='course-select']").attribute("value")).to eq @course.name
+        force_click("[data-testid='delete-course-button'] > button")
+        wait_for_ajaximations
+        expect(f("[data-testid='course-select']").attribute("value")).to eq ""
+      end
+    end
+
+    context "when react_inbox_labels feature flag is ON" do
+      before do
+        Account.site_admin.set_feature_flag! :react_inbox_labels, "on"
+      end
+
+      it "shows the Manage labels button" do
+        get "/conversations"
+        expect(f('button[data-testid="manage-labels"]')).to be_displayed
+      end
+
+      context "in the Manage labels modal" do
+        before do
+          @teacher.preferences[:inbox_labels] = ["Test 1", "Test 2", "Test 3"]
+          @teacher.save!
+
+          user_session(@teacher)
+          get "/conversations"
+
+          f('button[data-testid="manage-labels"]').click
+          wait_for_ajaximations
+        end
+
+        it "shows the user's labels" do
+          labels = ff("tr[data-testid='label']")
+
+          expect(labels.count).to eq 3
+          expect(labels[0].text).to eq "Test 1\nRemove Label"
+          expect(labels[1].text).to eq "Test 2\nRemove Label"
+          expect(labels[2].text).to eq "Test 3\nRemove Label"
+        end
+
+        it "removes the Test 1 label from user's labels" do
+          delete_label_buttons = ff("button[data-testid='delete-label']")
+          expect(delete_label_buttons.count).to eq 3
+
+          delete_label_buttons[0].click
+          fj("button:contains('Save')").click
+          wait_for_ajaximations
+
+          keep_trying_until { expect(User.find(@teacher.id).inbox_labels).to eq ["Test 2", "Test 3"] }
+        end
+
+        it "adds the Test 4 label to user's labels" do
+          f("input[placeholder='Label Name']").send_keys "Test 4"
+          f("button[data-testid='add-label']").click
+          fj("button:contains('Save')").click
+          wait_for_ajaximations
+
+          expect(User.find(@teacher.id).inbox_labels).to eq ["Test 1", "Test 2", "Test 3", "Test 4"]
+        end
+      end
+    end
+
+    context "when react_inbox_labels feature flag is OFF" do
+      before do
+        Account.site_admin.set_feature_flag! :react_inbox_labels, "off"
+      end
+
+      it "does not shows the Manage labels button" do
+        get "/conversations"
+        expect(f("body")).not_to contain_jqcss('button[data-testid="manage-labels"]')
       end
     end
   end

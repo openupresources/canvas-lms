@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -18,9 +19,9 @@
 
 import React from 'react'
 import fetchMock from 'fetch-mock'
+import {render, within} from '@testing-library/react'
 import {defaultGradebookProps} from '../../__tests__/GradebookSpecHelper'
 import {darken, defaultColors} from '../../constants/colors'
-import {render, within} from '@testing-library/react'
 import Gradebook from '../../Gradebook'
 import store from '../../stores/index'
 import {AssignmentGroup, Student} from '../../../../../../api.d'
@@ -240,6 +241,7 @@ describe('student-names-filter', () => {
       integration_id: null,
       sis_import_id: null,
       login_id: '9088409122',
+      section_ids: [],
       last_name: '',
       first_name: 'Ganondorf',
       enrollments: [
@@ -293,5 +295,96 @@ describe('student-names-filter', () => {
     rerender(<Gradebook {...defaultGradebookProps} recentlyLoadedStudents={students} />)
 
     expect(getByTestId('students-filter-select')).toBeDisabled()
+  })
+})
+
+describe('ProgressBar for loading data', () => {
+  it('do not render the progress bar if submission data loaded', () => {
+    const {queryByTestId} = render(
+      <Gradebook
+        {...defaultGradebookProps}
+        isSubmissionDataLoaded={true}
+        totalSubmissionsLoaded={0}
+        totalStudentsToLoad={11}
+      />
+    )
+
+    expect(queryByTestId('gradebook-submission-progress-bar')).not.toBeInTheDocument()
+  })
+
+  it('renders the progress bar with the correct screenreader label', () => {
+    const assignmentMap = {}
+
+    for (let i = 0; i < 200; i++) {
+      assignmentMap[i] = {}
+    }
+
+    const {getByRole} = render(
+      <Gradebook
+        {...defaultGradebookProps}
+        assignmentMap={assignmentMap}
+        isGridLoaded={true}
+        isSubmissionDataLoaded={false}
+        totalStudentsToLoad={300}
+        totalSubmissionsLoaded={0}
+      />
+    )
+
+    expect(getByRole('progressbar')).toHaveAttribute(
+      'aria-label',
+      'Loading Gradebook submissions 0 / 60000'
+    )
+  })
+})
+
+describe('TotalGradeOverrideTrayProvider tests', () => {
+  it('should render the total grade override tray with FF ON', async () => {
+    store.setState({
+      finalGradeOverrideTrayProps: {
+        isOpen: true,
+        studentInfo: {id: '1', name: 'Test Student'},
+      },
+    })
+    const gradeBookEnv = {
+      ...defaultGradebookProps.gradebookEnv,
+      custom_grade_statuses_enabled: true,
+    }
+    const {queryByTestId} = render(
+      <Gradebook
+        {...defaultGradebookProps}
+        isSubmissionDataLoaded={true}
+        totalSubmissionsLoaded={0}
+        totalStudentsToLoad={11}
+        gradebookEnv={gradeBookEnv}
+      />
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(queryByTestId('total-grade-override-tray')).toBeInTheDocument()
+  })
+
+  it('should not render the total grade override tray with FF OFF', async () => {
+    store.setState({
+      finalGradeOverrideTrayProps: {
+        isTrayOpen: true,
+        studentInfo: {id: '1', name: 'Test Student'},
+      },
+    })
+    const gradeBookEnv = {
+      ...defaultGradebookProps.gradebookEnv,
+      custom_grade_statuses_enabled: false,
+    }
+    const {queryByTestId} = render(
+      <Gradebook
+        {...defaultGradebookProps}
+        isSubmissionDataLoaded={true}
+        totalSubmissionsLoaded={0}
+        totalStudentsToLoad={11}
+        gradebookEnv={gradeBookEnv}
+      />
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(queryByTestId('total-grade-override-tray')).not.toBeInTheDocument()
   })
 })

@@ -17,16 +17,17 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
-import pubsub from 'jquery-tinypubsub'
+import * as pubsub from 'jquery-tinypubsub'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import fileSize from '@canvas/util/fileSize'
+import htmlEscape from '@instructure/html-escape'
 import './mediaComment'
 import '@canvas/jquery/jquery.ajaxJSON'
 import 'jqueryui/dialog'
-import '@canvas/jquery/jquery.instructure_misc_helpers' /* /\$\.h/, /\$\.fileSize/ */
+import '@canvas/jquery/jquery.instructure_misc_helpers' /* /\$\.h/ */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* .dim, /\.log\(/ */
-import 'jqueryui/progressbar'
+import 'jqueryui-unpatched/progressbar'
+import {each} from 'lodash'
 
 const I18n = useI18nScope('media_comments_publicjs')
 
@@ -213,7 +214,7 @@ $.mediaComment.upload_delegate = {
     $('#media_upload_settings').css('visibility', file ? 'visible' : 'hidden')
     $('#media_upload_title').val(file.title)
     $('#media_upload_display_title').text(file.title)
-    $('#media_upload_file_size').text($.fileSize(file.bytesTotal))
+    $('#media_upload_file_size').text(fileSize(file.bytesTotal))
 
     $('#media_upload_feedback_text').html('')
     $('#media_upload_feedback').css('visibility', 'hidden')
@@ -287,11 +288,8 @@ $.mediaComment.upload_delegate = {
 let reset_selectors = false
 let lastInit = null
 $.mediaComment.init = function (mediaType, opts) {
-  require.ensure(
-    [],
-    () => {
-      const swfobject = require('swfobject')
-
+  import('swfobject')
+    .then(swfobject => {
       lastInit = lastInit || new Date()
       mediaType = mediaType || 'any'
       opts = opts || {}
@@ -586,28 +584,21 @@ $.mediaComment.init = function (mediaType, opts) {
         jsUploader.onReady = mediaCommentReady
         jsUploader.addEntry = addEntry
 
-        const getBrowser = require('parse-browser-info').getBrowser
-        const currentBrowser = getBrowser()
-        if (
-          (currentBrowser.name === 'Chrome' && Number(currentBrowser.version) >= 68) ||
-          (currentBrowser.name === 'Firefox' && Number(currentBrowser.version) >= 61)
-        ) {
-          import('@canvas/media-recorder')
-            .then(({default: renderCanvasMediaRecorder}) => {
-              let tryToRenderInterval
-              const renderFunc = () => {
-                const e = document.getElementById('record_media_tab')
-                if (e) {
-                  renderCanvasMediaRecorder(e, jsUploader.doUploadByFile)
-                  clearInterval(tryToRenderInterval)
-                }
+        import('@canvas/media-recorder')
+          .then(({default: renderCanvasMediaRecorder}) => {
+            let tryToRenderInterval
+            const renderFunc = () => {
+              const e = document.getElementById('record_media_tab')
+              if (e) {
+                renderCanvasMediaRecorder(e, jsUploader.doUploadByFile)
+                clearInterval(tryToRenderInterval)
               }
-              tryToRenderInterval = setInterval(renderFunc, 10)
-            })
-            .catch(() => {
-              throw new Error('Failed to load @canvas/media-recorder')
-            })
-        }
+            }
+            tryToRenderInterval = setInterval(renderFunc, 10)
+          })
+          .catch(() => {
+            throw new Error('Failed to load @canvas/media-recorder')
+          })
       }
 
       const now = new Date()
@@ -683,9 +674,10 @@ $.mediaComment.init = function (mediaType, opts) {
         // only call mediaCommentReady if we are not doing js uploader
         mediaCommentReady()
       }
-    },
-    'mediaCommentRecordAsyncChunk'
-  )
+    })
+    .catch(() => {
+      throw new Error('Failed to load swfobject')
+    })
 } // End of init function
 
 $(document).ready(function () {
@@ -724,10 +716,10 @@ $(document).ready(function () {
       $('#video_upload')[0].removeFiles(0, files.length - 1)
     }
   })
-  $('#media_upload_submit').live('click', _event => {
+  $(document).on('click', '#media_upload_submit', _event => {
     $.mediaComment.upload_delegate.submit()
   })
-  $('#video_record_option,#audio_record_option').live('click', function (event) {
+  $(document).on('click', '#video_record_option,#audio_record_option', function (event) {
     event.preventDefault()
     $('#video_record_option,#audio_record_option').removeClass('selected_option')
     $(this).addClass('selected_option')
@@ -772,7 +764,7 @@ $(document).bind('media_recording_error', () => {
 })
 
 window.mediaCommentCallback = function (results) {
-  _.each(results, addEntry)
+  each(results, addEntry)
   $('#media_comment_create_dialog').empty().dialog('close')
 }
 

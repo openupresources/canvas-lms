@@ -27,7 +27,11 @@ class UserListsController < ApplicationController
   # POST /courses/:course_id/user_lists.json
   # POST /accounts/:account_id/user_lists.json
   def create
-    perms = @context.is_a?(Course) ? add_enrollment_permissions : :manage_account_memberships
+    perms = if @context.is_a?(Course)
+              add_enrollment_permissions
+            else
+              [:manage_account_memberships, *add_temporary_enrollment_permissions]
+            end
     return unless authorized_action(@context, @current_user, perms)
 
     respond_to do |format|
@@ -41,9 +45,9 @@ class UserListsController < ApplicationController
           # but honestly I'd rather keep it hidden so nobody knows my shame
           render json: UserListV2.new(params[:user_list],
                                       root_account: @context.root_account,
-                                      search_type: search_type,
+                                      search_type:,
                                       current_user: @current_user,
-                                      can_read_sis: can_read_sis)
+                                      can_read_sis:)
         else
           render json: UserList.new(params[:user_list],
                                     root_account: @context.root_account,
@@ -53,6 +57,8 @@ class UserListsController < ApplicationController
       end
     end
   end
+
+  private
 
   def add_enrollment_permissions
     if @domain_root_account.feature_enabled?(:granular_permissions_manage_users)
@@ -68,6 +74,12 @@ class UserListsController < ApplicationController
         :manage_students,
         :manage_admin_users
       ]
+    end
+  end
+
+  def add_temporary_enrollment_permissions
+    if @domain_root_account.feature_enabled?(:temporary_enrollments)
+      RoleOverride::MANAGE_TEMPORARY_ENROLLMENT_PERMISSIONS
     end
   end
 end

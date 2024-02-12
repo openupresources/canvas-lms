@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require_relative "./shared_constants"
-require_relative "./shared_linter_examples"
+require_relative "shared_constants"
+require_relative "shared_linter_examples"
 
 describe TatlTael::Linters::SeleniumSpecsLinter do
   let(:linter_class) { described_class }
@@ -23,22 +23,6 @@ describe TatlTael::Linters::SeleniumSpecsLinter do
                            [{ path: Consts::SELENIUM_SPEC_PATH, status: "added" },
                             { path: Consts::PUBLIC_JS_PATH, status: "added" },
                             { path: Consts::PUBLIC_JS_SPEC_PATH, status: "added" }]
-        end
-      end
-
-      context "needs coffee specs" do
-        context "has no coffee specs" do
-          include_examples "comments",
-                           [{ path: Consts::SELENIUM_SPEC_PATH, status: "added" },
-                            { path: Consts::APP_COFFEE_PATH, status: "added" }],
-                           :unnecessary_selenium_specs
-        end
-
-        context "has coffee specs" do
-          include_examples "does not comment",
-                           [{ path: Consts::SELENIUM_SPEC_PATH, status: "added" },
-                            { path: Consts::APP_COFFEE_PATH, status: "added" },
-                            { path: Consts::COFFEE_SPEC_PATH, status: "added" }]
         end
       end
 

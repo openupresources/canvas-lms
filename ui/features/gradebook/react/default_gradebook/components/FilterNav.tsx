@@ -16,26 +16,30 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React, {useState, useCallback, useRef, type SetStateAction} from 'react'
 import {Link} from '@instructure/ui-link'
 import {AccessibleContent} from '@instructure/ui-a11y-content'
 import uuid from 'uuid'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {Flex} from '@instructure/ui-flex'
 import {Tag} from '@instructure/ui-tag'
+import {Alert} from '@instructure/ui-alerts'
+import {Tooltip} from '@instructure/ui-tooltip'
 import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
-import type {Filter, FilterDrilldownData, FilterDrilldownMenuItem} from '../gradebook.d'
+import type {Filter, FilterPreset} from '../gradebook.d'
 import type {AssignmentGroup, Module, Section, StudentGroupCategoryMap} from '../../../../../api.d'
-import {getLabelForFilter, doFiltersMatch, isFilterNotEmpty} from '../Gradebook.utils'
+import {doFiltersMatch, getLabelForFilter, isFilterNotEmpty} from '../Gradebook.utils'
 import useStore from '../stores/index'
 import FilterDropdown from './FilterDropdown'
 import FilterNavDateModal from './FilterDateModal'
 import FilterTray from './FilterTray'
-import natcompare from '@canvas/util/natcompare'
+import {useFilterDropdownData} from './FilterNav.utils'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
+import {IconArrowOpenDownLine} from '@instructure/ui-icons'
+import {View} from '@instructure/ui-view'
+import {FilterNavPopover} from './FilterNavPopover'
 
 const I18n = useI18nScope('gradebook')
-
-const {Item: FlexItem} = Flex as any
 
 export type FilterNavProps = {
   modules: Module[]
@@ -43,6 +47,8 @@ export type FilterNavProps = {
   sections: Section[]
   gradingPeriods: CamelizedGradingPeriod[]
   studentGroupCategories: StudentGroupCategoryMap
+  customStatuses: GradeStatus[]
+  multiselectGradebookFiltersEnabled: boolean
 }
 
 export default function FilterNav({
@@ -51,301 +57,227 @@ export default function FilterNav({
   modules,
   sections,
   studentGroupCategories,
+  customStatuses,
+  multiselectGradebookFiltersEnabled,
 }: FilterNavProps) {
   const [isTrayOpen, setIsTrayOpen] = useState(false)
   const [isDateModalOpen, setIsDateModalOpen] = useState(false)
+  const [announcement, setAnnouncement] = useState('')
   const filterPresets = useStore(state => state.filterPresets)
   const applyFilters = useStore(state => state.applyFilters)
   const addFilters = useStore(state => state.addFilters)
-  const toggleFilter = useStore(state => state.toggleFilter)
   const appliedFilters = useStore(state => state.appliedFilters)
+  const applyFiltersButtonRef = useRef<HTMLButtonElement>(null)
+  const filterTagRef = useRef<(HTMLElement | null)[]>([])
+  const [isFilterNavPopoverOpen, setIsFilterNavPopoverOpen] = useState<boolean>(false)
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null)
 
   const handleClearFilters = () => {
+    setAnnouncement(I18n.t('All Filters Have Been Cleared'))
     applyFilters([])
+    applyFiltersButtonRef.current?.focus()
   }
 
-  const activeFilterComponents = appliedFilters.filter(isFilterNotEmpty).map(filter => {
+  const onToggleFilterPreset = useCallback(
+    (filterPreset: FilterPreset) => {
+      if (doFiltersMatch(appliedFilters, filterPreset.filters)) {
+        applyFilters([])
+      } else {
+        applyFilters(filterPreset.filters)
+      }
+    },
+    [appliedFilters, applyFilters]
+  )
+
+  const {dataMap, filterItems} = useFilterDropdownData({
+    appliedFilters,
+    assignmentGroups,
+    filterPresets,
+    gradingPeriods,
+    modules,
+    sections,
+    studentGroupCategories,
+    onToggleFilterPreset,
+    customStatuses,
+    multiselectGradebookFiltersEnabled,
+    onToggleDateModal: () => setIsDateModalOpen(true),
+  })
+
+  const activeFilterComponents = appliedFilters.filter(isFilterNotEmpty).map((filter, i) => {
     const label = getLabelForFilter(
       filter,
       assignmentGroups,
       gradingPeriods,
       modules,
       sections,
-      studentGroupCategories
+      studentGroupCategories,
+      customStatuses
     )
-    return (
-      <Tag
-        data-testid="applied-filter-tag"
-        key={`staged-filter-${filter.id}`}
-        text={<AccessibleContent alt={I18n.t('Remove filter')}>{label}</AccessibleContent>}
-        dismissible={true}
-        onClick={() =>
-          useStore.setState({
-            appliedFilters: appliedFilters.filter(c => c.id !== filter.id),
-          })
+
+    const handleDeleteFilterClick = () => {
+      setAnnouncement(I18n.t('Removed %{filterName} Filter', {filterName: label}))
+      useStore.setState({
+        appliedFilters: appliedFilters.filter(c => c.id !== filter.id),
+      })
+      setIsFilterNavPopoverOpen(false)
+      setOpenFilterKey('')
+    }
+
+    const handleSelectFilterClick = () => {
+      setAnnouncement(I18n.t('Added %{filterName} Filter', {filterName: label}))
+
+      if (filter.type === 'start-date' || filter.type === 'end-date') {
+        setIsDateModalOpen(true)
+      }
+    }
+
+    const handlePopoverClick = () => {
+      if (openFilterKey !== filterKey) {
+        setIsFilterNavPopoverOpen(true)
+        setOpenFilterKey(filterKey)
+        return
+      }
+      setIsFilterNavPopoverOpen(false)
+      setOpenFilterKey('')
+    }
+
+    const getFilterKey = () => {
+      const submissionStateFilterValues = [
+        'has-ungraded-submissions',
+        'has-submissions',
+        'has-no-submissions',
+        'has-unposted-grades',
+      ]
+
+      switch (filter.type) {
+        case 'section':
+          return 'sections'
+        case 'assignment-group':
+          return 'assignment-groups'
+        case 'module':
+          return 'modules'
+        case 'grading-period':
+          return 'grading-periods'
+        case 'student-group':
+          return 'student-groups'
+        case 'start-date':
+          return 'start-date'
+        case 'end-date':
+          return 'end-date'
+        case 'submissions':
+          return submissionStateFilterValues.includes(filter.value ?? '') ? 'submissions' : 'status'
+        default:
+          return ''
+      }
+    }
+
+    const filterKey = getFilterKey()
+    const selectedFilterItem = filterItems[filterKey]
+    const menuItems = selectedFilterItem?.items ?? []
+    const menuGroups = selectedFilterItem?.itemGroups ?? []
+
+    return multiselectGradebookFiltersEnabled ? (
+      <FilterNavPopover
+        key={`staged-filter-popover-${filter.id}`}
+        data-testid={`applied-filter-popover-${label}`}
+        renderTrigger={
+          <Tag
+            data-testid={`applied-filter-${label}`}
+            key={`staged-filter-${filter.id}`}
+            elementRef={(e: Element | null) => {
+              filterTagRef.current[i] = e as HTMLElement
+            }}
+            text={
+              <AccessibleContent alt={I18n.t('%{filterName} Filter Options', {filterName: label})}>
+                <Tooltip renderTip={label} positionTarget={filterTagRef.current[i]}>
+                  {label}
+                </Tooltip>
+                <View as="span" margin="0 0 0 small">
+                  <IconArrowOpenDownLine />
+                </View>
+              </AccessibleContent>
+            }
+            onClick={handlePopoverClick}
+            margin="0 xx-small 0 0"
+          />
         }
+        isOpen={isFilterNavPopoverOpen && openFilterKey === filterKey}
+        filterType={filter.type}
+        menuGroups={menuGroups}
+        menuItems={menuItems}
+        handleHideFilter={handlePopoverClick}
+        handleRemoveFilter={handleDeleteFilterClick}
+        handleSelectFilter={handleSelectFilterClick}
+      />
+    ) : (
+      <Tag
+        data-testid={`applied-filter-${label}`}
+        key={`staged-filter-${filter.id}`}
+        elementRef={(e: Element | null) => {
+          filterTagRef.current[i] = e as HTMLElement
+        }}
+        text={
+          <AccessibleContent alt={I18n.t('Remove %{filterName} Filter', {filterName: label})}>
+            <Tooltip renderTip={label} positionTarget={filterTagRef.current[i]}>
+              {label}
+            </Tooltip>
+          </AccessibleContent>
+        }
+        dismissible={true}
+        onClick={handleDeleteFilterClick}
         margin="0 xx-small 0 0"
       />
     )
   })
 
-  const dataMap: FilterDrilldownData = {
-    savedFilterPresets: {
-      id: 'savedFilterPresets',
-      parentId: null,
-      name: I18n.t('Saved Filter Presets'),
-      items: [],
-    },
-  }
-
-  for (const filterPreset of filterPresets) {
-    const item = {
-      id: filterPreset.id,
-      parentId: 'savedFilterPresets',
-      name: filterPreset.name,
-      isSelected: doFiltersMatch(appliedFilters, filterPreset.filters),
-      onToggle: () => {
-        if (doFiltersMatch(appliedFilters, filterPreset.filters)) {
-          applyFilters([])
-        } else {
-          applyFilters(filterPreset.filters)
-        }
-      },
-    }
-    dataMap[filterPreset.id] = item
-    dataMap.savedFilterPresets.items?.push(item)
-  }
-
-  const filterItems: FilterDrilldownData = {}
-
-  if (sections.length > 0) {
-    filterItems.sections = {
-      id: 'sections',
-      name: I18n.t('Sections'),
-      parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'section'),
-      items: sections.map(a => ({
-        id: a.id,
-        name: a.name,
-        isSelected: appliedFilters.some(c => c.type === 'section' && c.value === a.id),
-        onToggle: () => {
-          const filter: Filter = {
-            id: uuid.v4(),
-            type: 'section',
-            value: a.id,
-            created_at: new Date().toISOString(),
-          }
-          toggleFilter(filter)
-        },
-      })),
-    }
-    dataMap.sections = filterItems.sections
-  }
-
-  if (modules.length > 0) {
-    filterItems.modules = {
-      id: 'modules',
-      name: I18n.t('Modules'),
-      parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'module'),
-      items: modules.map(m => ({
-        id: m.id,
-        name: m.name,
-        isSelected: appliedFilters.some(c => c.type === 'module' && c.value === m.id),
-        onToggle: () => {
-          const filter: Filter = {
-            id: uuid.v4(),
-            type: 'module',
-            value: m.id,
-            created_at: new Date().toISOString(),
-          }
-          toggleFilter(filter)
-        },
-      })),
-    }
-    dataMap.modules = filterItems.modules
-  }
-
-  if (gradingPeriods.length > 0) {
-    const gradingPeriodItems: FilterDrilldownMenuItem[] = gradingPeriods.map(a => ({
-      id: a.id,
-      name: a.title,
-      isSelected: appliedFilters.some(c => c.type === 'grading-period' && c.value === a.id),
-      onToggle: () => {
-        const filter: Filter = {
-          id: uuid.v4(),
-          type: 'grading-period',
-          value: a.id,
-          created_at: new Date().toISOString(),
-        }
-        toggleFilter(filter)
-      },
-    }))
-    filterItems['grading-periods'] = {
-      id: 'grading-periods',
-      name: I18n.t('Grading Periods'),
-      parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'grading-period'),
-      items: [
-        {
-          id: 'ALL_GRADING_PERIODS',
-          name: I18n.t('All Grading Periods'),
-          isSelected: appliedFilters.some(c => c.type === 'grading-period' && c.value === '0'),
-          onToggle: () => {
-            const filter: Filter = {
-              id: uuid.v4(),
-              type: 'grading-period',
-              value: '0',
-              created_at: new Date().toISOString(),
-            }
-            toggleFilter(filter)
-          },
-        } as FilterDrilldownMenuItem,
-      ].concat(gradingPeriodItems),
-      itemGroups: [],
-    }
-    dataMap['grading-periods'] = filterItems['grading-periods']
-  }
-
-  if (assignmentGroups.length > 1) {
-    filterItems['assignment-groups'] = {
-      id: 'assignment-groups',
-      name: I18n.t('Assignment Groups'),
-      parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'assignment-group'),
-      items: assignmentGroups.map(a => ({
-        id: a.id,
-        name: a.name,
-        isSelected: appliedFilters.some(c => c.type === 'assignment-group' && c.value === a.id),
-        onToggle: () => {
-          const filter: Filter = {
-            id: uuid.v4(),
-            type: 'assignment-group',
-            value: a.id,
-            created_at: new Date().toISOString(),
-          }
-          toggleFilter(filter)
-        },
-      })),
-      itemGroups: [],
-    }
-    dataMap['assignment-groups'] = filterItems['assignment-groups']
-  }
-
-  if (Object.values(studentGroupCategories).length > 0) {
-    filterItems['student-groups'] = {
-      id: 'student-groups',
-      name: I18n.t('Student Groups'),
-      parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'student-group'),
-      itemGroups: Object.values(studentGroupCategories)
-        .sort((c1, c2) => natcompare.strings(c1.name, c2.name))
-        .map(category => ({
-          id: category.id,
-          name: category.name,
-          items: category.groups
-            .sort((g1, g2) => natcompare.strings(g1.name, g2.name))
-            .map(group => ({
-              id: group.id,
-              name: group.name,
-              isSelected: appliedFilters.some(
-                c => c.type === 'student-group' && c.value === group.id
-              ),
-              onToggle: () => {
-                const filter: Filter = {
-                  id: uuid.v4(),
-                  type: 'student-group',
-                  value: group.id,
-                  created_at: new Date().toISOString(),
-                }
-                toggleFilter(filter)
-              },
-            })),
-        })),
-    }
-    dataMap['student-groups'] = filterItems['student-groups']
-  }
-
-  filterItems.submissions = {
-    id: 'submissions',
-    name: I18n.t('Submissions'),
-    parentId: 'savedFilterPresets',
-    isSelected: appliedFilters.some(c => c.type === 'submissions'),
-    items: [
-      {
-        id: 'savedFilterPresets',
-        name: 'Has Ungraded Submissions',
-        isSelected: appliedFilters.some(
-          c => c.type === 'submissions' && c.value === 'has-ungraded-submissions'
-        ),
-        onToggle: () => {
-          const filter: Filter = {
-            id: uuid.v4(),
-            type: 'submissions',
-            value: 'has-ungraded-submissions',
-            created_at: new Date().toISOString(),
-          }
-          toggleFilter(filter)
-        },
-      },
-      {
-        id: '2',
-        name: 'Has Submissions',
-        isSelected: appliedFilters.some(
-          c => c.type === 'submissions' && c.value === 'has-submissions'
-        ),
-        onToggle: () => {
-          const filter: Filter = {
-            id: uuid.v4(),
-            type: 'submissions',
-            value: 'has-submissions',
-            created_at: new Date().toISOString(),
-          }
-          toggleFilter(filter)
-        },
-      },
-    ],
-  }
-  dataMap.submissions = filterItems.submissions
-
-  filterItems.startAndEndDate = {
-    id: 'start-and-end-date',
-    name: I18n.t('Start & End Date'),
-    parentId: 'savedFilterPresets',
-    isSelected: appliedFilters.some(
-      f => (f.type === 'start-date' || f.type === 'end-date') && isFilterNotEmpty(f)
-    ),
-    onToggle: () => setIsDateModalOpen(true),
-  }
-
   const startDate = appliedFilters.find((c: Filter) => c.type === 'start-date')?.value || null
 
   const endDate = appliedFilters.find((c: Filter) => c.type === 'end-date')?.value || null
 
+  const changeAnnouncement = (filterAnnouncement: SetStateAction<string>) => {
+    setAnnouncement(filterAnnouncement)
+  }
+
   return (
     <Flex justifyItems="space-between" padding="0 0 small 0">
-      <FlexItem>
+      <Alert
+        screenReaderOnly={true}
+        liveRegionPoliteness="assertive"
+        liveRegion={() => document.getElementById('flash_screenreader_holder') as HTMLElement}
+      >
+        {announcement}
+      </Alert>
+      <Flex.Item>
         <Flex>
-          <FlexItem padding="0 small 0 0">
+          <Flex.Item padding="0 small 0 0">
             <FilterDropdown
               onOpenTray={() => setIsTrayOpen(true)}
               dataMap={dataMap}
               filterItems={filterItems}
+              changeAnnouncement={changeAnnouncement}
+              applyFiltersButtonRef={applyFiltersButtonRef}
+              multiselectGradebookFiltersEnabled={multiselectGradebookFiltersEnabled}
             />
-          </FlexItem>
-          <FlexItem data-testid="filter-tags">
+          </Flex.Item>
+          <Flex.Item data-testid="filter-tags">
             {activeFilterComponents.length > 0 && activeFilterComponents}
-          </FlexItem>
+          </Flex.Item>
         </Flex>
-      </FlexItem>
+      </Flex.Item>
 
-      <FlexItem>
+      <Flex.Item>
         {activeFilterComponents.length > 0 && (
-          <Link isWithinText={false} as="button" margin="0" onClick={handleClearFilters}>
+          <Link
+            isWithinText={false}
+            as="button"
+            margin="0"
+            onClick={handleClearFilters}
+            data-testid="clear-all-filters"
+          >
             {I18n.t('Clear All Filters')}
           </Link>
         )}
-      </FlexItem>
+      </Flex.Item>
 
       <FilterTray
         isTrayOpen={isTrayOpen}
@@ -363,7 +295,7 @@ export default function FilterNav({
         endDate={endDate}
         isOpen={isDateModalOpen}
         onCloseDateModal={() => setIsDateModalOpen(false)}
-        onSelectDates={(startDateValue, endDateValue) => {
+        onSelectDates={(startDateValue: string | null, endDateValue: string | null) => {
           const startDateCondition: Filter = {
             id: uuid.v4(),
             type: 'start-date',

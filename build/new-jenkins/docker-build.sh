@@ -36,7 +36,7 @@ WORKSPACE=${WORKSPACE:-$(pwd)}
 # $WEBPACK_BUILDER_TAG: additional tag for the webpack-builder image
 #   - set to patchset unique ID for builds to reference without knowing about the hash ID
 
-export CACHE_VERSION="2022-11-30.1"
+export CACHE_VERSION="2023-04-05.1"
 export DOCKER_BUILDKIT=1
 
 if [[ "$WRITE_BUILD_CACHE" == "1" ]]; then
@@ -45,7 +45,7 @@ fi
 
 source ./build/new-jenkins/docker-build-helpers.sh
 
-./build/new-jenkins/docker-with-flakey-network-protection.sh pull starlord.inscloudgate.net/jenkins/dockerfile:1.0-experimental
+./build/new-jenkins/docker-with-flakey-network-protection.sh pull starlord.inscloudgate.net/jenkins/dockerfile:1.5.2
 ./build/new-jenkins/docker-with-flakey-network-protection.sh pull starlord.inscloudgate.net/jenkins/core:focal
 
 docker build --file Dockerfile.jenkins-cache --tag "local/cache-helper" "$WORKSPACE"
@@ -70,7 +70,7 @@ BASE_RUNNER_BUILD_ARGS=(
   --build-arg RUBY="$RUBY"
 )
 WEBPACK_RUNNER_BUILD_ARGS=(
-  --build-arg JS_BUILD_NO_UGLIFY="$JS_BUILD_NO_UGLIFY"
+  --build-arg SKIP_SOURCEMAPS="$SKIP_SOURCEMAPS"
   --build-arg RAILS_LOAD_ALL_LOCALES="$RAILS_LOAD_ALL_LOCALES"
   --build-arg CRYSTALBALL_MAP="$CRYSTALBALL_MAP"
 )
@@ -124,6 +124,7 @@ WEBPACK_CACHE_ID_PARTS=(
   $WEBPACK_RUNNER_DOCKERFILE_MD5
   $WEBPACK_BUILDER_DOCKERFILE_MD5
   $WEBPACK_CACHE_DOCKERFILE_MD5
+  $CACHE_VERSION
 )
 WEBPACK_CACHE_ID=$(compute_hash ${WEBPACK_CACHE_ID_PARTS[@]})
 
@@ -178,11 +179,14 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
         RUBY_RUNNER_SELECTED_TAG=${RUBY_RUNNER_TAGS[SAVE_TAG]}
 
         add_log "built ${RUBY_RUNNER_SELECTED_TAG}"
+      else
+        BASE_RUNNER_SELECTED_TAG=$(docker inspect $RUBY_RUNNER_SELECTED_TAG --format '{{ .Config.Labels.BASE_RUNNER_SELECTED_TAG }}')
       fi
 
       tag_many $RUBY_RUNNER_SELECTED_TAG local/ruby-runner ${RUBY_RUNNER_TAGS[SAVE_TAG]}
 
       docker build \
+        --label "BASE_RUNNER_SELECTED_TAG=$BASE_RUNNER_SELECTED_TAG" \
         --label "RUBY_RUNNER_SELECTED_TAG=$RUBY_RUNNER_SELECTED_TAG" \
         --tag "${YARN_RUNNER_TAGS[SAVE_TAG]}" \
         - < Dockerfile.jenkins.yarn-runner
@@ -191,6 +195,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
 
       add_log "built ${YARN_RUNNER_SELECTED_TAG}"
     else
+      BASE_RUNNER_SELECTED_TAG=$(docker inspect $YARN_RUNNER_SELECTED_TAG --format '{{ .Config.Labels.BASE_RUNNER_SELECTED_TAG }}')
       RUBY_RUNNER_SELECTED_TAG=$(docker inspect $YARN_RUNNER_SELECTED_TAG --format '{{ .Config.Labels.RUBY_RUNNER_SELECTED_TAG }}')
 
       ./build/new-jenkins/docker-with-flakey-network-protection.sh pull $RUBY_RUNNER_SELECTED_TAG
@@ -200,6 +205,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
     tag_many $YARN_RUNNER_SELECTED_TAG local/yarn-runner ${YARN_RUNNER_TAGS[SAVE_TAG]}
 
     docker build \
+      --label "BASE_RUNNER_SELECTED_TAG=$BASE_RUNNER_SELECTED_TAG" \
       --label "RUBY_RUNNER_SELECTED_TAG=$RUBY_RUNNER_SELECTED_TAG" \
       --label "YARN_RUNNER_SELECTED_TAG=$YARN_RUNNER_SELECTED_TAG" \
       --tag "${WEBPACK_BUILDER_TAGS[SAVE_TAG]}" \
@@ -209,6 +215,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
 
     add_log "built ${WEBPACK_BUILDER_SELECTED_TAG}"
   else
+    BASE_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_BUILDER_SELECTED_TAG --format '{{ .Config.Labels.BASE_RUNNER_SELECTED_TAG }}')
     RUBY_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_BUILDER_SELECTED_TAG --format '{{ .Config.Labels.RUBY_RUNNER_SELECTED_TAG }}')
     YARN_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_BUILDER_SELECTED_TAG --format '{{ .Config.Labels.YARN_RUNNER_SELECTED_TAG }}')
 
@@ -249,6 +256,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
     - < Dockerfile.jenkins.webpack-runner
 
   docker build \
+    --label "BASE_RUNNER_SELECTED_TAG=$BASE_RUNNER_SELECTED_TAG" \
     --label "RUBY_RUNNER_SELECTED_TAG=$RUBY_RUNNER_SELECTED_TAG" \
     --label "WEBPACK_ASSETS_CACHE_ID=$WEBPACK_ASSETS_CACHE_ID" \
     --label "WEBPACK_BUILDER_SELECTED_TAG=$WEBPACK_BUILDER_SELECTED_TAG" \
@@ -259,6 +267,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
 
   if [[ "$WRITE_BUILD_CACHE" == "1" ]]; then
     docker build \
+      --label "BASE_RUNNER_SELECTED_TAG=$BASE_RUNNER_SELECTED_TAG" \
       --label "RUBY_RUNNER_SELECTED_TAG=$RUBY_RUNNER_SELECTED_TAG" \
       --label "WEBPACK_CACHE_ID=$WEBPACK_CACHE_ID" \
       --label "WEBPACK_BUILDER_SELECTED_TAG=$WEBPACK_BUILDER_SELECTED_TAG" \
@@ -272,6 +281,7 @@ if [[ -z "${WEBPACK_ASSETS_SELECTED_TAG}" || "${FORCE_BUILD_WEBPACK-0}" == "1" ]
 
   add_log "built ${WEBPACK_ASSETS_SELECTED_TAG}"
 else
+  BASE_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_ASSETS_SELECTED_TAG --format '{{ .Config.Labels.BASE_RUNNER_SELECTED_TAG }}')
   RUBY_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_ASSETS_SELECTED_TAG --format '{{ .Config.Labels.RUBY_RUNNER_SELECTED_TAG }}')
   YARN_RUNNER_SELECTED_TAG=$(docker inspect $WEBPACK_ASSETS_SELECTED_TAG --format '{{ .Config.Labels.YARN_RUNNER_SELECTED_TAG }}')
   WEBPACK_BUILDER_SELECTED_TAG=$(docker inspect $WEBPACK_ASSETS_SELECTED_TAG --format '{{ .Config.Labels.WEBPACK_BUILDER_SELECTED_TAG }}')
@@ -291,6 +301,7 @@ if [ -n "${1:-}" ]; then
   docker build \
     --build-arg COMPILE_ADDITIONAL_ASSETS="$COMPILE_ADDITIONAL_ASSETS" \
     --file Dockerfile.jenkins.final \
+    --label "BASE_RUNNER_SELECTED_TAG=$BASE_RUNNER_SELECTED_TAG" \
     --label "RUBY_RUNNER_SELECTED_TAG=$RUBY_RUNNER_SELECTED_TAG" \
     --label "WEBPACK_BUILDER_SELECTED_TAG=$WEBPACK_BUILDER_SELECTED_TAG" \
     --label "WEBPACK_ASSETS_SELECTED_TAG=$WEBPACK_ASSETS_SELECTED_TAG" \

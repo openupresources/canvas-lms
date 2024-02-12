@@ -21,6 +21,15 @@ class AssignmentPage
   class << self
     include SeleniumDependencies
 
+    # Selectors
+    def assign_to_button
+      f(".assign-to-link")
+    end
+
+    def course_pacing_notice_selector
+      "[data-testid='CoursePacingNotice']"
+    end
+
     def visit(course, assignment)
       get "/courses/#{course}/assignments/#{assignment}"
     end
@@ -59,7 +68,7 @@ class AssignmentPage
     end
 
     def speedgrader_link
-      f("a.icon-speed-grader")
+      f("#speed_grader_link_mount_point a.icon-speed-grader")
     end
 
     def manage_assignment_button
@@ -79,7 +88,17 @@ class AssignmentPage
     end
 
     def course_pacing_notice
-      f("[data-testid='CoursePacingNotice']")
+      f(course_pacing_notice_selector)
+    end
+
+    # Methods
+    def click_assign_to_button
+      assign_to_button.click
+    end
+
+    def retrieve_due_date_table_row(row_item)
+      row_elements = f(".assignment_dates").find_elements(:tag_name, "tr")
+      row_elements.detect { |i| i.text.include?(row_item) }
     end
   end
 end

@@ -111,7 +111,7 @@ class EpubExport < ActiveRecord::Base
 
   def export
     create_content_export!({
-                             user: user,
+                             user:,
                              export_type: ContentExport::COMMON_CARTRIDGE,
                              selected_content: { everything: true },
                              progress: 0,
@@ -162,15 +162,13 @@ class EpubExport < ActiveRecord::Base
   end
 
   def self.fail_stuck_epub_exports(exports)
-    cutoff = Setting.get("epub_generation_expiration_minutes", "120").to_i.minutes.ago
+    cutoff = 2.hours.ago
     exports.select { |e| (e.generating? || e.exporting?) && e.updated_at < cutoff }.each(&:mark_as_failed)
   end
 
   def convert_to_epub
     begin
-      set_locale
-      file_paths = super
-      I18n.locale = :en
+      file_paths = I18n.with_locale(set_locale) { super }
     rescue => e
       mark_as_failed(e)
       raise e
@@ -202,7 +200,7 @@ class EpubExport < ActiveRecord::Base
   end
 
   def cleanup_file_path!(file_path)
-    FileUtils.rm_rf(file_path, secure: true) if File.exist?(file_path)
+    FileUtils.rm_rf(file_path, secure: true)
   end
 
   def sort_by_content_type?
@@ -212,9 +210,9 @@ class EpubExport < ActiveRecord::Base
   private
 
   def set_locale
-    I18n.locale = infer_locale(
+    infer_locale(
       context: course,
-      user: user,
+      user:,
       root_account: course.root_account
     )
   end

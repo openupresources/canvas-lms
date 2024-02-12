@@ -109,6 +109,7 @@ module Importers
 
       item ||= Assignment.where(context_type: context.class.to_s, context_id: context, id: hash[:id]).first
       item ||= Assignment.where(context_type: context.class.to_s, context_id: context, migration_id: hash[:migration_id]).first if hash[:migration_id]
+
       item ||= context.assignments.temp_record # new(:context => context)
 
       item.updating_user = migration.user
@@ -121,8 +122,9 @@ module Importers
       item.title = I18n.t("untitled assignment") if item.title.blank?
       item.migration_id = hash[:migration_id]
       if new_record || item.deleted? || master_migration
+        restore_lti_models(item) if item.deleted?
         item.workflow_state = if item.can_unpublish?
-                                (hash[:workflow_state] || "published")
+                                hash[:workflow_state] || "published"
                               else
                                 "published"
                               end
@@ -250,7 +252,7 @@ module Importers
           AssignmentOverride.overridden_dates.each do |field|
             next unless o.key?(field)
 
-            override.send "override_#{field}", Canvas::Migration::MigratorHelper.get_utc_time_from_timestamp(o[field])
+            override.send :"override_#{field}", Canvas::Migration::MigratorHelper.get_utc_time_from_timestamp(o[field])
           end
           override.save!
           added_overrides = true
@@ -293,7 +295,7 @@ module Importers
       hash[:due_at] ||= hash[:due_date] if hash.key?(:due_date)
       %i[due_at lock_at unlock_at peer_reviews_due_at].each do |key|
         if hash.key?(key) && (master_migration || hash[key].present?)
-          item.send "#{key}=", Canvas::Migration::MigratorHelper.get_utc_time_from_timestamp(hash[key])
+          item.send :"#{key}=", Canvas::Migration::MigratorHelper.get_utc_time_from_timestamp(hash[key])
         end
       end
 
@@ -310,14 +312,21 @@ module Importers
       end
 
       %i[peer_reviews
-         automatic_peer_reviews anonymous_peer_reviews
-         grade_group_students_individually allowed_extensions
-         position peer_review_count
-         omit_from_final_grade intra_group_peer_reviews
-         grader_count grader_comments_visible_to_graders
-         graders_anonymous_to_graders grader_names_visible_to_final_grader
+         automatic_peer_reviews
+         anonymous_peer_reviews
+         grade_group_students_individually
+         allowed_extensions
+         position
+         peer_review_count
+         omit_from_final_grade
+         hide_in_gradebook
+         intra_group_peer_reviews
+         grader_count
+         grader_comments_visible_to_graders
+         graders_anonymous_to_graders
+         grader_names_visible_to_final_grader
          anonymous_instructor_annotations].each do |prop|
-        item.send("#{prop}=", hash[prop]) unless hash[prop].nil?
+        item.send(:"#{prop}=", hash[prop]) unless hash[prop].nil?
       end
 
       # Only set post_to_sis if this is a new assignment or if the content is locked
@@ -336,8 +345,8 @@ module Importers
       end
 
       [:turnitin_enabled, :vericite_enabled].each do |prop|
-        if !hash[prop].nil? && context.send("#{prop}?")
-          item.send("#{prop}=", hash[prop])
+        if !hash[prop].nil? && context.send(:"#{prop}?")
+          item.send(:"#{prop}=", hash[prop])
         end
       end
 
@@ -352,7 +361,7 @@ module Importers
       end
 
       if hash["similarity_detection_tool"].present?
-        settings =  item.turnitin_settings
+        settings = item.turnitin_settings
         settings[:originality_report_visibility] = hash["similarity_detection_tool"]["visibility"]
         item.turnitin_settings = settings
       end
@@ -391,13 +400,14 @@ module Importers
           context_type: context.class.name
         )
         active_proxies = Lti::ToolProxy.find_active_proxies_for_context_by_vendor_code_and_product_code(
-          context: context, vendor_code: vendor_code, product_code: product_code
+          context:, vendor_code:, product_code:
         )
 
         if active_proxies.blank?
           migration.add_warning(I18n.t(
                                   "We were unable to find a tool profile match for vendor_code: \"%{vendor_code}\" product_code: \"%{product_code}\".",
-                                  vendor_code: vendor_code, product_code: product_code
+                                  vendor_code:,
+                                  product_code:
                                 ))
         else
           item.lti_context_id ||= SecureRandom.uuid
@@ -500,6 +510,11 @@ module Importers
 
           params[:client_id] = li[:client_id] unless tool
 
+          if Account.site_admin.feature_enabled?(:blueprint_line_item_support) && migration&.for_master_course_import? && primary_line_item
+            params = clear_params_before_overwriting_child_li(params, primary_line_item, migration)
+            primary_line_item.mark_as_importing! migration
+          end
+
           if primary_line_item&.coupled && (li[:coupled] || !any_coupled_line_items)
             # Modify the default coupled line item if:
             # * We are processing a coupled line item (need to replace properties
@@ -525,6 +540,13 @@ module Importers
       end
     end
 
+    # Restore any deleted LTI models (Lti::ResourceLink, Lti::LineItem, ContentTag)
+    # for an existing assignment, if necessary.
+    def self.restore_lti_models(item)
+      item.lti_resource_links.find_each(&:undestroy)
+      item.external_tool_tag&.workflow_state = "active"
+    end
+
     def self.set_annotatable_attachment(assignment, hash, context)
       return unless hash[:annotatable_attachment_migration_id].present? && assignment.annotated_document?
 
@@ -536,6 +558,25 @@ module Importers
       attachment.update!(folder: context.student_annotation_documents_folder)
       attachment.move_to_bottom if attachment.saved_change_to_folder_id?
       assignment.annotatable_attachment = attachment
+    end
+
+    def self.clear_params_before_overwriting_child_li(params, primary_line_item, migration)
+      return params unless (child_tag = migration.master_course_subscription&.content_tag_for(primary_line_item.assignment))
+      return params unless child_tag.downstream_changes.present?
+
+      primary_line_item.class.base_class.restricted_column_settings.each do |type, columns|
+        changed_columns = params.keys.map(&:to_s) & columns if child_tag.downstream_changes & ["lti_line_items_#{type}"] # changed restricted types
+
+        if changed_columns.any?
+          if primary_line_item.assignment.child_content_restrictions[type] # don't overwrite downstream changes _unless_ it's locked
+            child_tag.downstream_changes -= "lti_line_items_#{type}" # remove them from the downstream changes since we're going to overwrite
+            child_tag.save!
+          else
+            changed_columns.each { |cc| params.delete(cc.to_sym) } # if not locked then we should ignore the params in the category (content or settings)
+          end
+        end
+      end
+      params
     end
   end
 end

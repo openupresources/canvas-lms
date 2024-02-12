@@ -24,7 +24,7 @@ describe CourseSection, "moving to new course" do
     course = account.courses.create!
     section = course.course_sections.create!
     student = User.create!
-    course.enroll_student(student, enrollment_state: "active", section: section)
+    course.enroll_student(student, enrollment_state: "active", section:)
     new_course = account.courses.create!
     assignment = new_course.assignments.create!
 
@@ -132,7 +132,8 @@ describe CourseSection, "moving to new course" do
 
     cs.crosslist_to_course(course2)
     expect(course1.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id].sort
-    expect(course2.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account2.id].sort
+    expect(course2.reload.associated_accounts(include_crosslisted_courses: false).map(&:id).sort).to eq [root_account.id, sub_account2.id].sort
+    expect(course2.reload.associated_accounts(include_crosslisted_courses: true).map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account2.id].sort
     expect(course3.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account3.id].sort
     u.reload
     expect(u.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account2.id].sort
@@ -141,7 +142,8 @@ describe CourseSection, "moving to new course" do
     expect(cs.nonxlist_course_id).to eq course1.id
     expect(course1.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id].sort
     expect(course2.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account2.id].sort
-    expect(course3.reload.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account3.id].sort
+    expect(course3.reload.associated_accounts(include_crosslisted_courses: false).map(&:id).sort).to eq [root_account.id, sub_account3.id].sort
+    expect(course3.reload.associated_accounts(include_crosslisted_courses: true).map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account3.id].sort
     u.reload
     expect(u.associated_accounts.map(&:id).sort).to eq [root_account.id, sub_account1.id, sub_account3.id].sort
 
@@ -254,15 +256,18 @@ describe CourseSection, "moving to new course" do
     u.favorites.where(context_type: "Course", context_id: course1).first_or_create!
 
     cs.crosslist_to_course(course2)
-    expect(u.favorites.where(context_type: "Course", context_id: course2).exists?).to eq true
+    expect(u.favorites.where(context_type: "Course", context_id: course2).exists?).to be true
   end
 
   it "removes discussion visibilites on crosslist" do
     course = course_factory({ course_name: "Course 1", active_all: true })
     section = course.course_sections.create!
     course.save!
-    announcement1 = Announcement.create!(title: "some topic", message: "blah",
-                                         context: course, is_section_specific: true, course_sections: [section])
+    announcement1 = Announcement.create!(title: "some topic",
+                                         message: "blah",
+                                         context: course,
+                                         is_section_specific: true,
+                                         course_sections: [section])
     visibility = announcement1.reload.discussion_topic_section_visibilities.first
 
     course2 = course_factory
@@ -316,7 +321,7 @@ describe CourseSection, "moving to new course" do
     expect(CourseAccountAssociation.where(course_id: course2).distinct.order(:account_id).pluck(:account_id)).to eq [account1.id, account2.id].sort
   end
 
-  it "calls DueDateCacher.recompute_users_for_course" do
+  it "calls SubmissionLifecycleManager.recompute_users_for_course" do
     account1 = Account.create!(name: "1")
     account2 = Account.create!(name: "2")
     course1 = account1.courses.create!
@@ -329,7 +334,7 @@ describe CourseSection, "moving to new course" do
     e.save!
     course1.reload
 
-    expect(DueDateCacher).to receive(:recompute_users_for_course)
+    expect(SubmissionLifecycleManager).to receive(:recompute_users_for_course)
       .with([u.id], course2, nil, update_grades: true, executing_user: nil)
     cs.move_to_course(course2)
   end
@@ -337,7 +342,7 @@ describe CourseSection, "moving to new course" do
   describe "validation" do
     before :once do
       course = Course.create_unique
-      @section = CourseSection.create(course: course)
+      @section = CourseSection.create(course:)
       @long_string = "qwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnmqwertyuiopasdfghjklzxcvbnm"
     end
 
@@ -383,6 +388,35 @@ describe CourseSection, "moving to new course" do
       @section.destroy
       @enrollment.reload
       expect(@enrollment.workflow_state).to eq("deleted")
+    end
+
+    it "clears gradebook filters for the section when destroyed" do
+      teacher = @course.enroll_teacher(User.create, enrollment_state: :active).user
+      teacher.set_preference(
+        :gradebook_settings,
+        @course.global_id,
+        { "filter_rows_by" => { "section_id" => @section.id.to_s } }
+      )
+
+      expect { @section.destroy }.to change {
+        settings = teacher.reload.get_preference(:gradebook_settings, @course.global_id)
+        settings.dig("filter_rows_by", "section_id")
+      }.from(@section.id.to_s).to(nil)
+    end
+
+    it "doesn't clear gradebook filters for other sections when destroyed" do
+      new_section = @course.course_sections.create!
+      teacher = @course.enroll_teacher(User.create, enrollment_state: :active).user
+      teacher.set_preference(
+        :gradebook_settings,
+        @course.global_id,
+        { "filter_rows_by" => { "section_id" => new_section.id.to_s } }
+      )
+
+      expect { @section.destroy }.not_to change {
+        settings = teacher.reload.get_preference(:gradebook_settings, @course.global_id)
+        settings.dig("filter_rows_by", "section_id")
+      }.from(new_section.id.to_s)
     end
 
     it "doesn't associate with deleted discussion topics" do
@@ -635,16 +669,18 @@ describe CourseSection, "moving to new course" do
     end
 
     it "invalidates access if section is cross-listed" do
-      @course.update(workflow_state: "available", restrict_student_future_view: true,
-                     restrict_enrollments_to_course_dates: true, start_at: 1.day.from_now)
-      expect(@enrollment.enrollment_state.reload.restricted_access?).to eq true
+      @course.update(workflow_state: "available",
+                     restrict_student_future_view: true,
+                     restrict_enrollments_to_course_dates: true,
+                     start_at: 1.day.from_now)
+      expect(@enrollment.enrollment_state.reload.restricted_access?).to be true
 
       other_course = course_factory(active_all: true)
       other_course.update(restrict_enrollments_to_course_dates: true, start_at: 1.day.from_now)
 
       @section.crosslist_to_course(other_course)
 
-      expect(@enrollment.enrollment_state.reload.restricted_access?).to eq false
+      expect(@enrollment.enrollment_state.reload.restricted_access?).to be false
     end
   end
 

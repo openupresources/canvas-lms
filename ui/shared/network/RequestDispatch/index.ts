@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2020 - present Instructure, Inc.
  *
@@ -19,7 +20,7 @@
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
 
-import {deferPromise} from 'defer-promise'
+import deferPromise from '@instructure/defer-promise'
 import cheaterDepaginate from './CheatDepaginator'
 
 export const DEFAULT_ACTIVE_REQUEST_LIMIT = 12 // overall limit
@@ -130,7 +131,7 @@ export default class RequestDispatch {
     return request.deferred.promise
   }
 
-  getJSON<T>(url: string, params?) {
+  getJSON<T>(url: string, params?): Promise<T> {
     const request = {
       deferred: deferPromise<T>(),
       start: () => {},

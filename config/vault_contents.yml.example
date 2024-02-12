@@ -14,8 +14,16 @@ development:
     access_key: 'fake-access-key'
     secret_key: 'fake-secret-key'
     security_token: 'fake-security-token'
-#  'app-canvas/data/secrets':
-#    data:
+  'app-canvas/data/secrets':
+    data:
+      canvas_security:
+        encryption_secret: "astringthatisactually32byteslong"
+        signing_secret: "astringthatisactually32byteslong"
+      lti_platform_storage:
+        signing_secret: "astringthatisactually32byteslong"
+#     pandata_creds:
+#       canvas_key: 'INTERNAL_TEST'
+#       canvas_secret: 'internaltest'
 #      canvas_cdn_creds:
 #        aws_access_key_id: <access_key_id>
 #        aws_secret_access_key: <secret_access_key>
@@ -29,6 +37,16 @@ development:
 #      inst_access_signature:
 #        private_key: <signing private key in base 64>
 #        encryption_public_key: <encryption public key in base 64 [NOT SAME KEYPAIR AS SIGNATURE!]>
+      inst_fs:
+        app_host: "http://api.inst-fs.docker"
+        # this is just "super-sekret-value", base64-encoded:
+        secret: "c3VwZXItc2VrcmV0LXZhbHVlCg=="
+#      linked_in_creds:
+#        api_key: <api_key>
+#        secret_key: <secret_key>
+#      microsoft_sync:
+#        client_id: some_client_id
+#        client_secret: some_client_secret
 #      notification_service_creds:
 #        access_key_id: <access_key_id>
 #        secret_access_key: <secret_access_key>

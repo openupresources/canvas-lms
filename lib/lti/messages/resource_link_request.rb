@@ -39,7 +39,7 @@ module Lti::Messages
     def generate_post_payload_message(validate_launch: true)
       add_resource_link_request_claims! if include_claims?(:rlid)
       add_line_item_url_to_ags_claim! if include_assignment_and_grade_service_claims?
-      super(validate_launch: validate_launch)
+      super(validate_launch:)
     end
 
     def generate_post_payload_for_assignment(assignment, _outcome_service_url, _legacy_outcome_service_url, _lti_turnitin_outcomes_placement_url)
@@ -54,14 +54,6 @@ module Lti::Messages
 
     private
 
-    def tool_from_tag(tag, context)
-      ContextExternalTool.find_external_tool(
-        tag.url,
-        context,
-        tag.content_id
-      )
-    end
-
     def tag_from_resource_link
       ContentTag.find_by(associated_asset: resource_link) if resource_link
     end
@@ -69,11 +61,11 @@ module Lti::Messages
     def add_resource_link_request_claims!
       @message.resource_link.id = launch_resource_link_id
       @message.resource_link.description = @assignment&.description
-      @message.resource_link.title = @assignment&.title || tag_from_resource_link&.title || @context.name
+      @message.resource_link.title = resource_link&.title || @assignment&.title || tag_from_resource_link&.title || @context.name
     end
 
     def add_lti1p1_claims!
-      @message.lti1p1.resource_link_id = @assignment.lti_resource_link_id if include_lti1p1_resource_link_id_migration?
+      @message.lti1p1.resource_link_id = resource_link&.lti_1_1_id if include_lti1p1_resource_link_id_migration?
       super
     end
 
@@ -84,7 +76,7 @@ module Lti::Messages
     # @see https://www.imsglobal.org/spec/lti/v1p3/migr#remapping-parameters for more info on LTI 1.1 -> 1.3 migration
     # parameters
     def include_lti1p1_resource_link_id_migration?
-      @assignment && launch_resource_link_id != @assignment.lti_resource_link_id
+      launch_resource_link_id != resource_link&.lti_1_1_id && resource_link&.lti_1_1_id.present?
     end
 
     # whenever possible, use the correct resource link id whether that comes from
@@ -111,7 +103,7 @@ module Lti::Messages
         unless @assignment.external_tool?
           raise launch_error.new(nil, api_message: "Assignment not configured for external tool launches")
         end
-        unless tool_from_tag(@assignment.external_tool_tag, @context) == @tool
+        unless ContextExternalTool.from_assignment(@assignment) == @tool
           raise launch_error.new(nil, api_message: "Assignment not configured for launches with specified tool")
         end
 
@@ -134,7 +126,7 @@ module Lti::Messages
       @message.assignment_and_grade_service.lineitem =
         if @context.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
           @expander.controller.lti_line_item_show_url(
-            host: @context.root_account.domain,
+            host: @context.root_account.environment_specific_domain,
             course_id: course_id_for_ags_url,
             id: line_item_for_assignment.id
           )

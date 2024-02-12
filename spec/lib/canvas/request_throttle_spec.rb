@@ -19,15 +19,32 @@
 #
 
 describe RequestThrottle do
+  let(:site_admin_service_user) { site_admin_user }
+  let(:developer_key_sasu) { DeveloperKey.create!(account: Account.site_admin, user: site_admin_service_user) }
   let(:base_req) { { "QUERY_STRING" => "", "PATH_INFO" => "/", "REQUEST_METHOD" => "GET" } }
   let(:request_user_1) { base_req.merge({ "REMOTE_ADDR" => "1.2.3.4", "rack.session" => { user_id: 1 } }) }
   let(:request_user_2) { base_req.merge({ "REMOTE_ADDR" => "4.3.2.1", "rack.session" => { user_id: 2 } }) }
   let(:token1) { AccessToken.create!(user: user_factory) }
   let(:token2) { AccessToken.create!(user: user_factory) }
+  let(:token_sasu) { AccessToken.create!(developer_key: developer_key_sasu, user: site_admin_service_user) }
   let(:request_query_token) { request_user_1.merge({ "REMOTE_ADDR" => "1.2.3.4", "QUERY_STRING" => "access_token=#{token1.full_token}" }) }
   let(:request_header_token) { request_user_2.merge({ "REMOTE_ADDR" => "4.3.2.1", "HTTP_AUTHORIZATION" => "Bearer #{token2.full_token}" }) }
   let(:request_logged_out) { base_req.merge({ "REMOTE_ADDR" => "1.2.3.4", "rack.session.options" => { id: "sess1" } }) }
   let(:request_no_session) { base_req.merge({ "REMOTE_ADDR" => "1.2.3.4" }) }
+  let(:request_sasu_query_token) do
+    request_no_session.merge({
+                               "USER_AGENT" => "inst-service1/1t34F67e (region: us-east-1; host:p.8A67n5d30a9; env: pRod)",
+                               "QUERY_STRING" => "access_token=#{token_sasu.full_token}",
+                               "rack.input" => StringIO.new("")
+                             })
+  end
+  let(:request_sasu_header_token) do
+    request_no_session.merge({
+                               "USER_AGENT" => "inst-service-ninety-nine/1234567890ABCDEF",
+                               "HTTP_AUTHORIZATION" => "Bearer #{token_sasu.full_token}",
+                               "rack.input" => StringIO.new("")
+                             })
+  end
   let(:inner_app) { ->(_env) { response } }
   let(:throttler) { RequestThrottle.new(inner_app) }
   let(:rate_limit_exceeded) { throttler.rate_limit_exceeded }
@@ -36,6 +53,8 @@ describe RequestThrottle do
   def response
     [200, { "Content-Type" => "text/plain" }, ["Hello"]]
   end
+
+  before { RequestThrottle.reload! }
 
   after { RequestThrottle.reload! }
 
@@ -46,8 +65,66 @@ describe RequestThrottle do
   end
 
   describe "#client_identifier" do
+    specs_require_sharding
+
+    before do
+      Account.site_admin.enable_feature! :site_admin_service_auth
+    end
+
+    context "with an inst_access service token" do
+      include_context "InstAccess setup"
+
+      let(:service_user) { user_model }
+      let(:root_account) { account_model }
+
+      let(:key) do
+        DeveloperKey.create!(
+          name: "key",
+          account: root_account,
+          internal_service: true,
+          service_user:
+        )
+      end
+
+      let(:token) do
+        InstAccess::Token.for_user(
+          user_uuid: service_user.uuid,
+          account_uuid: root_account.uuid,
+          canvas_domain: "test.host",
+          user_global_id: service_user.global_id,
+          region: ApplicationController.region,
+          client_id: key.global_id,
+          instructure_service: true
+        )
+      end
+
+      let(:request) do
+        req(
+          request_no_session.merge(
+            {
+              "USER_AGENT" => "inst-service-ninety-nine/1234567890ABCDEF",
+              "HTTP_AUTHORIZATION" => "Bearer #{token.to_unencrypted_token_string}",
+              "rack.input" => StringIO.new("")
+            }
+          )
+        )
+      end
+
+      it "uses the proper client identifier" do
+        expect(throttler.client_identifier(request)).to eq "service_user_key:#{key.global_id}"
+      end
+    end
+
     def req(hash)
-      ActionDispatch::Request.new(hash).tap(&:fullpath)
+      r = ActionDispatch::Request.new(hash).tap(&:fullpath)
+      throttler.inst_access_token_authentication = AuthenticationMethods::InstAccessToken::Authentication.new(r)
+      allow(r).to receive(:user_agent).and_return(hash["USER_AGENT"]) if hash.key?("USER_AGENT")
+      r
+    end
+
+    it "uses site admin service user id" do
+      expect(throttler.client_identifier(req(request_sasu_query_token))).to eq "service_user_key:#{developer_key_sasu.global_id}"
+      expect(throttler.client_identifier(req(request_sasu_header_token))).to eq "service_user_key:#{developer_key_sasu.global_id}"
     end
 
     it "uses access token" do
@@ -79,20 +156,20 @@ describe RequestThrottle do
     it "ignores non-ID tools" do
       request_grade_passback = base_req.merge("REQUEST_METHOD" => "POST", "PATH_INFO" => "/api/lti/v1/tools/garbage/grade_passback")
       expect(ContextExternalTool).not_to receive(:find_by)
-      expect(throttler.client_identifier(req(request_grade_passback))).to eq nil
+      expect(throttler.client_identifier(req(request_grade_passback))).to be_nil
     end
 
     it "ignores non-existent tools" do
       request_grade_passback = base_req.merge("REQUEST_METHOD" => "POST", "PATH_INFO" => "/api/lti/v1/tools/5/grade_passback")
       expect(ContextExternalTool).to receive(:find_by).once.with(id: "5")
-      expect(throttler.client_identifier(req(request_grade_passback))).to eq nil
+      expect(throttler.client_identifier(req(request_grade_passback))).to be_nil
     end
 
     it "ignores non-POST to tools" do
       tool = ContextExternalTool.create!(domain: "domain", context: Account.default, consumer_key: "key", shared_secret: "secret", name: "tool")
       request_grade_passback = base_req.merge("REQUEST_METHOD" => "GET", "PATH_INFO" => "/api/lti/v1/tools/#{tool.id}/grade_passback")
       expect(ContextExternalTool).not_to receive(:find_by)
-      expect(throttler.client_identifier(req(request_grade_passback))).to eq nil
+      expect(throttler.client_identifier(req(request_grade_passback))).to be_nil
     end
 
     it "uses client_id+cluster for LTI Advantage endpoints" do
@@ -104,8 +181,9 @@ describe RequestThrottle do
       )
 
       mock_token = instance_double(Lti::IMS::AdvantageAccessToken, client_id: "10000000000007")
-      expect(Lti::IMS::AdvantageAccessTokenRequestHelper).to \
-        receive(:token).with(request).and_return(mock_token)
+      expect(Lti::IMS::AdvantageAccessTokenRequestHelper).to receive(:token)
+        .with(request)
+        .and_return(mock_token)
       expect(Account.default.shard).to receive(:database_server_id).and_return "cluster123"
 
       result = throttler.client_identifier(request)
@@ -124,8 +202,7 @@ describe RequestThrottle do
     end
 
     it "passes on other requests" do
-      allow(throttler).to receive(:approved?).and_return(false)
-      allow(throttler).to receive(:blocked?).and_return(false)
+      allow(throttler).to receive_messages(approved?: false, blocked?: false)
       expect(strip_variable_headers(throttler.call(request_user_1))).to eq response
     end
 
@@ -160,7 +237,7 @@ describe RequestThrottle do
 
     it "still gets blocked if throttling disabled" do
       Setting.set("request_throttle.enabled", "false")
-      expect(RequestThrottle.enabled?).to eq(false)
+      expect(RequestThrottle.enabled?).to be(false)
       set_blocklist("user:2")
       expect(strip_variable_headers(throttler.call(request_user_1))).to eq response
       expect(throttler.call(request_user_2)).to eq rate_limit_exceeded
@@ -231,14 +308,13 @@ describe RequestThrottle do
     end
 
     before do
-      allow(throttler).to receive(:approved?).and_return(false)
-      allow(throttler).to receive(:blocked?).and_return(false)
+      allow(throttler).to receive_messages(approved?: false, blocked?: false)
     end
 
     it "skips without redis enabled" do
       if Canvas.redis_enabled?
         allow(Canvas).to receive(:redis_enabled?).and_return(false)
-        expect_any_instance_of(Redis::Scripting::Module).not_to receive(:run)
+        expect(Canvas).not_to receive(:redis)
       end
       expect(strip_variable_headers(throttler.call(request_user_1))).to eq response
     end
@@ -326,23 +402,23 @@ describe RequestThrottle do
         it "compares to the hwm setting" do
           bucket = RequestThrottle::LeakyBucket.new("test", 5.0)
           Setting.set("request_throttle.hwm", "6.0")
-          expect(bucket.full?).to eq false
+          expect(bucket.full?).to be false
           Setting.set("request_throttle.hwm", "4.0")
-          expect(bucket.full?).to eq true
+          expect(bucket.full?).to be true
         end
 
         it "compares to a customized hwm setting if set" do
           bucket = RequestThrottle::LeakyBucket.new("test", 5.0)
           Setting.set("request_throttle.hwm", "4.0")
-          expect(bucket.full?).to eq true
+          expect(bucket.full?).to be true
           Setting.set("request_throttle.custom_settings",
                       { test: { hwm: "6.0" } }.to_json)
           RequestThrottle::LeakyBucket.reload!
-          expect(bucket.full?).to eq false
+          expect(bucket.full?).to be false
           Setting.set("request_throttle.custom_settings",
                       { other: { hwm: "6.0" } }.to_json)
           RequestThrottle::LeakyBucket.reload!
-          expect(bucket.full?).to eq true
+          expect(bucket.full?).to be true
         end
       end
 
@@ -455,7 +531,7 @@ describe RequestThrottle do
         it "uses regexes to predict up front costs by path if set" do
           hash = {
             %r{\A/files/\d+/download} => 1,
-            "equation_images\/" => 2
+            "equation_images/" => 2
           }
           expect(RequestThrottle).to receive(:dynamic_settings).and_return({ "up_front_cost_by_path_regex" => hash })
 
@@ -473,8 +549,7 @@ describe RequestThrottle do
         it "will always be allowed when disabled, even with full bucket" do
           allow(RequestThrottle).to receive(:enabled?).and_return(false)
           req = request_logged_out
-          allow(req).to receive(:fullpath).and_return("/")
-          allow(req).to receive(:env).and_return({ "canvas.request_throttle.user_id" => ["123"] })
+          allow(req).to receive_messages(fullpath: "/", env: { "canvas.request_throttle.user_id" => ["123"] })
           allow(@bucket).to receive(:full?).and_return(true)
           expect(throttler.allowed?(request_logged_out, @bucket)).to be_truthy
         end

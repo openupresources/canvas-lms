@@ -22,7 +22,7 @@ require_relative "../graphql_spec_helper"
 
 describe Types::RubricType do
   let_once(:course) { course_factory(active_all: true) }
-  let_once(:student) { student_in_course(course: course, active_all: true).user }
+  let_once(:student) { student_in_course(course:, active_all: true).user }
   let(:rubric) { rubric_for_course }
   let(:rubric_type) { GraphQLTypeTester.new(rubric, current_user: student) }
 
@@ -32,7 +32,7 @@ describe Types::RubricType do
 
   it "requires permission" do
     user2 = User.create!
-    expect(rubric_type.resolve("_id", current_user: user2)).to eq nil
+    expect(rubric_type.resolve("_id", current_user: user2)).to be_nil
   end
 
   describe "works for the field" do
@@ -42,14 +42,18 @@ describe Types::RubricType do
       ).to eq(rubric.criteria.map { |c| c[:id].to_s })
     end
 
+    it "criteria_count" do
+      expect(rubric_type.resolve("criteriaCount")).to eq rubric.criteria.count
+    end
+
     it "free_form_criterion_comments" do
       expect(
         rubric_type.resolve("freeFormCriterionComments")
-      ).to eq false
+      ).to be false
     end
 
     it "hide_score_total" do
-      expect(rubric_type.resolve("hideScoreTotal")).to eq false
+      expect(rubric_type.resolve("hideScoreTotal")).to be false
     end
 
     it "points_possible" do
@@ -59,6 +63,11 @@ describe Types::RubricType do
 
     it "title" do
       expect(rubric_type.resolve("title")).to eq rubric.title
+    end
+
+    it "hide_points" do
+      rubric.update!(hide_points: true)
+      expect(rubric_type.resolve("hidePoints")).to eq rubric.hide_points
     end
   end
 end

@@ -50,19 +50,15 @@ module MicrosoftSync
         result = {
           class: error.class.name,
           message: error.message&.truncate(1000),
-          extra_metadata: extra_metadata
+          extra_metadata:
         }
 
         if error.is_a?(MicrosoftSync::Errors::PublicError)
-          locale_was = I18n.locale
-          # force passthrough call to I18n() in public_message() to return original value,
-          # will be localized in deserialize_and_localize()
-          I18n.locale = :en
-          begin
+          I18n.with_locale(:en) do
+            # force passthrough call to I18n() in public_message() to return original value,
+            # will be localized in deserialize_and_localize()
             result[:public_message] = error.class.public_message
             result[:public_interpolated_values] = error.public_interpolated_values
-          ensure
-            I18n.locale = locale_was
           end
         end
 
@@ -185,7 +181,7 @@ module MicrosoftSync
 
       def self.for(service:, response:, tenant:)
         klass = subclasses_by_status_code[response.code] || self
-        klass.new(service: service, response: response, tenant: tenant)
+        klass.new(service:, response:, tenant:)
       end
 
       def initialize(service:, response:, tenant:)
@@ -230,13 +226,21 @@ module MicrosoftSync
 
     INTERMITTENT = [
       EOFError,
-      Errno::ECONNREFUSED, Errno::ECONNRESET, Errno::EINVAL, Errno::ETIMEDOUT,
-      Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError,
+      Errno::ECONNREFUSED,
+      Errno::ECONNRESET,
+      Errno::EINVAL,
+      Errno::ETIMEDOUT,
+      Net::HTTPBadResponse,
+      Net::HTTPHeaderSyntaxError,
+      Net::ProtocolError,
       OpenSSL::SSL::SSLError,
       SocketError,
       Timeout::Error,
 
-      HTTPBadGateway, HTTPGatewayTimeout, HTTPInternalServerError, HTTPServiceUnavailable,
+      HTTPBadGateway,
+      HTTPGatewayTimeout,
+      HTTPInternalServerError,
+      HTTPServiceUnavailable,
 
       Throttled,
     ].freeze

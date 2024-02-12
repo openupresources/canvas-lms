@@ -43,16 +43,20 @@ module BroadcastPolicy
 
       record.class.connection.after_transaction_commit do
         to_list = record.instance_eval(&to)
+        to_list = to_list.eager_load(:active_pseudonyms) if to_list.try(:reflections)&.key?("active_pseudonyms")
         to_list = Array(to_list).flatten
         next if to_list.empty?
 
         data = record.instance_eval(&self.data) if self.data
         to_list.each_slice(NotificationPolicy.slice_size) do |to_slice|
+          recipients = to_slice.reject { |to| to.class.method_defined?(:suspended?) ? to.suspended? : false }
+          next if recipients.empty?
+
           BroadcastPolicy.notifier.send_notification(
             record,
             dispatch,
             notification,
-            to_slice,
+            recipients,
             data
           )
         end
@@ -71,4 +75,6 @@ module BroadcastPolicy
       end
     end
   end
+
+  require "active_support/core_ext/object/try"
 end

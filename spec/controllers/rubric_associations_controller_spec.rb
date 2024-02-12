@@ -75,7 +75,7 @@ describe RubricAssociationsController do
         expect do
           post("create", params: request_params)
         end.to change {
-          AnonymousOrModerationEvent.where(event_type: "rubric_created", assignment: assignment).count
+          AnonymousOrModerationEvent.where(event_type: "rubric_created", assignment:).count
         }.by(1)
       end
 
@@ -96,6 +96,7 @@ describe RubricAssociationsController do
     end
 
     describe "rubrics associated in a different" do
+      specs_require_sharding
       describe "course" do
         before do
           course_factory
@@ -112,6 +113,20 @@ describe RubricAssociationsController do
           }.by(1)
           expect(assigns[:rubric].context).to eq @course2
           expect(assigns[:rubric].data).to eq @rubric.data
+        end
+
+        it "duplicates the associated rubric into the correct shard" do
+          @rubric.context = @course2
+          @shard2.activate do
+            account_model
+            @course3 = course_factory(account: @account)
+            @assignment = assignment_model(course: @course3)
+            course_with_teacher_logged_in(active_all: true, course: @course3)
+          end
+          post "create", params: { course_id: @course3.id, rubric_association: { rubric_id: @rubric.id, association_id: @assignment.id, association_type: "Assignment" } }
+          expect(assigns[:rubric].context).to eq @course3
+          expect(assigns[:rubric].data).to eq @rubric.data
+          expect(assigns[:rubric].shard).to eq @shard2
         end
 
         describe "with the account_level_mastery_scales FF" do
@@ -155,9 +170,9 @@ describe RubricAssociationsController do
         it "does not duplicate the rubric" do
           expect do
             post "create", params: { course_id: @course.id, rubric_association: { rubric_id: @rubric.id } }
-          end.to change {
+          end.not_to change {
             Rubric.count
-          }.by(0)
+          }
           expect(assigns[:rubric]).to eq @rubric
         end
       end
@@ -238,7 +253,7 @@ describe RubricAssociationsController do
         end.to change {
           AnonymousOrModerationEvent.where(
             event_type: "rubric_updated",
-            assignment: assignment
+            assignment:
           ).count
         }.by(1)
       end
@@ -344,14 +359,14 @@ describe RubricAssociationsController do
         expect do
           delete("destroy", params: { course_id: course.id, id: rubric_association.id })
         end.to change {
-          AnonymousOrModerationEvent.where(event_type: "rubric_deleted", assignment: assignment, user: teacher).count
+          AnonymousOrModerationEvent.where(event_type: "rubric_deleted", assignment:, user: teacher).count
         }.by(1)
       end
 
       it "includes the removed rubric in the event payload" do
         delete("destroy", params: { course_id: course.id, id: rubric_association.id })
 
-        event = AnonymousOrModerationEvent.find_by(event_type: "rubric_deleted", assignment: assignment, user: teacher)
+        event = AnonymousOrModerationEvent.find_by(event_type: "rubric_deleted", assignment:, user: teacher)
         expect(event.payload["id"]).to eq rubric.id
       end
     end

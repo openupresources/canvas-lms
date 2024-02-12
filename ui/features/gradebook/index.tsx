@@ -29,6 +29,10 @@ ready(() => {
   const gradebookMenuNode = document.querySelector(
     '[data-component="GradebookMenu"]'
   ) as HTMLSpanElement
+  const actionMenuNode = document.querySelector('[data-component="ActionMenu"]') as HTMLSpanElement
+  const enhancedActionMenuNode = document.querySelector(
+    '[data-component="EnhancedActionMenu"]'
+  ) as HTMLSpanElement
   const settingsModalButtonContainer = document.getElementById(
     'gradebook-settings-modal-button-container'
   ) as HTMLSpanElement
@@ -39,21 +43,28 @@ ready(() => {
   const applyScoreToUngradedModalNode = document.querySelector(
     '[data-component="ApplyScoreToUngradedModal"]'
   ) as HTMLSpanElement
-  const gradingPeriodsFilterContainer = document.getElementById(
-    'grading-periods-filter-container'
-  ) as HTMLElement
   const gradebookGridNode = document.getElementById('gradebook_grid') as HTMLDivElement
+  const gradebookSettingsModalContainer = document.querySelector(
+    "[data-component='GradebookSettingsModal']"
+  ) as HTMLSpanElement
   const flashMessageContainer = document.getElementById('flash_message_holder') as HTMLDivElement
+  // AnonymousSpeedGraderAlert
+  const anonymousSpeedGraderAlertNode = document.querySelector(
+    '[data-component="AnonymousSpeedGraderAlert"]'
+  ) as HTMLSpanElement
 
   ReactDOM.render(
     <GradebookData
+      actionMenuNode={actionMenuNode}
+      anonymousSpeedGraderAlertNode={anonymousSpeedGraderAlertNode}
       applyScoreToUngradedModalNode={applyScoreToUngradedModalNode}
       currentUserId={ENV.current_user_id as string}
+      enhancedActionMenuNode={enhancedActionMenuNode}
       flashMessageContainer={flashMessageContainer}
       gradebookEnv={ENV.GRADEBOOK_OPTIONS as GradebookOptions}
       gradebookGridNode={gradebookGridNode}
       gradebookMenuNode={gradebookMenuNode}
-      gradingPeriodsFilterContainer={gradingPeriodsFilterContainer}
+      gradebookSettingsModalContainer={gradebookSettingsModalContainer}
       gridColorNode={gridColorNode}
       locale={ENV.LOCALE}
       settingsModalButtonContainer={settingsModalButtonContainer}

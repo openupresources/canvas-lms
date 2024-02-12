@@ -27,7 +27,7 @@ body {
   font-weight: 300;
 
   &.no-headers, &.embedded {
-    #header, #topbar, #left-side, #breadcrumbs { display: none !important; }
+    #header, #mobile-header, #masquerade_bar, #topbar, #left-side, #breadcrumbs { display: none !important; }
     .ic-app-nav-toggle-and-crumbs { display: none; }
     #footer { display: none; }
   }
@@ -53,13 +53,6 @@ body {
       color: $layout-modal-font-color !important;
       height: auto !important;
     }
-  }
-}
-
-// so we don't get the non-interactionable content
-.scripts-not-loaded {
-  a:not([href]), a[href="#"], button:not([type]) {
-    visibility: hidden !important;
   }
 }
 
@@ -169,6 +162,7 @@ iframe.tool_launch {
   #left-side, #header, .ic-app-nav-toggle-and-crumbs{
     display: none !important;
   }
+  .bcs__trigger{ display: none !important; }
 }
 
 

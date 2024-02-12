@@ -18,8 +18,8 @@
 import Backbone from '@canvas/backbone'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import ExternalContentReturnView from '@canvas/external-tools/backbone/views/ExternalContentReturnView.coffee'
+import {has} from 'lodash'
+import ExternalContentReturnView from '@canvas/external-tools/backbone/views/ExternalContentReturnView'
 import ExternalToolCollection from './collections/ExternalToolCollection'
 import ExternalContentFileSubmissionView from './views/ExternalContentFileSubmissionView'
 import ExternalContentUrlSubmissionView from './views/ExternalContentUrlSubmissionView'
@@ -56,13 +56,12 @@ export default class HomeworkSubmissionLtiContainer {
     ) {
       return
     }
-    processSingleContentItem(event)
-      .then(result => {
-        handleContentItem(result, this.contentReturnView, this.removeDeepLinkingListener)
-      })
-      .catch(e => {
-        handleDeepLinkingError(e, this.contentReturnView, this.embedLtiLaunch.bind(this))
-      })
+    try {
+      const result = processSingleContentItem(event)
+      handleContentItem(result, this.contentReturnView, this.removeDeepLinkingListener)
+    } catch (e) {
+      handleDeepLinkingError(e, this.contentReturnView, this.embedLtiLaunch.bind(this))
+    }
   }
 
   removeDeepLinkingListener = () => {
@@ -88,7 +87,7 @@ export default class HomeworkSubmissionLtiContainer {
   // private methods below ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   cleanupViewsForTool(tool) {
-    if (_.has(this.renderedViews, tool.get('id'))) {
+    if (has(this.renderedViews, tool.get('id'))) {
       const views = this.renderedViews[tool.get('id')]
       views.forEach(v => v.remove())
     }

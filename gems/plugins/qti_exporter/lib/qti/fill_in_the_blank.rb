@@ -86,7 +86,7 @@ module Qti
         end
         ci.search("simpleChoice").each do |choice|
           answer = {}
-          answer[:weight] = @type == "multiple_dropdowns_question" ? 0 : 100
+          answer[:weight] = (@type == "multiple_dropdowns_question") ? 0 : 100
           answer[:migration_id] = choice["identifier"]
           answer[:id] = get_or_generate_answer_id(answer[:migration_id])
           answer[:text] = choice.text.strip
@@ -118,7 +118,7 @@ module Qti
       @doc.css("responseDeclaration").each do |res_node|
         res_id = res_node["identifier"]
         res_node.css("correctResponse value").each do |correct_id|
-          if (answer = (answer_hash[res_id] && answer_hash[res_id][correct_id.text]))
+          if (answer = answer_hash[res_id] && answer_hash[res_id][correct_id.text])
             answer[:weight] = AssessmentItemConverter::DEFAULT_CORRECT_WEIGHT
           end
         end
@@ -190,7 +190,7 @@ module Qti
           id: unique_local_id,
           migration_id: blank_id,
           text: sanitize_html_string(val_node.text, true),
-          blank_id: blank_id,
+          blank_id:,
         }
       end
     end

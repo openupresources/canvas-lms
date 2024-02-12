@@ -86,7 +86,8 @@ describe MicrosoftSync::Errors do
 
       it "returns a JSON blob with error class and message" do
         expect(subject).to eq(
-          "class" => "MicrosoftSync::TestErrorNotPublic", "message" => "abc",
+          "class" => "MicrosoftSync::TestErrorNotPublic",
+          "message" => "abc",
           "extra_metadata" => {}
         )
       end
@@ -129,8 +130,6 @@ describe MicrosoftSync::Errors do
     let(:t_calls_args) { [] }
 
     before do
-      @orig_locale = I18n.locale
-      I18n.locale = :en
       orig_t = I18n.method(:t!)
       allow(I18n).to receive(:t!) do |*args|
         # I18n.t! mutates the second arg, so can't use normal expect().to have_received,
@@ -139,8 +138,6 @@ describe MicrosoftSync::Errors do
         orig_t.call(*args)
       end
     end
-
-    after { I18n.locale = @orig_locale }
 
     context "with a serialized non-PublicError" do
       let(:error) { MicrosoftSync::TestErrorNotPublic.new("foo") }
@@ -205,7 +202,7 @@ describe MicrosoftSync::Errors do
     subject do
       described_class.for(
         service: "my api",
-        response: double(code: code, body: body, headers: HTTParty::Response::Headers.new(headers)),
+        response: double(code:, body:, headers: HTTParty::Response::Headers.new(headers)),
         tenant: "mytenant"
       )
     end
@@ -265,7 +262,7 @@ describe MicrosoftSync::Errors do
       context "when the response status code is 429" do
         let(:code) { 429 }
 
-        it { expect(subject.retry_after_seconds).to eq(nil) }
+        it { expect(subject.retry_after_seconds).to be_nil }
 
         context "when the retry-after header is set" do
           let(:headers) { { "Retry-After" => "12.345" } }

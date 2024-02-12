@@ -21,8 +21,16 @@ class AssignmentStudentVisibility < ActiveRecord::Base
   include VisibilityPluckingHelper
 
   belongs_to :user
-  belongs_to :assignment
+  belongs_to :assignment, inverse_of: :assignment_student_visibilities, class_name: "AbstractAssignment"
   belongs_to :course
+
+  # we are temporarily using a setting here because the feature flag
+  # is not able to be directly checked when canvas boots
+  def self.reset_table_name
+    return super unless Setting.get("differentiated_modules_setting", "false") == "true"
+
+    self.table_name = "assignment_student_visibilities_v2"
+  end
 
   # create_or_update checks for !readonly? before persisting
   def readonly?
@@ -64,7 +72,7 @@ class AssignmentStudentVisibility < ActiveRecord::Base
   end
 
   def self.visible_assignment_ids_for_user(user_id, course_ids = nil)
-    opts = { user_id: user_id }
+    opts = { user_id: }
     if course_ids
       opts[:course_id] = course_ids
     end

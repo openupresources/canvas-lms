@@ -87,7 +87,7 @@
 #           "items": { "$ref": "SubmissionComment" }
 #         },
 #         "submission_type": {
-#           "description": "The types of submission ex: ('online_text_entry'|'online_url'|'online_upload'|'media_recording'|'student_annotation')",
+#           "description": "The types of submission ex: ('online_text_entry'|'online_url'|'online_upload'|'online_quiz'|'media_recording'|'student_annotation')",
 #           "example": "online_text_entry",
 #           "type": "string",
 #           "allowableValues": {
@@ -95,6 +95,7 @@
 #               "online_text_entry",
 #               "online_url",
 #               "online_upload",
+#               "online_quiz",
 #               "media_recording",
 #               "student_annotation"
 #             ]
@@ -261,7 +262,8 @@ class SubmissionsApiController < ApplicationController
                       @assignment.representatives(user: @current_user).map(&:id)
                     else
                       @context.apply_enrollment_visibility(@context.student_enrollments,
-                                                           @current_user, section_ids)
+                                                           @current_user,
+                                                           section_ids)
                               .pluck(:user_id)
                     end
       submissions = @assignment.submissions.where(user_id: student_ids).preload(:originality_reports)
@@ -276,7 +278,8 @@ class SubmissionsApiController < ApplicationController
                submissions = submissions.preload(:quiz_submission) unless params[:exclude_response_fields]&.include?("preview_url")
                submissions = submissions.preload(:attachment) unless params[:exclude_response_fields]&.include?("attachments")
 
-               submissions = Api.paginate(submissions, self,
+               submissions = Api.paginate(submissions,
+                                          self,
                                           polymorphic_url([:api_v1, @section || @context, @assignment, :submissions]))
                bulk_load_attachments_and_previews(submissions)
 
@@ -286,7 +289,7 @@ class SubmissionsApiController < ApplicationController
                end
              end
 
-      render json: json
+      render json:
     end
   end
 
@@ -415,7 +418,7 @@ class SubmissionsApiController < ApplicationController
       end
     end
 
-    if student_ids.is_a?(Array) && student_ids.length > Api.max_per_page
+    if student_ids.is_a?(Array) && student_ids.length > Api::MAX_PER_PAGE
       return render json: { error: "too many students" }, status: :bad_request
     end
 
@@ -471,7 +474,7 @@ class SubmissionsApiController < ApplicationController
 
     # unless teacher, filter assignments down to only assignments current user can see
     unless @context.grants_any_right?(@current_user, :read_as_admin, :manage_grades)
-      assignments = assignments.select { |a| (assignment_visibilities.fetch(a.id, []) & student_ids).any? }
+      assignments = assignments.select { |a| assignment_visibilities.fetch(a.id, []).intersect?(student_ids) }
     end
 
     # preload with stuff already in memory
@@ -677,11 +680,12 @@ class SubmissionsApiController < ApplicationController
     permission = :grade if @user != @current_user
     if authorized_action(@assignment, @current_user, permission)
       api_attachment_preflight(
-        @user, request,
+        @user,
+        request,
         check_quota: false, # we don't check quota when uploading a file for assignment submission
         folder: @user.submissions_folder(@context), # organize attachment into the course submissions folder
         assignment: @assignment,
-        submit_assignment: submit_assignment
+        submit_assignment:
       )
     end
   end
@@ -774,6 +778,9 @@ class SubmissionsApiController < ApplicationController
   #   Sets the late policy status to either "late", "missing", "extended", "none", or null.
   #     NB: "extended" values can only be set in the UI when the "UI features for 'extended' Submissions" Account Feature is on
   #
+  # @argument submission[sticker] [String, "apple"|"basketball"|"bell"|"book"|"bookbag"|"briefcase"|"bus"|"calendar"|"chem"|"design"|"pencil"|"beaker"|"paintbrush"|"computer"|"column"|"pen"|"tablet"|"telescope"|"calculator"|"paperclip"|"composite_notebook"|"scissors"|"ruler"|"clock"|"globe"|"grad"|"gym"|"mail"|"microscope"|"mouse"|"music"|"notebook"|"page"|"panda1"|"panda2"|"panda3"|"panda4"|"panda5"|"panda6"|"panda7"|"panda8"|"panda9"|"presentation"|"science"|"science2"|"star"|"tag"|"tape"|"target"|"trophy"]
+  #   Sets the sticker for the submission.
+  #
   # @argument submission[seconds_late_override] [Integer]
   #   Sets the seconds late if late policy status is "late"
   #
@@ -830,6 +837,10 @@ class SubmissionsApiController < ApplicationController
     end
 
     @user ||= get_user_considering_section(params[:user_id])
+    unless @assignment.assigned?(@user) || @assignment.students_with_visibility.include?(@user)
+      render_unauthorized_action
+      return
+    end
     @submission ||= @assignment.all_submissions.find_or_create_by!(user: @user)
 
     authorized = if params[:submission] || params[:rubric_assessment]
@@ -839,16 +850,30 @@ class SubmissionsApiController < ApplicationController
                  end
 
     if authorized
+      track_update_metrics(@submission, params)
+
       submission = { grader: @current_user }
       if params[:submission].is_a?(ActionController::Parameters)
         submission[:grade] = params[:submission].delete(:posted_grade)
         submission[:excuse] = params[:submission].delete(:excuse)
-        if params[:submission].key?(:late_policy_status)
-          submission[:late_policy_status] = params[:submission].delete(:late_policy_status)
+        [:late_policy_status, :custom_grade_status_id].each do |status_attr|
+          if params[:submission].key?(status_attr)
+            submission[status_attr] = params[:submission].delete(status_attr)
+          end
         end
+
         if params[:submission].key?(:seconds_late_override)
           submission[:seconds_late_override] = params[:submission].delete(:seconds_late_override)
         end
+
+        if params[:submission].key?(:sticker)
+          submission[:sticker] = params[:submission].delete(:sticker)
+        end
+
+        if params.key?(:sub_assignment_tag) && @domain_root_account&.feature_enabled?(:discussion_checkpoints)
+          submission[:sub_assignment_tag] = params.delete(:sub_assignment_tag)
+        end
+
         submission[:provisional] = value_to_boolean(params[:submission][:provisional])
         submission[:final] = value_to_boolean(params[:submission][:final]) && @assignment.permits_moderation?(@current_user)
         if params[:submission][:submission_type] == "basic_lti_launch" && (!@submission.has_submission? || @submission.submission_type == "basic_lti_launch")
@@ -871,7 +896,12 @@ class SubmissionsApiController < ApplicationController
         @submission = @assignment.find_or_create_submission(@user) if @submission.new_record?
         @submissions ||= [@submission]
       end
-      if submission.key?(:late_policy_status) || submission.key?(:seconds_late_override)
+
+      submission_status_changed =
+        %i[late_policy_status seconds_late_override custom_grade_status_id]
+        .any? { |status_attr| submission.key?(status_attr) }
+
+      if submission_status_changed || submission.key?(:sticker)
         excused = Canvas::Plugin.value_to_boolean(submission[:excuse])
         grade_group_students = !(@assignment.grade_group_students_individually || excused)
 
@@ -880,12 +910,22 @@ class SubmissionsApiController < ApplicationController
           @submissions = @assignment.find_or_create_submissions(students, Submission.preload(:grading_period, :stream_item))
         end
 
+        if submission.key?(:custom_grade_status_id)
+          custom_status = @context.custom_grade_statuses.find(submission[:custom_grade_status_id])
+        end
+
         @submissions.each do |sub|
-          sub.late_policy_status = submission[:late_policy_status] if submission.key?(:late_policy_status)
+          if custom_status
+            sub.custom_grade_status = custom_status
+          elsif submission.key?(:late_policy_status)
+            sub.late_policy_status = submission[:late_policy_status]
+          end
+
           if sub.late_policy_status == "late" && submission[:seconds_late_override].present?
             sub.seconds_late_override = submission[:seconds_late_override]
           end
-          sub.grader = @current_user
+          sub.sticker = submission[:sticker] if submission.key?(:sticker)
+          sub.grader = @current_user if submission_status_changed
           # If we've called Assignment#grade_student, it has already created a
           # new submission version on this request.
           previously_graded = graded_just_now && (sub.grade.present? || sub.excused?)
@@ -895,7 +935,7 @@ class SubmissionsApiController < ApplicationController
 
       assessment = params[:rubric_assessment]
       if assessment.is_a?(ActionController::Parameters) && @assignment.active_rubric_association?
-        if (assessment.keys & @assignment.rubric_association.rubric.criteria_object.map { |c| c.id.to_s }).empty?
+        unless assessment.keys.intersect?(@assignment.rubric_association.rubric.criteria_object.map { |c| c.id.to_s })
           return render json: { message: "invalid rubric_assessment" }, status: :bad_request
         end
 
@@ -981,7 +1021,7 @@ class SubmissionsApiController < ApplicationController
           params.merge(anonymize_user_id: !!@anonymize_user_id)
         )
       end
-      render json: json
+      render json:
     end
   end
 
@@ -1149,10 +1189,10 @@ class SubmissionsApiController < ApplicationController
           pg_list = submission_provisional_grades_json(
             course: @context,
             assignment: @assignment,
-            submission: submission,
+            submission:,
             current_user: @current_user,
             avatars: service_enabled?(:avatars) && !@assignment.grade_as_group?,
-            includes: includes
+            includes:
           )
           json[:provisional_grades] = pg_list
         end
@@ -1371,6 +1411,38 @@ class SubmissionsApiController < ApplicationController
     end
   end
 
+  # @API Clear unread status for all submissions.
+  #
+  # Site-admin-only endpoint.
+  #
+  # No request fields are necessary.
+  #
+  # On success, the response will be 204 No Content with an empty body.
+  #
+  # @example_request
+  #
+  #   curl 'https://<canvas>/api/v1/courses/<course_id>/submissions/<user_id>/clear_unread.json' \
+  #        -X PUT \
+  #        -H "Authorization: Bearer <token>" \
+  #        -H "Content-Length: 0"
+  #
+  def submissions_clear_unread
+    return unless authorized_action(Account.site_admin, @current_user, :manage_students)
+
+    user_id = params[:user_id]
+    course_id = params[:course_id]
+    user = User.find(user_id)
+    course = Course.find(course_id)
+    submissions = course.submissions.where(user:)
+    ContentParticipation.add_missing_content_participation_items(course, user)
+    ids = ContentParticipation.mark_all_as_read_for_user(user, submissions, course)
+
+    opts = { type: :submissions_clear_unread }
+    error_info = Canvas::Errors::Info.new(request, @domain_root_account, @current_user, opts).to_h
+    error_info[:extra][:ids] = ids
+    Canvas::Errors.capture("Notification Badge Count mismatch, Site Admin is clearing Notification Badge Count for User ID - #{user_id} for Course ID - #{course_id}", error_info, :warn)
+  end
+
   # @API Get rubric assessments read state
   #
   # Return whether new rubric comments/grading made on a submission have been seen by the student being assessed.
@@ -1518,7 +1590,7 @@ class SubmissionsApiController < ApplicationController
               end
       not_submitted = total - graded - ungraded
 
-      render json: { graded: graded, ungraded: ungraded, not_submitted: not_submitted }
+      render json: { graded:, ungraded:, not_submitted: }
     end
   end
 
@@ -1531,7 +1603,7 @@ class SubmissionsApiController < ApplicationController
   def change_topic_read_state(new_state)
     @assignment = api_find(@context.assignments.active, params[:assignment_id])
     @user = get_user_considering_section(params[:user_id])
-    @submission = @assignment.submissions.find_or_create_by!(user: @user)
+    @submission = @assignment.find_or_create_submission(@user, skip_grader_check: true)
 
     render_state_change_result @submission.change_read_state(new_state, @current_user)
   end
@@ -1590,5 +1662,20 @@ class SubmissionsApiController < ApplicationController
     @assignment = api_find(@context.assignments.active, params[:assignment_id])
     @user = get_user_considering_section(params[:user_id])
     @submission = @assignment.submission_for_student(@user)
+  end
+
+  def track_update_metrics(submission, params)
+    custom_grade_status_id = params.dig(:submission, :custom_grade_status_id).to_s
+    if !custom_grade_status_id.empty? && custom_grade_status_id != submission.custom_grade_status_id.to_s
+      InstStatsd::Statsd.increment("custom_grade_status.applied_to.submission")
+    end
+
+    if params.dig(:submission, :posted_grade)
+      if params["originator"] == "individual_gradebook"
+        InstStatsd::Statsd.increment("individual_gradebook.submission.posted_grade")
+      elsif params["originator"] == "gradebook"
+        InstStatsd::Statsd.increment("gradebook.submission.posted_grade")
+      end
+    end
   end
 end

@@ -18,17 +18,20 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
+import sanitizeHtml from 'sanitize-html-with-tinymce'
 import moveMultipleQuestionBanks from './moveMultipleQuestionBanks'
 import loadBanks from './loadBanks'
 import addBank from './addBank'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, getFormData, formErrors */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, getFormData, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, showIf, .dim */
-import '@canvas/keycodes'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('question_bank')
 
@@ -128,7 +131,7 @@ export function attachPageEvents(_e) {
 
   if ($('#more_questions').length > 0) {
     $('.display_question .move').remove()
-    const url = $.replaceTags($('#bank_urls .more_questions_url').attr('href'), 'page', 1)
+    const url = replaceTags($('#bank_urls .more_questions_url').attr('href'), 'page', 1)
     $.ajaxJSON(
       url,
       'GET',
@@ -153,7 +156,7 @@ export function attachPageEvents(_e) {
     const currentPage = parseInt($more_questions.attr('data-current-page'), 10)
     const totalPages = parseInt($more_questions.attr('data-total-pages'), 10)
     let url = $(this).attr('href')
-    url = $.replaceTags(url, 'page', currentPage + 1)
+    url = replaceTags(url, 'page', currentPage + 1)
     $link.text('loading more questions...').addClass('loading')
     $.ajaxJSON(
       url,
@@ -166,6 +169,9 @@ export function attachPageEvents(_e) {
         for (const idx in data.questions) {
           const question = data.questions[idx].assessment_question
           question.assessment_question_id = question.id
+          const question_data = question.question_data
+          question_data.question_text = sanitizeHtml(question_data.question_text || '')
+          question.question_data = question_data
           const $question = $('#question_teaser_blank').clone().removeAttr('id')
           $question.fillTemplateData({
             data: question,
@@ -173,7 +179,7 @@ export function attachPageEvents(_e) {
             hrefValues: ['id'],
           })
           $question.fillTemplateData({
-            data: question.question_data,
+            data: question_data,
             htmlValues: ['question_text'],
           })
           $question.data('question', question)

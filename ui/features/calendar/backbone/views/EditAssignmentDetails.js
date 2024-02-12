@@ -21,8 +21,9 @@ import $ from 'jquery'
 import moment from 'moment'
 import natcompare from '@canvas/util/natcompare'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
-import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView.coffee'
+import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
 import SisValidationHelper from '@canvas/sis/SisValidationHelper'
+import replaceTags from '@canvas/util/replaceTags'
 import editAssignmentTemplate from '../../jst/editAssignment.handlebars'
 import editAssignmentOverrideTemplate from '../../jst/editAssignmentOverride.handlebars'
 import wrapper from '@canvas/forms/jst/EmptyDialogFormWrapper.handlebars'
@@ -30,12 +31,13 @@ import genericSelectOptionsTemplate from '../../jst/genericSelectOptions.handleb
 import datePickerFormat from '@canvas/datetime/datePickerFormat'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import withinMomentDates from '../../momentDateHelper'
-import tz from '@canvas/timezone'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import * as tz from '@canvas/datetime'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '../../fcMomentHandlebarsHelpers'
+import {encodeQueryString} from '@canvas/query-string-encoding'
 
 const I18n = useI18nScope('calendar')
 
@@ -52,7 +54,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       postToSISName: ENV.SIS_NAME,
       postToSIS:
         this.event.eventType === 'assignment' ? this.event.assignment.post_to_sis : undefined,
-      datePickerFormat: 'medium_with_weekday',
+      datePickerFormat: 'full_with_weekday',
       important_dates: this.event.important_dates,
     })
     this.currentContextInfo = null
@@ -74,7 +76,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       this.$el.attr('method', 'PUT')
       return this.$el.attr(
         'action',
-        $.replaceTags(this.event.contextInfo.assignment_url, 'id', this.event.object.id)
+        replaceTags(this.event.contextInfo.assignment_url, 'id', this.event.object.id)
       )
     }
   }
@@ -137,7 +139,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       params.assignment_group_id = data.assignment_group_id
     }
     params.return_to = window.location.href
-    pieces[0] += `?${$.param(params)}`
+    pieces[0] += `?${encodeQueryString(params)}`
     return (window.location.href = pieces.join('#'))
   }
 
@@ -250,10 +252,6 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
   }
 
   onSaveFail(xhr) {
-    let resp
-    if ((resp = JSON.parse(xhr.responseText))) {
-      showFlashAlert({message: resp.error, err: null, type: 'error'})
-    }
     this.closeCB()
     this.disableWhileLoadingOpts = {}
     return super.onSaveFail(xhr)

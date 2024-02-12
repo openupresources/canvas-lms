@@ -39,7 +39,7 @@ describe MoodleImporter::Converter do
       "Missing links found in imported content",
       "The announcement \"News forum\" could not be linked to the module"
     ]
-    expect(@cm.old_warnings_format.all? { |w| allowed_warnings.find { |aw| w[0].start_with?(aw) } }).to eq true
+    expect(@cm.old_warnings_format.all? { |w| allowed_warnings.find { |aw| w[0].start_with?(aw) } }).to be true
   end
 
   context "discussion topics" do
@@ -49,7 +49,7 @@ describe MoodleImporter::Converter do
       dt = @course.discussion_topics.first
       expect(dt.title).to eq "Hidden Forum"
       expect(dt.message).to eq "<p>Description of hidden forum</p>"
-      expect(dt.unpublished?).to eq true
+      expect(dt.unpublished?).to be true
 
       ann = @course.announcements.first
       expect(ann.title).to eq "News forum"
@@ -63,7 +63,7 @@ describe MoodleImporter::Converter do
 
       assignment2 = @course.assignments.where(title: "Hidden Assignmnet").first
       expect(assignment2.description).to eq "<p>This is a hidden assignment</p>"
-      expect(assignment2.unpublished?).to eq true
+      expect(assignment2.unpublished?).to be true
     end
   end
 
@@ -75,7 +75,7 @@ describe MoodleImporter::Converter do
 
       page1 = wiki.wiki_pages.where(title: "Hidden Section").first
       expect(page1.body).to eq "<p>This is a Hidden Section, with hidden items</p>"
-      expect(page1.unpublished?).to eq true
+      expect(page1.unpublished?).to be true
     end
   end
 
@@ -91,7 +91,7 @@ describe MoodleImporter::Converter do
     it "converts Moodle Quiz module to a quiz" do
       quiz = @course.quizzes.where(title: "Quiz Name").first
       expect(quiz.description).to match(/Quiz Description/)
-      expect(quiz.quiz_questions.count).to eq 11
+      expect(quiz.quiz_questions.count).to eq 12
     end
 
     it "converts Moodle Questionnaire module to a quiz" do
@@ -99,6 +99,13 @@ describe MoodleImporter::Converter do
       expect(quiz.description).to match(/Sumary/)
       expect(quiz.quiz_type).to eq "survey"
       expect(quiz.quiz_questions.count).to eq 10
+    end
+
+    it "allows the link replacer to map random question instances" do
+      aq1 = @course.assessment_questions.where(name: "1234").first.question_data["question_text"]
+      aq2 = @course.assessment_questions.where(name: "1234").last.question_data["question_text"]
+      expect(aq1.include?("LINK.PLACEHOLDER")).to be false
+      expect(aq2.include?("LINK.PLACEHOLDER")).to be false
     end
   end
 

@@ -24,7 +24,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
   extend RootAccountResolver
 
   restrict_columns :state, [:workflow_state]
-  self.ignored_columns = %i[migration_id_2 vendor_guid_2]
+  self.ignored_columns += %i[migration_id_2 vendor_guid_2]
 
   belongs_to :learning_outcome_group
   belongs_to :source_outcome_group, class_name: "LearningOutcomeGroup", inverse_of: :destination_outcome_groups
@@ -50,6 +50,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
 
   workflow do
     state :active
+    state :archived
     state :deleted
   end
 
@@ -77,8 +78,8 @@ class LearningOutcomeGroup < ActiveRecord::Base
     child_outcome_links.create(
       content: outcome,
       context: context || self,
-      skip_touch: skip_touch,
-      migration_id: migration_id
+      skip_touch:,
+      migration_id:
     )
   end
 
@@ -103,7 +104,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
         associated_asset_type: group.class,
         context_id: group.context_id || group.id,
         context_type: group.context_id.present? ? group.context_type : LearningOutcomeGroup,
-        root_account_id: root_account_id,
+        root_account_id:,
         title: outcome.title,
         comments: "",
         context_code: "#{group.context_type.to_s.underscore}_#{group.context_id}",
@@ -112,7 +113,16 @@ class LearningOutcomeGroup < ActiveRecord::Base
       }
     end
 
-    ContentTag.insert_all(new_tags)
+    tags = ContentTag.insert_all(new_tags, returning: %w[id content_id associated_asset_id context_id context_type workflow_state])
+
+    Struct.new("OutcomeLink", :id, :content_id, :associated_asset_id, :context_id, :context_type, :workflow_state)
+
+    tags.rows.each do |tag|
+      link = Struct::OutcomeLink.new(tag[0], tag[1], tag[2], tag[3], tag[4], tag[5])
+      Canvas::LiveEvents.learning_outcome_link_created(link)
+    rescue => e
+      Canvas::Errors.capture_exception(:learning_outcome_link_creation, e, :error)
+    end
 
     touch_set.group_by(&:class).each do |cls, idset|
       cls.where(id: idset).update_all(updated_at: timestamp)
@@ -121,7 +131,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
 
   def sync_source_group
     transaction do
-      return unless source_outcome_group
+      raise ActiveRecord::Rollback unless source_outcome_group
 
       source_outcome_group.child_outcome_links.active.each do |link|
         add_outcome(link.content, skip_touch: true)
@@ -132,6 +142,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
 
         if target_child_group
           unless target_child_group.workflow_state == "active"
+            target_child_group.root_account_id = context.resolved_root_account_id
             target_child_group.workflow_state = "active"
             target_child_group.save!
           end
@@ -246,8 +257,31 @@ class LearningOutcomeGroup < ActiveRecord::Base
     end
   end
 
-  scope :active, -> { where("learning_outcome_groups.workflow_state<>'deleted'") }
+  def archive!
+    # Only active groups can be archived
+    if workflow_state == "active"
+      self.workflow_state = "archived"
+      self.archived_at = Time.now.utc
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot archive a deleted LearningOutcomeGroup"
+    end
+  end
+
+  def unarchive!
+    # Only archived groups can be unarchived
+    if workflow_state == "archived"
+      self.workflow_state = "active"
+      self.archived_at = nil
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot unarchive a deleted LearningOutcomeGroup"
+    end
+  end
+
+  scope :active, -> { where("learning_outcome_groups.workflow_state NOT IN ('deleted', 'archived')") }
   scope :active_first, -> { order(Arel.sql("CASE WHEN workflow_state = 'active' THEN 0 ELSE 1 END")) }
+  scope :archived, -> { where("learning_outcome_groups.workflow_state = 'archived' AND learning_outcome_groups.archived_at IS NOT NULL") }
 
   scope :global, -> { where(context_id: nil) }
 
@@ -300,7 +334,7 @@ class LearningOutcomeGroup < ActiveRecord::Base
 
         new_ids = []
         ids_to_check.each do |id|
-          group = LearningOutcomeGroup.for_context(context).active.where(id: id).first
+          group = LearningOutcomeGroup.for_context(context).active.where(id:).first
           new_ids += group.parent_ids if group
         end
 

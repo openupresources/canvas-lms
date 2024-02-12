@@ -20,8 +20,16 @@
 
 class Progress < ActiveRecord::Base
   belongs_to :context, polymorphic:
-      [:content_migration, :course, :account, :group_category, :content_export,
-       :assignment, :attachment, :epub_export, :sis_batch, :course_pace,
+      [:content_migration,
+       :course,
+       :account,
+       :group_category,
+       :content_export,
+       :assignment,
+       :attachment,
+       :epub_export,
+       :sis_batch,
+       :course_pace,
        { context_user: "User", quiz_statistics: "Quizzes::QuizStatistics" }]
   belongs_to :user
   belongs_to :delayed_job, class_name: "::Delayed::Job", optional: true
@@ -33,11 +41,14 @@ class Progress < ActiveRecord::Base
   serialize :results
   attr_reader :total
 
+  scope :is_pending, -> { where(workflow_state: ["queued", "running"]) }
+
   include Workflow
   workflow do
     state :queued do
       event :start, transitions_to: :running
       event :fail, transitions_to: :failed
+      event :cancel, transitions_to: :canceled
     end
     state :running do
       event(:complete, transitions_to: :completed) { self.completion = 100 }
@@ -45,6 +56,7 @@ class Progress < ActiveRecord::Base
     end
     state :completed
     state :failed
+    state :canceled
   end
 
   set_policy do
@@ -101,14 +113,24 @@ class Progress < ActiveRecord::Base
   def process_job(target, method, enqueue_args, *method_args, **kwargs)
     enqueue_args = enqueue_args.reverse_merge(max_attempts: 1, priority: Delayed::LOW_PRIORITY)
     method_args.unshift(self) unless enqueue_args.delete(:preserve_method_args)
-    work = Progress::Work.new(self, target, method, args: method_args, kwargs: kwargs)
+    work = Progress::Work.new(self, target, method, args: method_args, kwargs:)
     GuardRail.activate(:primary) do
       ActiveRecord::Base.connection.after_transaction_commit do
         job = Delayed::Job.enqueue(work, **enqueue_args)
         update(delayed_job_id: job.id)
+        cancel_orphaned_progresses(job.id) if enqueue_args[:on_conflict] == :overwrite && job.enqueue_result == :updated
         job
       end
     end
+  end
+
+  private
+
+  # If a job is enqueued with `on_conflict: :overwrite`, and another job already exists with the same
+  # singleton, then the existing job's handler will be updated to point at the new Progress. Thus, cancel any
+  # other queued Progresses that were pointing at the job (since they'll never get updated).
+  def cancel_orphaned_progresses(job_id)
+    Progress.where(delayed_job_id: job_id, workflow_state: "queued").where.not(id:).update_all(workflow_state: "canceled")
   end
 
   # (private)

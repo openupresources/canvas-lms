@@ -43,15 +43,13 @@ interface StoreProps {
   readonly blueprintLocked: boolean | undefined
 }
 
-const {Item: FlexItem} = Flex as any
-
-const PaceModalHeading: React.FC<Props & StoreProps> = ({
+const PaceModalHeading = ({
   coursePace,
   contextName,
   paceContext,
   enrolledSection,
   blueprintLocked,
-}) => {
+}: Props & StoreProps) => {
   const renderPaceInfo = () => {
     if (['Section', 'Course'].includes(coursePace.context_type)) {
       return (
@@ -110,11 +108,11 @@ const PaceModalHeading: React.FC<Props & StoreProps> = ({
 
   return (
     <Flex as="section" justifyItems="space-between">
-      <FlexItem>{renderDetails()}</FlexItem>
-      <FlexItem margin="none none auto none">
+      <Flex.Item>{renderDetails()}</Flex.Item>
+      <Flex.Item margin="none none auto none">
         <Settings isBlueprintLocked={blueprintLocked} margin="0 0 0 small" />
         <BlueprintLock newPace={!coursePace.id} bannerSelector=".pace-redesign-inner-modal" />
-      </FlexItem>
+      </Flex.Item>
     </Flex>
   )
 }

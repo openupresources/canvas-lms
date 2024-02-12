@@ -77,7 +77,7 @@ export function downloadToWrap(url) {
 // take a url to a file (e.g. /files/17), and convert it to
 // it's in-context url (e.g. /courses/2/files/17).
 // Add wrap=1 to the url so it previews, not downloads
-// If it is a user file, add the verifier
+// If it is a user file or being referenced from a different origin, add the verifier
 // NOTE: this can be removed once canvas-rce-api is updated
 //       to normalize the file URLs it returns.
 export function fixupFileUrl(contextType, contextId, fileInfo, canvasOrigin) {
@@ -95,6 +95,8 @@ export function fixupFileUrl(contextType, contextId, fileInfo, canvasOrigin) {
     if (fileInfo.uuid && contextType.includes('user')) {
       delete parsed.search
       parsed.query.verifier = fileInfo.uuid
+    } else {
+      delete parsed.query.verifier
     }
     fileInfo[key] = format(parsed)
   }
@@ -121,8 +123,6 @@ export function prepEmbedSrc(url, canvasOrigin = window.location.origin) {
 
 // when the user opens a link to a resource, we want its view
 // logged, so remove /preview
-// Add wrap=1 to indicate clicking on the link should open a preview
-// and not download the file (this doesn't work if the original link is a download link)
 export function prepLinkedSrc(url) {
   const parsed = parseCanvasUrl(url)
   if (!parsed) {
@@ -130,6 +130,5 @@ export function prepLinkedSrc(url) {
   }
   delete parsed.search
   parsed.pathname = parsed.pathname.replace(/\/preview(\?|$)/, '$1')
-  parsed.query.wrap = '1'
   return format(parsed)
 }

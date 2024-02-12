@@ -36,17 +36,15 @@ class CoursePacing::PaceContextsService
       sections = sections.reverse_order if params[:order] == "desc"
       sections
     when "student_enrollment"
-      student_enrollments = course.all_real_student_enrollments.current_and_future.order(:user_id, created_at: :desc).select("DISTINCT ON(enrollments.user_id) enrollments.*")
+      student_enrollments = course.all_real_student_enrollments.order(:user_id, created_at: :desc).select("DISTINCT ON(enrollments.user_id) enrollments.*")
+      student_enrollments = student_enrollments.where("enrollments.workflow_state in ('active', 'creation_pending', 'invited')")
+      student_enrollments = student_enrollments.where("enrollments.id in ( ? )", JSON.parse(params[:contexts])) if params[:contexts].present?
       student_enrollments = student_enrollments.joins(:user).where("users.name ILIKE ?", "%#{params[:search_term]}%") if params[:search_term].present?
-      student_enrollments = student_enrollments.joins(:user).where("enrollments.id in ( ? )", JSON.parse(params[:contexts])) if params[:contexts].present?
       student_enrollments = student_enrollments.joins(:user).order("users.sortable_name") if params[:sort] == "name"
       student_enrollments = student_enrollments.reverse_order if params[:order] == "desc"
       student_enrollments.to_a
     else
-      Canvas::Errors.capture_exception(
-        :pace_contexts_service,
-        "Expected a value of 'course', 'section', or 'student_enrollment', got '#{type}'"
-      )
+      raise ArgumentError, "Expected a value of 'course', 'section', or 'student_enrollment', got '#{type}'"
     end
   end
 end

@@ -26,6 +26,7 @@
     :NO_MODULE_PROGRESSIONS => @context.large_roster,
   })
 %>
+<% js_bundle :module_student_view_peer_reviews %>
 <% js_bundle :context_modules_publish_menu %>
 <% js_bundle :module_dnd %>
 <% css_bundle :react_files %>
@@ -58,8 +59,8 @@
           </button>
         <% end %>
       <% end %>
-      <% if Account.site_admin.feature_enabled?(:module_publish_menu) && @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit) %>
-        <div id="context-modules-publish-menu" data-course-id="<%= @context.id %>" data-progress-id="<%= @progress&.id %>" style="display: inline-block;"></div>
+      <% if @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit) %>
+        <div id="context-modules-publish-menu" data-course-id="<%= @context.id %>" data-progress-id="<%= @progress&.id %>" style="display: inline-block;" data-disabled="<%= @modules.empty? %>"></div>
       <% end %>
       <% if @can_add %>
         <button class="btn btn-primary add_module_link">
@@ -95,6 +96,7 @@
 
 <div id="external-tool-mount-point"></div>
 <div id="direct-share-mount-point"></div>
+<div id="differentiated-modules-mount-point"></div>
 <div class="item-group-container" id="context_modules_sortable_container">
   <div id="no_context_modules_message" style="display:none;">
     <% if can_do(@context.context_modules.temp_record, @current_user, :create) %>

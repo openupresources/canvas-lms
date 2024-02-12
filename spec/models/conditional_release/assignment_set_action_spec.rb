@@ -21,18 +21,18 @@
 require_relative "../../conditional_release_spec_helper"
 
 module ConditionalRelease
-  describe AssignmentSetAction, type: :model do
+  describe AssignmentSetAction do
     it_behaves_like "a soft-deletable model"
 
     it "must have student_id and actor_id" do
       set = create :assignment_set
       [:student_id, :actor_id].each do |attr|
         action = build :assignment_set_action, assignment_set: set
-        action.send("#{attr}=", nil)
+        action.send(:"#{attr}=", nil)
         expect(action.valid?).to be false
-        action.send("#{attr}=", "")
+        action.send(:"#{attr}=", "")
         expect(action.valid?).to be false
-        action.send("#{attr}=", "person")
+        action.send(:"#{attr}=", "person")
         expect(action.valid?).to be true
       end
     end

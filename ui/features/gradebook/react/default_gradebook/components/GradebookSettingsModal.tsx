@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,7 +18,7 @@
  */
 
 import React from 'react'
-import _ from 'underscore'
+import {isEqual, isEmpty, cloneDeep} from 'lodash'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
@@ -37,15 +38,16 @@ import GradePostingPolicyTabPanel from './GradePostingPolicyTabPanel'
 import ViewOptionsTabPanel from './ViewOptionsTabPanel'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import {confirmViewUngradedAsZero} from '../Gradebook.utils'
-import type {GradebookViewOptions, LatePolicyCamelized} from '../gradebook.d'
+import type {
+  GradebookViewOptions,
+  LatePolicyCamelized,
+  LatePolicyValidationErrors,
+} from '../gradebook.d'
 
 const I18n = useI18nScope('gradebook')
 
-const {Item: FlexItem} = Flex as any
-const {Panel: TabsPanel} = Tabs as any
-
 function isLatePolicySaveable({latePolicy: {changes, validationErrors}}): boolean {
-  return !_.isEmpty(changes) && _.isEmpty(validationErrors)
+  return !isEmpty(changes) && isEmpty(validationErrors)
 }
 
 function haveCourseSettingsChanged({props, state}): boolean {
@@ -66,7 +68,7 @@ function isPostPolicyChanged({props, state}) {
 }
 
 function haveViewOptionsChanged({state: {viewOptions, viewOptionsLastSaved}}): boolean {
-  return viewOptions != null && !_.isEqual(viewOptions, viewOptionsLastSaved)
+  return viewOptions != null && !isEqual(viewOptions, viewOptionsLastSaved)
 }
 
 function onSaveSettingsFailure() {
@@ -113,7 +115,7 @@ export type GradebookSettingsModalProps = {
   gradedLateSubmissionsExist: boolean
   loadCurrentViewOptions?: () => GradebookViewOptions
   onCourseSettingsUpdated: (courseSettings: {allowFinalGradeOverride: boolean}) => void
-  onLatePolicyUpdate: (latePolicy: Partial<LatePolicyCamelized>) => void
+  onLatePolicyUpdate: (latePolicy: LatePolicyCamelized) => void
   onViewOptionsUpdated?: (viewOptions: GradebookViewOptions) => Promise<void | void[]>
   postPolicies: {
     coursePostPolicy: {
@@ -124,6 +126,7 @@ export type GradebookSettingsModalProps = {
     }) => void
     setCoursePostPolicy: (coursePostPolicy: {courseId?: string; postManually: boolean}) => void
   }
+  // eslint-disable-next-line react/no-unused-prop-types
   ref: React.RefObject<any>
 }
 
@@ -134,14 +137,14 @@ type State = {
   isOpen: boolean
   latePolicy: {
     changes: Partial<LatePolicyCamelized>
-    data?: Partial<LatePolicyCamelized>
-    validationErrors: {[key: string]: string}
+    data?: LatePolicyCamelized
+    validationErrors: LatePolicyValidationErrors
   }
   coursePostPolicy: {
     postManually: boolean
   }
   processingRequests: boolean
-  selectedTab: string
+  selectedTab: string | undefined
   viewOptions: GradebookViewOptions | null
   viewOptionsLastSaved: GradebookViewOptions | null
 }
@@ -208,10 +211,11 @@ export default class GradebookSettingsModal extends React.Component<
       : updateLatePolicy
     return createOrUpdate(this.props.courseId, this.state.latePolicy.changes)
       .then(() => {
-        const latePolicy: Partial<LatePolicyCamelized> = {
+        // can be cast because state.latePolicy.data exists
+        const latePolicy = {
           ...(this.state.latePolicy.data || {}),
           ...this.state.latePolicy.changes,
-        }
+        } as LatePolicyCamelized
         return this.props.onLatePolicyUpdate(latePolicy)
       })
       .catch(this.onSaveLatePolicyFailure)
@@ -240,7 +244,7 @@ export default class GradebookSettingsModal extends React.Component<
       .catch(onSavePostPolicyFailure)
 
   saveViewOptions = () => {
-    const savedOptions = _.cloneDeep(this.state.viewOptions)
+    const savedOptions: GradebookViewOptions = cloneDeep(this.state.viewOptions)
     if (!this.props.onViewOptionsUpdated) {
       throw new Error('onViewOptionsUpdated is required to save view options')
     }
@@ -285,8 +289,8 @@ export default class GradebookSettingsModal extends React.Component<
 
   changeLatePolicy = (latePolicy: {
     changes: Partial<LatePolicyCamelized>
-    data: LatePolicyCamelized
-    validationErrors: {[key: string]: string}
+    data?: LatePolicyCamelized
+    validationErrors: LatePolicyValidationErrors
   }) => {
     this.setState({latePolicy})
   }
@@ -354,10 +358,6 @@ export default class GradebookSettingsModal extends React.Component<
     })
   }
 
-  changeTab = (_ev, {id}) => {
-    this.setState({selectedTab: id})
-  }
-
   render() {
     const includeAdvancedTab = this.props.courseFeatures.finalGradeOverrideEnabled
     const tab = this.state.selectedTab
@@ -374,24 +374,28 @@ export default class GradebookSettingsModal extends React.Component<
         size="medium"
       >
         <Flex direction="column" height="100vh">
-          <FlexItem as="header" padding="medium">
+          <Flex.Item as="header" padding="medium">
             <Flex direction="row">
-              <FlexItem shouldGrow={true} shouldShrink={true}>
+              <Flex.Item shouldGrow={true} shouldShrink={true}>
                 <Heading level="h3">{I18n.t('Gradebook Settings')}</Heading>
-              </FlexItem>
+              </Flex.Item>
 
-              <FlexItem>
+              <Flex.Item>
                 <CloseButton
                   placement="static"
                   onClick={this.close}
                   screenReaderLabel={I18n.t('Close')}
                 />
-              </FlexItem>
+              </Flex.Item>
             </Flex>
-          </FlexItem>
-          <FlexItem shouldGrow={true} shouldShrink={true} overflowX="hidden">
-            <Tabs onRequestTabChange={this.changeTab}>
-              <TabsPanel
+          </Flex.Item>
+          <Flex.Item shouldGrow={true} shouldShrink={true} overflowX="hidden">
+            <Tabs
+              onRequestTabChange={(_ev, {id}) => {
+                this.setState({selectedTab: id})
+              }}
+            >
+              <Tabs.Panel
                 renderTitle={I18n.t('Late Policies')}
                 id="tab-panel-late"
                 isSelected={tab === 'tab-panel-late'}
@@ -403,10 +407,10 @@ export default class GradebookSettingsModal extends React.Component<
                   showAlert={this.props.gradedLateSubmissionsExist}
                   gradebookIsEditable={this.props.gradebookIsEditable}
                 />
-              </TabsPanel>
+              </Tabs.Panel>
 
               {this.props.postPolicies != null && (
-                <TabsPanel
+                <Tabs.Panel
                   renderTitle={I18n.t('Grade Posting Policy')}
                   id="tab-panel-post"
                   isSelected={tab === 'tab-panel-post'}
@@ -417,11 +421,11 @@ export default class GradebookSettingsModal extends React.Component<
                     settings={this.state.coursePostPolicy}
                     gradebookIsEditable={this.props.gradebookIsEditable}
                   />
-                </TabsPanel>
+                </Tabs.Panel>
               )}
 
               {includeAdvancedTab && (
-                <TabsPanel
+                <Tabs.Panel
                   renderTitle={I18n.t('Advanced')}
                   id="tab-panel-advanced"
                   isSelected={tab === 'tab-panel-advanced'}
@@ -430,11 +434,11 @@ export default class GradebookSettingsModal extends React.Component<
                     courseSettings={this.state.courseSettings}
                     onCourseSettingsChange={this.handleCourseSettingsChange}
                   />
-                </TabsPanel>
+                </Tabs.Panel>
               )}
 
               {this.props.loadCurrentViewOptions && this.state.viewOptions && (
-                <TabsPanel
+                <Tabs.Panel
                   renderTitle={I18n.t('View Options')}
                   id="tab-panel-view-options"
                   isSelected={tab === 'tab-panel-view-options'}
@@ -450,6 +454,7 @@ export default class GradebookSettingsModal extends React.Component<
                         this.setViewOption('columnSortSettings', {criterion, direction})
                       },
                     }}
+                    finalGradeOverrideEnabled={this.props.courseFeatures.finalGradeOverrideEnabled}
                     statusColors={{
                       currentValues: this.state.viewOptions.statusColors,
                       onChange: (colors: GradebookViewOptions['statusColors']) => {
@@ -503,11 +508,16 @@ export default class GradebookSettingsModal extends React.Component<
                       },
                     }}
                   />
-                </TabsPanel>
+                </Tabs.Panel>
               )}
             </Tabs>
-          </FlexItem>
-          <FlexItem id="gradebook-settings-modal-footer" align="end" as="footer" overflowY="hidden">
+          </Flex.Item>
+          <Flex.Item
+            id="gradebook-settings-modal-footer"
+            align="end"
+            as="footer"
+            overflowY="hidden"
+          >
             <Button id="gradebook-settings-cancel-button" onClick={this.close} margin="0 small">
               {I18n.t('Cancel')}
             </Button>
@@ -520,7 +530,7 @@ export default class GradebookSettingsModal extends React.Component<
             >
               {I18n.t('Apply Settings')}
             </Button>
-          </FlexItem>
+          </Flex.Item>
         </Flex>
       </Tray>
     )

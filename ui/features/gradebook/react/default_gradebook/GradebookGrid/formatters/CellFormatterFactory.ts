@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -41,7 +42,7 @@ class CellFormatterFactory {
   constructor(gradebook: Gradebook) {
     this.formatters = {
       assignment: new AssignmentCellFormatter(gradebook),
-      assignment_group: new AssignmentGroupCellFormatter(),
+      assignment_group: new AssignmentGroupCellFormatter(gradebook),
       custom_column: new CustomColumnCellFormatter(),
       student: new StudentCellFormatter(gradebook),
       student_lastname: new StudentLastNameCellFormatter(gradebook),

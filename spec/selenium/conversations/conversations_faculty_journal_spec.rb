@@ -44,6 +44,7 @@ describe "conversations new" do
   context "Conversations Faculty Journal" do
     before do
       Account.default.update_attribute(:enable_user_notes, true)
+      Account.site_admin.disable_feature!(:deprecate_faculty_journal)
     end
 
     context "when react_inbox feature flag is OFF" do
@@ -140,9 +141,26 @@ describe "conversations new" do
       end
     end
 
-    context "when react_inbox feature flag is ON", ignore_js_errors: true do
+    context "when react_inbox feature flag is ON", :ignore_js_errors do
       before do
         Account.default.enable_feature! :react_inbox
+      end
+
+      it "can faculty journalize a message sent to a student that has common courses" do
+        user_session(@teacher)
+        get conversations_path
+        f("button[data-testid='compose']").click
+        # must drill down
+        f("input[placeholder='Select Course']").click
+        fj("li:contains('#{@course.name}')").click
+        ff("input[aria-label='Search']")[1].click
+        fj("li:contains('Students')").click
+        fj("li:contains('third student')").click
+        fj("label:contains('Add as a Faculty Journal entry')").click
+        f("textarea[data-testid='message-body']").send_keys "this for third student"
+        fj("button:contains('Send')").click
+        wait_for_ajaximations
+        expect(UserNote.last.note).to eq "this for third student"
       end
 
       it "can faculty journalize a message sent to a group" do
@@ -151,7 +169,7 @@ describe "conversations new" do
         f("button[data-testid='compose']").click
         f("input[placeholder='Select Course']").click
         fj("li:contains('#{@course.name}')").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         fj("li:contains('Student Groups')").click
         wait_for_ajaximations
         fj("li:contains('#{@group.name}')").click
@@ -160,8 +178,7 @@ describe "conversations new" do
         f("textarea[data-testid='message-body']").send_keys "this is a group message!"
         fj("button:contains('Send')").click
         wait_for_ajaximations
-        get "/users/#{@s1.id}/user_notes"
-        expect(fj(".user_note_content:contains('this is a group message!')")).to be_present
+        expect(UserNote.last.note).to eq "this is a group message!"
       end
 
       it "does not show faculty journal option if sender is a student" do
@@ -170,7 +187,7 @@ describe "conversations new" do
         f("button[data-testid='compose']").click
         f("input[placeholder='Select Course']").click
         fj("li:contains('#{@course.name}')").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         fj("li:contains('Students')").click
         wait_for_ajaximations
         fj("li:contains('#{@s2.name}')").click
@@ -186,7 +203,7 @@ describe "conversations new" do
         f("button[data-testid='compose']").click
         f("input[placeholder='Select Course']").click
         fj("li:contains('#{@course.name}')").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         fj("li:contains('Students')").click
         wait_for_ajaximations
         fj("li:contains('#{@s2.name}')").click
@@ -200,7 +217,7 @@ describe "conversations new" do
         f("button[data-testid='compose']").click
         f("input[placeholder='Select Course']").click
         fj("li:contains('#{@course.name}')").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         fj("li:contains('Teachers')").click
         wait_for_ajaximations
         fj("li:contains('#{@teacher.name}')").click

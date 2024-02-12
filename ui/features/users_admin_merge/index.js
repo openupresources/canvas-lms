@@ -16,8 +16,9 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-
-import 'jqueryui/autocomplete'
+import replaceTags from '@canvas/util/replaceTags'
+import 'jqueryui-unpatched/menu'
+import 'jqueryui-unpatched/autocomplete'
 
 const $select_name = $('#select_name')
 const $selected_name = $('#selected_name')
@@ -37,9 +38,7 @@ export default $('.account_search .user_name').each(function () {
   return $input.bind('autocompleteselect autocompletechange', (event, ui) => {
     if (ui.item) {
       $selected_name.text(ui.item.label)
-      $select_name
-        .show()
-        .attr('href', $.replaceTags($('#select_name').attr('rel'), 'id', ui.item.id))
+      $select_name.show().attr('href', replaceTags($('#select_name').attr('rel'), 'id', ui.item.id))
     } else {
       $select_name.hide()
     }

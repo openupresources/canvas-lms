@@ -116,7 +116,7 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
       when Array
         o.map! { |x| truncate_params!(x) }
       when String
-        o.size > 256 ? o.slice(0, 256) : o
+        (o.size > 256) ? o.slice(0, 256) : o
       else
         o
       end
@@ -142,14 +142,22 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
       #
       # Also skip audit logs for internal setting mutations, which can only
       # be executed by siteadmins.
-      next if [Mutations::CreateDiscussionEntryDraft, Mutations::CreateInternalSetting,
-               Mutations::UpdateInternalSetting, Mutations::DeleteInternalSetting].include? mutation
+      #
+      # Also skip audit logs for user inbox label mutations, which can only
+      # be executed by the user itself. We can improve that later outside of
+      # hackweek.
+      next if [Mutations::CreateDiscussionEntryDraft,
+               Mutations::CreateInternalSetting,
+               Mutations::UpdateInternalSetting,
+               Mutations::DeleteInternalSetting,
+               Mutations::CreateUserInboxLabel,
+               Mutations::DeleteUserInboxLabel].include? mutation
 
       logger = Logger.new(mutation, context, arguments)
 
       # TODO? I make a log entry all the fields of the mutation, but maybe I
       # should make them on the arguments too???
-      mutation.fields.each do |_, return_field|
+      mutation.fields.each_value do |return_field|
         next if return_field.original_name == :errors
 
         if (entry = value[return_field.original_name])

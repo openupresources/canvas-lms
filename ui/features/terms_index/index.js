@@ -18,11 +18,13 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 import $ from 'jquery'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import '@canvas/util/templateData'
+import replaceTags from '@canvas/util/replaceTags'
+import {underscoreString} from '@canvas/convert-case'
 
 const I18n = useI18nScope('terms.index')
 
@@ -59,7 +61,8 @@ $(document).ready(() => {
 
   $('.cant_delete_term_link').click(event => {
     event.preventDefault()
-    alert(
+    // eslint-disable-next-line no-alert
+    window.alert(
       I18n.t('messages.classes_in_term', "You can't delete a term that still has classes in it.")
     )
   })
@@ -107,13 +110,13 @@ $(document).ready(() => {
       const $tr = $(this).parents('.term')
       $tr.find('button').attr('disabled', false)
       $tr.find('.submit_button').text(I18n.t('update_term', 'Update Term'))
-      const url = $.replaceTags($('.term_url').attr('href'), 'id', term.id)
+      const url = replaceTags($('.term_url').attr('href'), 'id', term.id)
       $(this).attr('action', url)
       $(this).attr('method', 'PUT')
       for (const idx in term.enrollment_dates_overrides) {
         let start_string
         const override = term.enrollment_dates_overrides[idx].enrollment_dates_override
-        const type_string = $.underscore(override.enrollment_type)
+        const type_string = underscoreString(override.enrollment_type)
         // Student enrollments without an overridden start date get the term's overall start date, while teacher, ta,
         // and designer roles without an overridden start date allow access from the dawn of time. The logic
         // implementing this is in EnrollmentTerm#enrollment_dates_for.

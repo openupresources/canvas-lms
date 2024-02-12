@@ -19,9 +19,13 @@
 #
 
 require_relative "../../db/migrate/20180611205754_clean_up_assignment_overrides"
+require_relative "../../db/migrate/20230830143715_change_require_quiz_or_assignment_constraint"
+require_relative "../../db/migrate/20231206164010_change_assignment_overrides_check_constraint"
 
 describe "CleanUpAssignmentOverrides" do
   it "cleans up invalid overrides and orphaned override students" do
+    ChangeAssignmentOverridesCheckConstraint.new.migrate(:down)
+    ChangeRequireQuizOrAssignmentConstraint.new.migrate(:down)
     CleanUpAssignmentOverrides.down
 
     course_with_student.user
@@ -34,6 +38,8 @@ describe "CleanUpAssignmentOverrides" do
     override2.update_attribute(:workflow_state, "deleted") # leaving aos orphaned
 
     CleanUpAssignmentOverrides.up
+    ChangeRequireQuizOrAssignmentConstraint.new.migrate(:up)
+    ChangeAssignmentOverridesCheckConstraint.new.migrate(:up)
 
     expect(override1.reload).to be_deleted
     expect(aos.reload).to be_deleted
@@ -41,5 +47,7 @@ describe "CleanUpAssignmentOverrides" do
     # ensure the check constraint prevents detaching AssignmentOverrides from an assignment or quiz
     override3 = @assignment.assignment_overrides.create! set_type: "ADHOC"
     expect { override3.update_attribute(:assignment_id, nil) }.to raise_error(ActiveRecord::StatementInvalid)
+  ensure
+    CleanUpAssignmentOverrides.up
   end
 end

@@ -67,7 +67,8 @@ class PseudonymsController < ApplicationController
       scope = @context.pseudonyms.active.where(user_id: @user)
       @pseudonyms = Api.paginate(
         scope,
-        self, api_v1_account_pseudonyms_url
+        self,
+        api_v1_account_pseudonyms_url
       )
     else
       bookmark = BookmarkedCollection::SimpleBookmarker.new(Pseudonym, :id)
@@ -150,7 +151,7 @@ class PseudonymsController < ApplicationController
       # Whether the email was actually found or not, we display the same
       # message. Otherwise this form could be used to fish for valid
       # email addresses.
-      flash[:notice] = t "notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email: email
+      flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
       @ccs.each(&:forgot_password!)
       format.html { redirect_to(canvas_login_url) }
       format.json { render json: { requested: true } }
@@ -175,7 +176,7 @@ class PseudonymsController < ApplicationController
       end
       @password_pseudonyms = @cc.user.pseudonyms.active_only.select { |p| p.account.canvas_authentication? }
       js_env PASSWORD_POLICY: @domain_root_account.password_policy,
-             PASSWORD_POLICIES: @password_pseudonyms.map { |p| [p.id, p.account.password_policy] }.to_h
+             PASSWORD_POLICIES: @password_pseudonyms.to_h { |p| [p.id, p.account.password_policy] }
     end
   end
 
@@ -262,6 +263,26 @@ class PseudonymsController < ApplicationController
   #     * student_other
   #     * teacher
   #
+  # @argument user[existing_user_id] [String]
+  #   A Canvas User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_sis_user_id`, or `existing_integration_id`). This parameter is
+  #   not available in OSS Canvas.
+  #
+  # @argument user[existing_integration_id] [String]
+  #   An Integration ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_user_id`, or `existing_sis_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[existing_sis_user_id] [String]
+  #   An SIS User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_integration_id`, or `existing_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[trusted_account] [String]
+  #   The domain of the account to search for the user. This field is required when
+  #   identifying a user in a trusted account. This parameter is not available in OSS
+  #   Canvas.
+  #
   # @example_request
   #
   #   #create a facebook login for user with ID 123
@@ -270,6 +291,16 @@ class PseudonymsController < ApplicationController
   #        -F 'login[unique_id]=112233445566' \
   #        -F 'login[authentication_provider_id]=facebook' \
   #        -H 'Authorization: Bearer <token>'
+  #
+  # @example_request
+  #
+  #   #create a login for user in another trusted account:
+  #   curl 'https://<canvas>/api/v1/accounts/<account_id>/logins' \
+  #        -F 'user[existing_user_sis_id]=SIS42' \
+  #        -F 'user[trusted_account]=canvas.example.edu' \
+  #        -F 'login[unique_id]=112233445566' \
+  #        -H 'Authorization: Bearer <token>'
+  #
   def create
     return unless get_user
 
@@ -530,7 +561,7 @@ class PseudonymsController < ApplicationController
     if params[:pseudonym].key?(:password) && !@pseudonym.passwordable?
       @pseudonym.errors.add(:password, "password can only be set for Canvas authentication")
       respond_to do |format|
-        format.html { render(params[:action] == "edit" ? :edit : :new) }
+        format.html { render((params[:action] == "edit") ? :edit : :new) }
         format.json { render json: @pseudonym.errors, status: :bad_request }
       end
       return false
@@ -547,7 +578,7 @@ class PseudonymsController < ApplicationController
     if params[:pseudonym].key?(:workflow_state) && !%w[active suspended].include?(params[:pseudonym][:workflow_state])
       @pseudonym.errors.add(:workflow_state, "invalid workflow_state")
       respond_to do |format|
-        format.html { render(params[:action] == "edit" ? :edit : :new) }
+        format.html { render((params[:action] == "edit") ? :edit : :new) }
         format.json { render json: @pseudonym.errors, status: :bad_request }
       end
       return false

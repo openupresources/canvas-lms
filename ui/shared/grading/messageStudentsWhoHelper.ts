@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -16,9 +17,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {filter, find, map, some} from 'lodash'
 import axios from '@canvas/axios'
-import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import type {Student} from '../../api.d'
 
 const I18n = useI18nScope('gradebooksharedMessageStudentsWhoHelper')
 
@@ -45,11 +47,19 @@ export function hasSubmitted(submission) {
   return !!(submission.submittedAt || submission.submitted_at)
 }
 
+export function hasGraded(submission) {
+  if (submission.excused) {
+    return true
+  }
+
+  return MessageStudentsWhoHelper.exists(submission.score)
+}
+
 export function hasSubmission(assignment) {
   const submissionTypes = getSubmissionTypes(assignment)
   if (submissionTypes.length === 0) return false
 
-  return _.some(
+  return some(
     submissionTypes,
     submissionType => submissionType !== 'none' && submissionType !== 'on_paper'
   )
@@ -65,7 +75,16 @@ function getCourseId(assignment) {
 
 const MessageStudentsWhoHelper = {
   settings(assignment, students) {
-    return {
+    const settings: {
+      title: string
+      points_possible: number
+      students: Student[]
+      context_code: string
+      callback: (selected: any, cutoff: any, students: any) => any
+      subjectCallback: (selected: any, cutoff: any) => any
+      options: any[]
+      onClose?: () => void
+    } = {
       options: this.options(assignment),
       title: assignment.name,
       points_possible: assignment.points_possible,
@@ -74,6 +93,8 @@ const MessageStudentsWhoHelper = {
       callback: this.callbackFn.bind(this),
       subjectCallback: this.generateSubjectCallbackFn(assignment),
     }
+
+    return settings
   },
 
   sendMessageStudentsWho(
@@ -81,8 +102,8 @@ const MessageStudentsWhoHelper = {
     subject: string,
     body: string,
     contextCode: string,
-    mediaFile: {id: string; type: string},
-    attachmentIds: string[]
+    mediaFile?: {id: string; type: string},
+    attachmentIds: null | string[] = null
   ) {
     const params: MessageStudentParams = {
       recipients: recipientsIds,
@@ -127,12 +148,12 @@ const MessageStudentsWhoHelper = {
         text: I18n.t("Haven't been graded"),
         subjectFn: assignment =>
           I18n.t('No grade for %{assignment}', {assignment: assignment.name}),
-        criteriaFn: student => !this.exists(student.score),
+        criteriaFn: student => !hasGraded(student),
       },
       {
         text: I18n.t('Scored less than'),
         cutoff: true,
-        subjectFn: (assignment, cutoff) =>
+        subjectFn: (assignment, cutoff: number) =>
           I18n.t('Scored less than %{cutoff} on %{assignment}', {
             assignment: assignment.name,
             cutoff: I18n.n(cutoff),
@@ -143,7 +164,7 @@ const MessageStudentsWhoHelper = {
       {
         text: I18n.t('Scored more than'),
         cutoff: true,
-        subjectFn: (assignment, cutoff) =>
+        subjectFn: (assignment, cutoff: number) =>
           I18n.t('Scored more than %{cutoff} on %{assignment}', {
             assignment: assignment.name,
             cutoff: I18n.n(cutoff),
@@ -169,14 +190,14 @@ const MessageStudentsWhoHelper = {
 
   callbackFn(selected, cutoff, students) {
     const criteriaFn = this.findOptionByText(selected).criteriaFn
-    const studentsMatchingCriteria = _.filter(students, student =>
+    const studentsMatchingCriteria = filter(students, student =>
       criteriaFn(student.user_data, cutoff)
     )
-    return _.map(studentsMatchingCriteria, student => student.user_data.id)
+    return map(studentsMatchingCriteria, student => student.user_data.id)
   },
 
   findOptionByText(text) {
-    return _.find(this.allOptions(), option => option.text === text)
+    return find(this.allOptions(), option => option.text === text)
   },
 
   generateSubjectCallbackFn(assignment) {

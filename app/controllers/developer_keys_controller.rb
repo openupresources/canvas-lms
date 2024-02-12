@@ -113,11 +113,7 @@ class DeveloperKeysController < ApplicationController
               end
             elsif @context.site_admin?
               # Return all siteadmin keys
-              if Account.site_admin.feature_enabled?(:site_admin_keys_only)
-                DeveloperKey.site_admin
-              else
-                DeveloperKey
-              end
+              DeveloperKey.site_admin
             else
               # Only return keys that belong to the current account
               DeveloperKey.where(account_id: @context.id)
@@ -136,6 +132,10 @@ class DeveloperKeysController < ApplicationController
                     .order("developer_keys.id DESC")
 
       return parent_keys + scope
+    end
+
+    if params[:id].present?
+      scope = scope.where(id: params[:id])
     end
 
     scope
@@ -196,6 +196,6 @@ class DeveloperKeysController < ApplicationController
 
   def report_error(exception, code = nil)
     code ||= response_code_for_rescue(exception) if exception
-    InstStatsd::Statsd.increment("canvas.developer_keys_controller.request_error", tags: { action: action_name, code: code })
+    InstStatsd::Statsd.increment("canvas.developer_keys_controller.request_error", tags: { action: action_name, code: })
   end
 end

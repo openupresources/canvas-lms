@@ -123,20 +123,21 @@ module AccountReports
       end
 
       add_extra_text(I18n.t("account_reports.student.enrollment_states",
-                            "Enrollment States: %{states};", states: enrollment_states_string))
+                            "Enrollment States: %{states};",
+                            states: enrollment_states_string))
 
       headers = []
-      headers << I18n.t("#account_reports.report_header_user_id", "user id")
-      headers << I18n.t("#account_reports.report_header_user_sis_id", "user sis id")
-      headers << I18n.t("#account_reports.report_header_user_name", "user name")
-      headers << I18n.t("#account_reports.report_header_section_id", "section id")
-      headers << I18n.t("#account_reports.report_header_section_sis_id", "section sis id")
-      headers << I18n.t("#account_reports.report_header_section_name", "section name")
-      headers << I18n.t("#account_reports.report_header_course_id", "course id")
-      headers << I18n.t("#account_reports.report_header_course_sis_id", "course sis id")
-      headers << I18n.t("#account_reports.report_header_course_name", "course name")
+      headers << "user id"
+      headers << "user sis id"
+      headers << "user name"
+      headers << "section id"
+      headers << "section sis id"
+      headers << "section name"
+      headers << "course id"
+      headers << "course sis id"
+      headers << "course name"
       if include_enrollment_state
-        headers << I18n.t("#account_reports.report_header_enrollment_state", "enrollment state")
+        headers << "enrollment state"
       end
 
       write_report headers do |csv|
@@ -192,7 +193,8 @@ module AccountReports
               other_ens.last_activity_at IS NOT NULL
               AND other_ens.last_activity_at > ?
             )
-        )}, start_at)
+        )},
+                          start_at)
       else
         data = data.where(enrollments: { last_activity_at: nil })
         data = data.where(%{NOT EXISTS (
@@ -210,15 +212,15 @@ module AccountReports
       data = add_course_sub_account_scope(data, "c") unless course
 
       headers = []
-      headers << I18n.t("#account_reports.report_header_user_id", "user id")
-      headers << I18n.t("#account_reports.report_header_user_sis_id", "user sis id")
-      headers << I18n.t("#account_reports.report_header_name", "name")
-      headers << I18n.t("#account_reports.report_header_section_id", "section id")
-      headers << I18n.t("#account_reports.report_header_section_sis_id", "section sis id")
-      headers << I18n.t("#account_reports.report_header_section_name", "section name")
-      headers << I18n.t("#account_reports.report_header_course_id", "course id")
-      headers << I18n.t("#account_reports.report_header_course_sis_id", "course sis id")
-      headers << I18n.t("#account_reports.report_header_course_name", "course name")
+      headers << "user id"
+      headers << "user sis id"
+      headers << "name"
+      headers << "section id"
+      headers << "section sis id"
+      headers << "section name"
+      headers << "course id"
+      headers << "course sis id"
+      headers << "course name"
 
       write_report headers do |csv|
         data.find_each do |u|
@@ -255,11 +257,11 @@ module AccountReports
       students = students.active unless @include_deleted
 
       headers = []
-      headers << I18n.t("#account_reports.report_header_user_id", "user id")
-      headers << I18n.t("#account_reports.report_header_user_sis_id", "user sis id")
-      headers << I18n.t("#account_reports.report_header_user_name", "user name")
-      headers << I18n.t("#account_reports.report_header_last_access_at", "last access at")
-      headers << I18n.t("#account_reports.report_header_last_ip", "last ip")
+      headers << "user id"
+      headers << "user sis id"
+      headers << "user name"
+      headers << "last access at"
+      headers << "last ip"
 
       @account_report.update(total_lines: students.count)
 
@@ -287,9 +289,9 @@ module AccountReports
       report_extra_text
 
       headers = []
-      headers << I18n.t("#account_reports.report_header_user_id", "user id")
-      headers << I18n.t("#account_reports.report_header_user_name", "user name")
-      headers << I18n.t("#account_reports.report_header_last_activity_at", "last activity at")
+      headers << "user id"
+      headers << "user name"
+      headers << "last activity at"
 
       write_report headers do |csv|
         students = User.joins(:enrollments)
@@ -319,13 +321,13 @@ module AccountReports
 
     def user_access_tokens
       headers = []
-      headers << I18n.t("#account_reports.report_header_user_id", "user id")
-      headers << I18n.t("#account_reports.report_header_user_name", "user name")
-      headers << I18n.t("#account_reports.report_header_token_hint", "token hint")
-      headers << I18n.t("#account_reports.report_header_expiration", "expiration")
-      headers << I18n.t("#account_reports.report_header_token_last_used", "last used")
-      headers << I18n.t("#account_reports.report_header_token_dev_key_id", "dev key id")
-      headers << I18n.t("#account_reports.report_header_token_dev_key_name", "dev key name")
+      headers << "user id"
+      headers << "user name"
+      headers << "token hint"
+      headers << "expiration"
+      headers << "last used"
+      headers << "dev key id"
+      headers << "dev key name"
 
       columns = []
       columns << "access_tokens.user_id"
@@ -353,7 +355,7 @@ module AccountReports
           row << (token[:permanent_expires_at] ? default_timezone_format(token[:permanent_expires_at]) : "never")
           row << (token[:last_used_at] ? default_timezone_format(token[:last_used_at]) : "never")
           row << token[:developer_key_id]
-          row << dev_key.name
+          row << dev_key&.name
           csv << row
         end
       end
@@ -361,7 +363,9 @@ module AccountReports
 
     def developer_key(dev_key_id)
       @dev_keys ||= {}
-      @dev_keys[dev_key_id] ||= DeveloperKey.find(dev_key_id)
+      return @dev_keys[dev_key_id] if @dev_keys.include?(dev_key_id)
+
+      @dev_keys[dev_key_id] = DeveloperKey.find_by(id: dev_key_id)
     end
   end
 end

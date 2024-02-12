@@ -16,10 +16,10 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import Backbone from '@canvas/backbone'
-import ModuleCollection from '@canvas/modules/backbone/collections/ModuleCollection.coffee'
+import ModuleCollection from '@canvas/modules/backbone/collections/ModuleCollection'
 import template from '../../jst/ProgressionStudentView.handlebars'
 import collectionTemplate from '../../jst/ProgressionModuleCollection.handlebars'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
 import ProgressionModuleView from './ProgressionModuleView'
 
 export default class ProgressionStudentView extends Backbone.View {
@@ -50,13 +50,10 @@ export default class ProgressionStudentView extends Backbone.View {
     modules.syncHeight = this.syncHeight
     modules.fetch()
 
-    const studentUrl = `${ENV.COURSE_USERS_PATH}/${studentId}`
     this.progressions = new PaginatedCollectionView({
       collection: modules,
       itemView: ProgressionModuleView,
       template: collectionTemplate,
-      student: this.model.attributes,
-      studentUrl,
       autoFetch: true,
     })
 
@@ -65,6 +62,10 @@ export default class ProgressionStudentView extends Backbone.View {
   }
 
   showProgressions() {
+    // this is important, we send the model to the collection so
+    // it can be readed by the react header.
+    this.model.collection.trigger('selectionChanged', this.model)
+
     this.$modules.attr('aria-busy', 'true')
     if (this.model.collection.currentStudentView != null) {
       this.model.collection.currentStudentView.hideProgressions()

@@ -116,8 +116,8 @@ describe Quizzes::QuizSubmissionService do
         end
 
         it "works with multiple sections" do
-          active_course_section   = CourseSection.new(start_at: Time.zone.now - 3.days, end_at: Time.zone.now + 3.days, restrict_enrollments_to_section_dates: true)
-          inactive_course_section = CourseSection.new(start_at: Time.zone.now - 6.days, end_at: Time.zone.now - 3.days, restrict_enrollments_to_section_dates: true)
+          active_course_section   = CourseSection.new(start_at: 3.days.ago, end_at: 3.days.from_now, restrict_enrollments_to_section_dates: true)
+          inactive_course_section = CourseSection.new(start_at: 6.days.ago, end_at: 3.days.ago, restrict_enrollments_to_section_dates: true)
 
           quiz.context = Account.default.courses.new
 
@@ -128,8 +128,7 @@ describe Quizzes::QuizSubmissionService do
           allow(quiz).to receive(:grants_right?).and_return(true)
           allow(quiz).to receive(:grants_right?).with(anything, anything, :manage).and_return(false)
 
-          allow(participant.user).to receive(:sections_for_course).and_return([inactive_course_section, active_course_section])
-          allow(participant.user).to receive(:new_record?).and_return(false)
+          allow(participant.user).to receive_messages(sections_for_course: [inactive_course_section, active_course_section], new_record?: false)
 
           expect do
             subject.create quiz

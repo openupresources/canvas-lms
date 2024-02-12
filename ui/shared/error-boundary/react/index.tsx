@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -18,7 +19,7 @@
 
 import React, {PropsWithChildren, ReactElement} from 'react'
 import * as Sentry from '@sentry/react'
-import {FallbackRender} from '@sentry/react/dist/errorboundary'
+import {FallbackRender} from '@sentry/react/types/errorboundary.d'
 
 export type ErrorBoundaryProps = PropsWithChildren<{
   errorComponent: FallbackRender | ReactElement

@@ -19,12 +19,12 @@
 // this is just https://github.com/usepropeller/react.backbone but without the UMD wrapper.
 
 import Backbone from '@canvas/backbone'
-import _ from 'underscore'
+import {debounce, identity} from 'lodash'
 
 const collectionBehavior = {
   changeOptions: 'add remove reset sort',
   updateScheduler(func) {
-    return _.debounce(func, 0)
+    return debounce(func, 0)
   },
 }
 
@@ -33,7 +33,7 @@ const modelBehavior = {
 
   // note: if we debounce models too we can no longer use model attributes
   // as properties to react controlled components due to https://github.com/facebook/react/issues/955
-  updateScheduler: _.identity,
+  updateScheduler: identity,
 }
 
 function subscribe(component, modelOrCollection, customChangeOptions) {
@@ -73,7 +73,7 @@ export default function BackboneMixin(optionsOrPropName, customChangeOptions) {
       subscribe(this, modelOrCollection(this.props), customChangeOptions)
     },
 
-    componentWillReceiveProps(nextProps) {
+    UNSAFE_componentWillReceiveProps(nextProps) {
       if (modelOrCollection(this.props) === modelOrCollection(nextProps)) return
       unsubscribe(this, modelOrCollection(this.props))
       subscribe(this, modelOrCollection(nextProps), customChangeOptions)

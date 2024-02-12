@@ -81,8 +81,7 @@ describe "Files API", type: :request do
 
     it "includes include capture param in inst_fs token" do
       secret = "secret"
-      allow(InstFS).to receive(:enabled?).and_return true
-      allow(InstFS).to receive(:jwt_secrets).and_return([secret])
+      allow(InstFS).to receive_messages(enabled?: true, jwt_secrets: [secret])
       json = call_course_create_file
       query = Rack::Utils.parse_nested_query(URI(json["upload_url"]).query)
       payload = Canvas::Security.decode_jwt(query["token"], [secret])
@@ -92,7 +91,8 @@ describe "Files API", type: :request do
     context "as teacher having manage_files_add permission" do
       it "creates a course file" do
         api_call(
-          :post, "/api/v1/courses/#{@course.id}/files",
+          :post,
+          "/api/v1/courses/#{@course.id}/files",
           {
             controller: "courses",
             action: "create_file",
@@ -123,7 +123,8 @@ describe "Files API", type: :request do
 
       it "disallows creating a course file" do
         api_call(
-          :post, "/api/v1/courses/#{@course.id}/files",
+          :post,
+          "/api/v1/courses/#{@course.id}/files",
           {
             controller: "courses",
             action: "create_file",
@@ -148,7 +149,8 @@ describe "Files API", type: :request do
 
       it "returns unauthorized error" do
         api_call(
-          :post, "/api/v1/courses/#{@course.id}/files",
+          :post,
+          "/api/v1/courses/#{@course.id}/files",
           {
             controller: "courses",
             action: "create_file",
@@ -237,7 +239,7 @@ describe "Files API", type: :request do
                            "hidden" => false,
                            "lock_at" => nil,
                            "locked_for_user" => false,
-                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0, verifier: @attachment.uuid),
+                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0),
                            "hidden_for_user" => false,
                            "created_at" => @attachment.created_at.as_json,
                            "updated_at" => @attachment.updated_at.as_json,
@@ -278,7 +280,7 @@ describe "Files API", type: :request do
                            "hidden" => false,
                            "lock_at" => nil,
                            "locked_for_user" => false,
-                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0, verifier: @attachment.uuid),
+                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0),
                            "hidden_for_user" => false,
                            "created_at" => @attachment.created_at.as_json,
                            "updated_at" => @attachment.updated_at.as_json,
@@ -326,7 +328,8 @@ describe "Files API", type: :request do
                                                                              content_length: 1234,
                                                                            })
 
-      raw_api_call(:post, "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
+      raw_api_call(:post,
+                   "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
                    { controller: "files", action: "api_create_success", format: "json", id: @attachment.to_param, uuid: @attachment.uuid })
       expect(response.headers[content_type_key]).to eq "text/html; charset=utf-8"
       expect(response.body).not_to include "verifier="
@@ -334,7 +337,8 @@ describe "Files API", type: :request do
 
     it "fails for an incorrect uuid" do
       upload_data
-      raw_api_call(:post, "/api/v1/files/#{@attachment.id}/create_success?uuid=abcde",
+      raw_api_call(:post,
+                   "/api/v1/files/#{@attachment.id}/create_success?uuid=abcde",
                    { controller: "files", action: "api_create_success", format: "json", id: @attachment.to_param, uuid: "abcde" })
       assert_status(400)
     end
@@ -342,7 +346,8 @@ describe "Files API", type: :request do
     it "fails if the attachment is already available" do
       upload_data
       @attachment.update_attribute(:file_state, "available")
-      raw_api_call(:post, "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
+      raw_api_call(:post,
+                   "/api/v1/files/#{@attachment.id}/create_success?uuid=#{@attachment.uuid}",
                    { controller: "files", action: "api_create_success", format: "json", id: @attachment.to_param, uuid: @attachment.uuid })
       assert_status(400)
     end
@@ -403,7 +408,7 @@ describe "Files API", type: :request do
         size: 2.megabytes,
         name: "test.txt",
         content_type: "text/plain",
-        instfs_uuid: instfs_uuid,
+        instfs_uuid:,
         quota_exempt: true,
         folder_id: folder.id,
         on_duplicate: "overwrite",
@@ -412,20 +417,21 @@ describe "Files API", type: :request do
     end
 
     before do
-      allow(InstFS).to receive(:enabled?).and_return true
-      allow(InstFS).to receive(:jwt_secrets).and_return([secret])
+      allow(InstFS).to receive_messages(enabled?: true, jwt_secrets: [secret])
     end
 
     it "is not available without the InstFS feature" do
       allow(InstFS).to receive(:enabled?).and_return false
-      raw_api_call(:post, "/api/v1/files/capture?#{base_params.to_query}",
+      raw_api_call(:post,
+                   "/api/v1/files/capture?#{base_params.to_query}",
                    base_params.merge(controller: "files", action: "api_capture", format: "json"))
       assert_status(404)
     end
 
     it "requires a service JWT to authorize" do
       params = base_params.merge(token: nil)
-      raw_api_call(:post, "/api/v1/files/capture?#{params.to_query}",
+      raw_api_call(:post,
+                   "/api/v1/files/capture?#{params.to_query}",
                    params.merge(controller: "files", action: "api_capture", format: "json"))
       assert_status(403)
     end
@@ -434,7 +440,8 @@ describe "Files API", type: :request do
       @course.storage_quota = base_params[:size] / 2
       @course.save!
       params = base_params.merge(quota_exempt: false)
-      json = api_call(:post, "/api/v1/files/capture?#{params.to_query}",
+      json = api_call(:post,
+                      "/api/v1/files/capture?#{params.to_query}",
                       params.merge(controller: "files", action: "api_capture", format: "json"),
                       expected_status: 400)
       expect(json["message"]).to eq "file size exceeds quota limits"
@@ -444,7 +451,8 @@ describe "Files API", type: :request do
       @course.storage_quota = base_params[:size] / 2
       @course.save!
       params = base_params.merge(quota_exempt: true)
-      raw_api_call(:post, "/api/v1/files/capture?#{params.to_query}",
+      raw_api_call(:post,
+                   "/api/v1/files/capture?#{params.to_query}",
                    params.merge(controller: "files", action: "api_capture", format: "json"))
       assert_status(201)
     end
@@ -452,18 +460,20 @@ describe "Files API", type: :request do
     it "creates file locked when usage rights required" do
       @course.usage_rights_required = true
       @course.save!
-      api_call(:post, "/api/v1/files/capture?#{base_params.to_query}",
+      api_call(:post,
+               "/api/v1/files/capture?#{base_params.to_query}",
                base_params.merge(controller: "files", action: "api_capture", format: "json"))
-      attachment = Attachment.where(instfs_uuid: instfs_uuid).first
+      attachment = Attachment.where(instfs_uuid:).first
       expect(attachment.locked).to be true
     end
 
     it "creates file unlocked when usage rights not required" do
       @course.usage_rights_required = false
       @course.save!
-      api_call(:post, "/api/v1/files/capture?#{base_params.to_query}",
+      api_call(:post,
+               "/api/v1/files/capture?#{base_params.to_query}",
                base_params.merge(controller: "files", action: "api_capture", format: "json"))
-      attachment = Attachment.where(instfs_uuid: instfs_uuid).first
+      attachment = Attachment.where(instfs_uuid:).first
       expect(attachment.locked).to be false
     end
 
@@ -471,18 +481,54 @@ describe "Files API", type: :request do
       params = base_params.merge(on_duplicate: "overwrite")
       existing = Attachment.create!(
         context: @course,
-        folder: folder,
+        folder:,
         uploaded_data: StringIO.new("existing"),
         filename: params[:name],
         display_name: params[:name]
       )
-      api_call(:post, "/api/v1/files/capture?#{base_params.to_query}",
+      api_call(:post,
+               "/api/v1/files/capture?#{base_params.to_query}",
                base_params.merge(controller: "files", action: "api_capture", format: "json"))
       existing.reload
-      attachment = Attachment.where(instfs_uuid: instfs_uuid).first
+      attachment = Attachment.where(instfs_uuid:).first
+      expect(attachment).not_to eq(existing)
       expect(attachment.display_name).to eq params[:name]
       expect(existing).to be_deleted
       expect(existing.replacement_attachment).to eq attachment
+    end
+
+    describe "re-uploading a file" do
+      before :once do
+        @existing = Attachment.create!(
+          context: @course,
+          folder:,
+          uploaded_data: StringIO.new("a file"),
+          filename: base_params[:name],
+          display_name: base_params[:name],
+          instfs_uuid: "old-instfs-uuid"
+        )
+        @capture_params = base_params.merge(controller: "files",
+                                            action: "api_capture",
+                                            format: "json",
+                                            size: @existing.size,
+                                            sha512: @existing.md5,
+                                            instfs_uuid: "new-instfs-uuid",
+                                            on_duplicate: "overwrite")
+      end
+
+      it "reuses the Attachment if a file is re-uploaded to the same folder" do
+        expect(InstFS).to receive(:delete_file).with("old-instfs-uuid")
+        json = api_call(:post, "/api/v1/files/capture?#{@capture_params.to_query}", @capture_params)
+        expect(json["id"]).to eq @existing.id
+        expect(@existing.reload.instfs_uuid).to eq "new-instfs-uuid"
+      end
+
+      it "does not reuse a deleted Attachment" do
+        @existing.destroy
+        expect(InstFS).not_to receive(:delete_file)
+        json = api_call(:post, "/api/v1/files/capture?#{@capture_params.to_query}", @capture_params)
+        expect(json["id"]).not_to eq @existing.id
+      end
     end
 
     it "redirect has preview_url include if requested" do
@@ -529,10 +575,10 @@ describe "Files API", type: :request do
     end
 
     context "with 'category' not present in params" do
-      subject { Attachment.find_by(instfs_uuid: instfs_uuid) }
+      subject { Attachment.find_by(instfs_uuid:) }
 
       let(:category) { "" }
-      let(:params) { base_params.merge(category: category, controller: "files", action: "api_capture", format: "json") }
+      let(:params) { base_params.merge(category:, controller: "files", action: "api_capture", format: "json") }
 
       it "uses the default category" do
         raw_api_call(
@@ -546,10 +592,10 @@ describe "Files API", type: :request do
     end
 
     context "with 'category' present in params" do
-      subject { Attachment.find_by(instfs_uuid: instfs_uuid) }
+      subject { Attachment.find_by(instfs_uuid:) }
 
       let(:category) { Attachment::ICON_MAKER_ICONS }
-      let(:params) { base_params.merge(category: category, controller: "files", action: "api_capture", format: "json") }
+      let(:params) { base_params.merge(category:, controller: "files", action: "api_capture", format: "json") }
 
       it "sets the attachment category" do
         raw_api_call(
@@ -579,9 +625,9 @@ describe "Files API", type: :request do
 
     it "lists files in alphabetical order" do
       json = api_call(:get, @files_path, @files_path_options, {})
-      res = json.map { |f| f["display_name"] }
+      res = json.pluck("display_name")
       expect(res).to eq %w[atest3.txt mtest2.txt ztest.txt]
-      json.map { |f| f["url"] }.each { |url| expect(url).to include "verifier=" }
+      json.pluck("url").each { |url| expect(url).to include "verifier=" }
     end
 
     it "omits verifiers using session auth" do
@@ -589,7 +635,7 @@ describe "Files API", type: :request do
       get @files_path
       expect(response).to be_successful
       json = json_parse
-      json.map { |f| f["url"] }.each { |url| expect(url).not_to include "verifier=" }
+      json.pluck("url").each { |url| expect(url).not_to include "verifier=" }
     end
 
     it "does not omit verifiers using session auth if params[:use_verifiers] is given" do
@@ -597,12 +643,12 @@ describe "Files API", type: :request do
       get @files_path + "?use_verifiers=1"
       expect(response).to be_successful
       json = json_parse
-      json.map { |f| f["url"] }.each { |url| expect(url).to include "verifier=" }
+      json.pluck("url").each { |url| expect(url).to include "verifier=" }
     end
 
     it "lists files in saved order if flag set" do
       json = api_call(:get, @files_path + "?sort_by=position", @files_path_options.merge(sort_by: "position"), {})
-      res = json.map { |f| f["display_name"] }
+      res = json.pluck("display_name")
       expect(res).to eq %w[ztest.txt atest3.txt mtest2.txt]
     end
 
@@ -662,7 +708,7 @@ describe "Files API", type: :request do
 
     it "only returns names if requested" do
       json = api_call(:get, @files_path, @files_path_options, { only: ["names"] })
-      res = json.map { |f| f["display_name"] }
+      res = json.pluck("display_name")
       expect(res).to eq %w[atest3.txt mtest2.txt ztest.txt]
       expect(json.any? { |f| f["url"] }).to be_falsey
     end
@@ -675,14 +721,15 @@ describe "Files API", type: :request do
 
       it "matches one content-type" do
         json = api_call(:get, @files_path + "?content_types=image", @files_path_options.merge(content_types: "image"), {})
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[thing.gif thing.png]
       end
 
       it "matches multiple content-types" do
-        json = api_call(:get, @files_path + "?content_types[]=text&content_types[]=image/gif",
+        json = api_call(:get,
+                        @files_path + "?content_types[]=text&content_types[]=image/gif",
                         @files_path_options.merge(content_types: ["text", "image/gif"]))
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[atest3.txt mtest2.txt thing.gif ztest.txt]
       end
     end
@@ -693,13 +740,13 @@ describe "Files API", type: :request do
       2.times { |i| Attachment.create!(filename: "second#{i}.txt", display_name: "second#{i}.txt", uploaded_data: StringIO.new("file"), folder: @f1, context: @course) }
 
       json = api_call(:get, @files_path + "?search_term=fir", @files_path_options.merge(search_term: "fir"), {})
-      expect(json.map { |h| h["id"] }.sort).to eq atts.map(&:id).sort
+      expect(json.pluck("id").sort).to eq atts.map(&:id).sort
     end
 
     it "includes user if requested" do
       @a1.update_attribute(:user, @user)
       json = api_call(:get, @files_path + "?include[]=user", @files_path_options.merge(include: ["user"]))
-      expect(json.map { |f| f["user"] }).to eql [
+      expect(json.pluck("user")).to eql [
         {},
         {},
         {
@@ -717,7 +764,7 @@ describe "Files API", type: :request do
       @a1.usage_rights = @course.usage_rights.create! legal_copyright: "(C) 2014 Initech", use_justification: "used_by_permission"
       @a1.save!
       json = api_call(:get, @files_path + "?include[]=usage_rights", @files_path_options.merge(include: ["usage_rights"]))
-      expect(json.map { |f| f["usage_rights"] }).to eql [
+      expect(json.pluck("usage_rights")).to eql [
         nil,
         nil,
         {
@@ -750,7 +797,7 @@ describe "Files API", type: :request do
           uploaded_data: StringIO.new("file"),
           folder: root_folder,
           context: user,
-          user: user
+          user:
         )
       end
       let(:request_params) do
@@ -766,7 +813,7 @@ describe "Files API", type: :request do
       before { file }
 
       it "includes user even for user files" do
-        expect(subject.map { |f| f["user"] }).to eql [
+        expect(subject.pluck("user")).to eql [
           {
             "id" => user.id,
             "anonymous_id" => user.id.to_s(36),
@@ -820,7 +867,7 @@ describe "Files API", type: :request do
     context "with a 'category' query parameter" do
       subject do
         Attachment.find(
-          api_call(:get, @files_path, @files_path_options, {}).map { |a| a["id"] }
+          api_call(:get, @files_path, @files_path_options, {}).pluck("id")
         )
       end
 
@@ -829,7 +876,7 @@ describe "Files API", type: :request do
       let(:uncategorized) { @a2 }
 
       before do
-        icon_maker.update!(category: category)
+        icon_maker.update!(category:)
 
         @files_path_options[:category] = category
       end
@@ -840,20 +887,20 @@ describe "Files API", type: :request do
 
     it "returns file category with the response" do
       json = api_call(:get, @files_path, @files_path_options, {})
-      res = json.map { |f| f["category"] }
+      res = json.pluck("category")
       expect(res).to eq %w[uncategorized uncategorized uncategorized]
     end
 
     describe "sort" do
       it "lists files in alphabetical order" do
         json = api_call(:get, @files_path, @files_path_options, {})
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[atest3.txt mtest2.txt ztest.txt]
       end
 
       it "lists files in saved order if flag set" do
         json = api_call(:get, @files_path + "?sort_by=position", @files_path_options.merge(sort_by: "position"), {})
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[ztest.txt atest3.txt mtest2.txt]
       end
 
@@ -867,7 +914,7 @@ describe "Files API", type: :request do
         Timecop.freeze(2.hours.ago) { @a2.touch }
         Timecop.freeze(1.hour.ago) { @a1.touch }
         json = api_call(:get, @files_path + "?sort=updated_at", @files_path_options.merge(sort: "updated_at"))
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[mtest2.txt ztest.txt atest3.txt]
       end
 
@@ -904,14 +951,14 @@ describe "Files API", type: :request do
     it "does not list locked file if not authed" do
       course_with_student_logged_in(course: @course)
       json = api_call(:get, @files_path, @files_path_options, {})
-      expect(json.any? { |f| f[:id] == @a2.id }).to eq false
+      expect(json.any? { |f| f[:id] == @a2.id }).to be false
     end
 
     it "does not list hidden files if not authed" do
       course_with_student_logged_in(course: @course)
       json = api_call(:get, @files_path, @files_path_options, {})
 
-      expect(json.any? { |f| f[:id] == @a3.id }).to eq false
+      expect(json.any? { |f| f[:id] == @a3.id }).to be false
     end
 
     it "does not list locked folder if not authed" do
@@ -950,14 +997,15 @@ describe "Files API", type: :request do
 
       it "matches one content-type" do
         json = api_call(:get, @files_path + "?content_types=image", @files_path_options.merge(content_types: "image"), {})
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[thing.gif thing.png]
       end
 
       it "matches multiple content-types" do
-        json = api_call(:get, @files_path + "?content_types[]=text&content_types[]=image/gif",
+        json = api_call(:get,
+                        @files_path + "?content_types[]=text&content_types[]=image/gif",
                         @files_path_options.merge(content_types: ["text", "image/gif"]))
-        res = json.map { |f| f["display_name"] }
+        res = json.pluck("display_name")
         expect(res).to eq %w[atest3.txt mtest2.txt thing.gif ztest.txt]
       end
     end
@@ -968,7 +1016,7 @@ describe "Files API", type: :request do
       2.times { |i| Attachment.create!(filename: "second#{i}.txt", display_name: "second#{i}.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course) }
 
       json = api_call(:get, @files_path + "?search_term=fir", @files_path_options.merge(search_term: "fir"), {})
-      expect(json.map { |h| h["id"] }.sort).to eq atts.map(&:id).sort
+      expect(json.pluck("id").sort).to eq atts.map(&:id).sort
     end
 
     describe "hidden folders" do
@@ -983,7 +1031,7 @@ describe "Files API", type: :request do
       context "as teacher" do
         it "includes files in subfolders of hidden folders" do
           json = api_call(:get, @files_path, @files_path_options)
-          expect(json.map { |entry| entry["id"] }).to include @teh_file.id
+          expect(json.pluck("id")).to include @teh_file.id
         end
       end
 
@@ -994,7 +1042,7 @@ describe "Files API", type: :request do
 
         it "excludes files in subfolders of hidden folders" do
           json = api_call(:get, @files_path, @files_path_options)
-          expect(json.map { |entry| entry["id"] }).not_to include @teh_file.id
+          expect(json.pluck("id")).not_to include @teh_file.id
         end
       end
     end
@@ -1006,7 +1054,7 @@ describe "Files API", type: :request do
       attachment_model display_name: "foo", content_type: "text/plain", context: @group, folder: Folder.root_folders(@group).first
       account_admin_user
       json = api_call(:get, "/api/v1/groups/#{@group.id}/files", { controller: "files", action: "api_index", format: "json", group_id: @group.to_param })
-      expect(json.map { |r| r["id"] }).to eql [@attachment.id]
+      expect(json.pluck("id")).to eql [@attachment.id]
       expect(response.headers["Link"]).to include "/api/v1/groups/#{@group.id}/files"
     end
 
@@ -1014,7 +1062,7 @@ describe "Files API", type: :request do
       user_model
       attachment_model display_name: "foo", content_type: "text/plain", context: @user, folder: Folder.root_folders(@user).first
       json = api_call(:get, "/api/v1/users/#{@user.id}/files", { controller: "files", action: "api_index", format: "json", user_id: @user.to_param })
-      expect(json.map { |r| r["id"] }).to eql [@attachment.id]
+      expect(json.pluck("id")).to eql [@attachment.id]
       expect(response.headers["Link"]).to include "/api/v1/users/#{@user.id}/files"
     end
   end
@@ -1106,6 +1154,22 @@ describe "Files API", type: :request do
       expect(json["url"]).to eq file_download_url(@att, download: "1", download_frd: "1", verifier: @att.uuid)
     end
 
+    it "omits verifiers in the enhanced preview when using session auth" do
+      user_session(@user)
+      get @file_path + "?include[]=enhanced_preview_url"
+      expect(response).to be_successful
+      json = json_parse
+      expect(json["preview_url"]).to eq context_url(@att.context, :context_file_file_preview_url, @att, annotate: 0)
+    end
+
+    it "passes along given verifiers when creating the enhanced_preview_url" do
+      user_session(@user)
+      get @file_path + "?include[]=enhanced_preview_url&verifier=#{@att.uuid}"
+      expect(response).to be_successful
+      json = json_parse
+      expect(json["preview_url"]).to eq context_url(@att.context, :context_file_file_preview_url, @att, annotate: 0, verifier: @att.uuid)
+    end
+
     it "returns lock information" do
       one_month_ago, one_month_from_now = 1.month.ago, 1.month.from_now
       att2 = Attachment.create!(filename: "test.txt", display_name: "test.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course, locked: true)
@@ -1122,6 +1186,30 @@ describe "Files API", type: :request do
       expect(json["lock_at"]).to eq one_month_from_now.as_json
     end
 
+    it "returns blueprint course restriction information when requested" do
+      copy_from = course_factory(active_all: true)
+      template = MasterCourses::MasterTemplate.set_as_master_course(copy_from)
+      original_file = copy_from.attachments.create!(
+        display_name: "cat_hugs.mp4", filename: "cat_hugs.mp4", content_type: "video/mp4", media_entry_id: "m-123456"
+      )
+      tag = template.create_content_tag_for!(original_file)
+      tag.update(restrictions: { content: true })
+
+      course_with_teacher(active_all: true)
+      copy_to = @course
+      template.add_child_course!(copy_to)
+
+      # just create a copy directly instead of doing a real migration
+      file_copy = copy_to.attachments.new(
+        display_name: "cat_hugs.mp4", filename: "cat_hugs.mp4", content_type: "video/mp4", media_entry_id: "m-123456"
+      )
+      file_copy.migration_id = tag.migration_id
+      file_copy.save!
+
+      json = api_call(:get, "/api/v1/files/#{file_copy.id}", { controller: "files", action: "api_show", format: "json", id: file_copy.id.to_param }, { include: ["blueprint_course_status"] })
+      expect(json["restricted_by_master_course"]).to be true
+    end
+
     it "is not locked/hidden for a teacher" do
       att2 = Attachment.create!(filename: "test.txt", display_name: "test.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course, locked: true)
       att2.hidden = true
@@ -1131,7 +1219,7 @@ describe "Files API", type: :request do
       expect(json["hidden"]).to be_truthy
       expect(json["hidden_for_user"]).to be_falsey
       expect(json["locked_for_user"]).to be_falsey
-      expect(json["preview_url"].include?("verifier")).to be_truthy
+      expect(json["preview_url"].include?("verifier")).to be_falsey
     end
 
     def should_be_locked(json)
@@ -1150,7 +1238,7 @@ describe "Files API", type: :request do
       expect(json.keys & prohibited_fields).to be_empty
     end
 
-    context "when the attachment is locked and replacement params are inlucded" do
+    context "when the attachment is locked and replacement params are included" do
       subject do
         api_call(
           :get,
@@ -1317,8 +1405,12 @@ describe "Files API", type: :request do
     end
 
     it "finds a file by migration_id" do
-      json = api_call(:get, "/api/v1/courses/#{@course.to_param}/files/file_ref/#{@mig_id}",
-                      controller: "files", action: "file_ref", format: "json", course_id: @course.to_param,
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.to_param}/files/file_ref/#{@mig_id}",
+                      controller: "files",
+                      action: "file_ref",
+                      format: "json",
+                      course_id: @course.to_param,
                       migration_id: @mig_id)
       expect(json["id"]).to eq @attachment.id
       expect(json["display_name"]).to eq @attachment.display_name
@@ -1326,15 +1418,29 @@ describe "Files API", type: :request do
 
     it "requires permissions" do
       user_factory
-      api_call(:get, "/api/v1/courses/#{@course.to_param}/files/file_ref/#{@mig_id}",
-               { controller: "files", action: "file_ref", format: "json", course_id: @course.to_param,
-                 migration_id: @mig_id }, {}, {}, { expected_status: 401 })
+      api_call(:get,
+               "/api/v1/courses/#{@course.to_param}/files/file_ref/#{@mig_id}",
+               { controller: "files",
+                 action: "file_ref",
+                 format: "json",
+                 course_id: @course.to_param,
+                 migration_id: @mig_id },
+               {},
+               {},
+               { expected_status: 401 })
     end
 
     it "404s if given a bad migration id" do
-      api_call(:get, "/api/v1/courses/#{@course.to_param}/files/file_ref/lolcats",
-               { controller: "files", action: "file_ref", format: "json", course_id: @course.to_param,
-                 migration_id: "lolcats" }, {}, {}, { expected_status: 404 })
+      api_call(:get,
+               "/api/v1/courses/#{@course.to_param}/files/file_ref/lolcats",
+               { controller: "files",
+                 action: "file_ref",
+                 format: "json",
+                 course_id: @course.to_param,
+                 migration_id: "lolcats" },
+               {},
+               {},
+               { expected_status: 404 })
     end
   end
 
@@ -1415,8 +1521,12 @@ describe "Files API", type: :request do
       it "disallows deleting a file" do
         course_with_teacher(active_all: true, user: user_with_pseudonym, course: @course)
         @file_path_options[:replace] = false
-        api_call(:delete, @file_path, @file_path_options,
-                 {}, {}, expected_status: 401)
+        api_call(:delete,
+                 @file_path,
+                 @file_path_options,
+                 {},
+                 {},
+                 expected_status: 401)
       end
     end
   end
@@ -1425,8 +1535,13 @@ describe "Files API", type: :request do
     context "instfs file" do
       before do
         @root = Folder.root_folders(@course).first
-        @icon = Attachment.create!(filename: "icon.svg", display_name: "icon.svg", uploaded_data: File.open("spec/fixtures/icon.svg"),
-                                   folder: @root, context: @course, category: Attachment::ICON_MAKER_ICONS, instfs_uuid: "yes")
+        @icon = Attachment.create!(filename: "icon.svg",
+                                   display_name: "icon.svg",
+                                   uploaded_data: File.open("spec/fixtures/icon.svg"),
+                                   folder: @root,
+                                   context: @course,
+                                   category: Attachment::ICON_MAKER_ICONS,
+                                   instfs_uuid: "yes")
         @file_path = "/api/v1/files/#{@icon.id}/icon_metadata"
         @file_path_options = { controller: "files", action: "icon_metadata", format: "json", id: @icon.id.to_param }
         allow(InstFS).to receive(:authenticated_url).and_return(@icon.authenticated_s3_url)
@@ -1465,8 +1580,8 @@ describe "Files API", type: :request do
             def request(*)
               super do |response|
                 response.instance_eval do
-                  def read_body(*, &block)
-                    @body.each_char(&block)
+                  def read_body(*, &)
+                    @body.each_char(&)
                   end
                 end
                 yield response if block_given?
@@ -1475,13 +1590,7 @@ describe "Files API", type: :request do
             end
           end
 
-          @original_net_http = Net.send(:remove_const, :HTTP)
-          Net.send(:const_set, :HTTP, mocked_http)
-        end
-
-        after do
-          Net.send(:remove_const, :HTTP)
-          Net.send(:const_set, :HTTP, @original_net_http)
+          stub_const("Net::HTTP", mocked_http)
         end
 
         it "only downloads data until the end of the metadata tag" do
@@ -1500,8 +1609,12 @@ describe "Files API", type: :request do
     context "local file" do
       before do
         @root = Folder.root_folders(@course).first
-        @icon = Attachment.create!(filename: "icon.svg", display_name: "icon.svg", uploaded_data: File.open("spec/fixtures/icon.svg"),
-                                   folder: @root, context: @course, category: Attachment::ICON_MAKER_ICONS)
+        @icon = Attachment.create!(filename: "icon.svg",
+                                   display_name: "icon.svg",
+                                   uploaded_data: File.open("spec/fixtures/icon.svg"),
+                                   folder: @root,
+                                   context: @course,
+                                   category: Attachment::ICON_MAKER_ICONS)
         @file_path = "/api/v1/files/#{@icon.id}/icon_metadata"
         @file_path_options = { controller: "files", action: "icon_metadata", format: "json", id: @icon.id.to_param }
         allow(CanvasHttp).to receive(:validate_url).and_return([@icon.authenticated_s3_url, URI.parse(@icon.authenticated_s3_url)])
@@ -1657,17 +1770,23 @@ describe "Files API", type: :request do
       end
 
       it "does not move a file into a submissions folder" do
-        api_call_as_user(@student, :put, "/api/v1/files/#{@file.id}",
+        api_call_as_user(@student,
+                         :put,
+                         "/api/v1/files/#{@file.id}",
                          { controller: "files", action: "api_update", format: "json", id: @file.to_param },
                          { parent_folder_id: @sub_folder.to_param },
-                         {}, { expected_status: 401 })
+                         {},
+                         { expected_status: 401 })
       end
 
       it "does not move a file out of a submissions folder" do
-        api_call_as_user(@student, :put, "/api/v1/files/#{@sub_file.id}",
+        api_call_as_user(@student,
+                         :put,
+                         "/api/v1/files/#{@sub_file.id}",
                          { controller: "files", action: "api_update", format: "json", id: @sub_file.to_param },
                          { parent_folder_id: @root_folder.to_param },
-                         {}, { expected_status: 401 })
+                         {},
+                         { expected_status: 401 })
       end
     end
 
@@ -1686,13 +1805,9 @@ describe "Files API", type: :request do
     end
 
     it "truncates names over 255 characters" do
-      overly_long_name = "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi" \
-                         "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi" \
-                         "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi"
+      overly_long_name = "hi" * 129
 
-      truncated_overly_long_name = "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi" \
-                                   "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi" \
-                                   "hihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihihi..."
+      truncated_overly_long_name = ("hi" * 126) + "..."
 
       api_call(:put, @file_path, @file_path_options, name: overly_long_name)
       updated_name = @att.reload.display_name
@@ -1763,32 +1878,74 @@ describe "Files API", type: :request do
     end
 
     it "returns total and used quota" do
-      json = api_call_as_user(t_teacher, :get, "/api/v1/courses/#{t_course.id}/files/quota", controller: "files",
-                                                                                             action: "api_quota", format: "json", course_id: t_course.to_param)
+      json = api_call_as_user(t_teacher,
+                              :get,
+                              "/api/v1/courses/#{t_course.id}/files/quota",
+                              controller: "files",
+                              action: "api_quota",
+                              format: "json",
+                              course_id: t_course.to_param)
       expect(json).to eql({ "quota" => 111.megabytes, "quota_used" => 33.megabytes })
     end
 
     it "requires manage_files permissions" do
       student_in_course course: t_course, active_all: true
-      api_call_as_user(@student, :get, "/api/v1/courses/#{t_course.id}/files/quota",
+      api_call_as_user(@student,
+                       :get,
+                       "/api/v1/courses/#{t_course.id}/files/quota",
                        { controller: "files", action: "api_quota", format: "json", course_id: t_course.to_param },
-                       {}, {}, { expected_status: 401 })
+                       {},
+                       {},
+                       { expected_status: 401 })
     end
 
     it "operates on groups" do
       group = Account.default.groups.create!
       attachment_model context: group, size: 13.megabytes
       account_admin_user
-      json = api_call(:get, "/api/v1/groups/#{group.id}/files/quota", controller: "files", action: "api_quota",
-                                                                      format: "json", group_id: group.to_param)
+      json = api_call(:get,
+                      "/api/v1/groups/#{group.id}/files/quota",
+                      controller: "files",
+                      action: "api_quota",
+                      format: "json",
+                      group_id: group.to_param)
       expect(json).to eql({ "quota" => group.quota, "quota_used" => 13.megabytes })
     end
 
-    it "operates on users" do
+    it "operates on users if user == self" do
       course_with_student active_all: true
-      json = api_call(:get, "/api/v1/users/self/files/quota", controller: "files", action: "api_quota",
-                                                              format: "json", user_id: "self")
+      json = api_call(:get,
+                      "/api/v1/users/self/files/quota",
+                      controller: "files",
+                      action: "api_quota",
+                      format: "json",
+                      user_id: "self")
       expect(json).to eql({ "quota" => @student.quota, "quota_used" => 0 })
+    end
+
+    it "operates on users for account admins" do
+      course_with_student active_all: true
+      account_admin_user
+      json = api_call_as_user(@admin,
+                              :get,
+                              "/api/v1/users/#{@student.id}/files/quota",
+                              controller: "files",
+                              action: "api_quota",
+                              format: "json",
+                              user_id: @student.id)
+      expect(json).to eql({ "quota" => @student.quota, "quota_used" => 0 })
+    end
+
+    it "does not operate on users for non admin roles" do
+      course_with_student active_all: true
+      api_call_as_user(@teacher,
+                       :get,
+                       "/api/v1/users/#{@student.id}/files/quota",
+                       controller: "files",
+                       action: "api_quota",
+                       format: "json",
+                       user_id: @student.id)
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 end

@@ -39,11 +39,11 @@ class UnreadCommentCountLoader < GraphQL::Batch::Loader
       Submission
       .where(id: submission_ids)
       .joins(:submission_comments)
-      .where(
-        "NOT EXISTS (?)",
+      .where.not(
         ViewedSubmissionComment
           .where("viewed_submission_comments.submission_comment_id=submission_comments.id")
           .where(user_id: @current_user)
+          .arel.exists
       )
       .group(:submission_id, "submission_comments.attempt")
       .count
@@ -114,6 +114,14 @@ module Interfaces::SubmissionInterface
     load_association(:assignment)
   end
 
+  field :graded_anonymously, Boolean, null: true
+
+  field :hide_grade_from_student,
+        Boolean,
+        "hide unpublished grades",
+        method: :hide_grade_from_student?,
+        null: true
+
   field :feedback_for_current_attempt, Boolean, null: false
   def feedback_for_current_attempt
     submission.feedback_for_current_attempt?
@@ -128,6 +136,13 @@ module Interfaces::SubmissionInterface
 
         UnreadCommentCountLoader.for(current_user).load(object)
       end
+  end
+
+  field :has_unread_rubric_assessment, Boolean, null: false
+  def has_unread_rubric_assessment
+    load_association(:content_participations).then do
+      submission.content_participations.where(workflow_state: "unread", content_item: "rubric").exists?
+    end
   end
 
   field :user, Types::UserType, null: true
@@ -149,7 +164,7 @@ module Interfaces::SubmissionInterface
   end
   def comments_connection(filter:, sort_order:)
     filter = filter.to_h
-    all_comments, for_attempt = filter.values_at(:all_comments, :for_attempt)
+    all_comments, for_attempt, peer_review = filter.values_at(:all_comments, :for_attempt, :peer_review)
 
     load_association(:assignment).then do
       scope = submission.comments_excluding_drafts_for(current_user)
@@ -159,6 +174,10 @@ module Interfaces::SubmissionInterface
           target_attempt = [nil, 0, 1] # Submission 0 and 1 share comments
         end
         scope = scope.where(attempt: target_attempt)
+
+        if peer_review
+          scope = scope.where(author: current_user)
+        end
       end
       scope = scope.reorder(created_at: sort_order) if sort_order
       scope.select { |comment| comment.grants_right?(current_user, :read) }
@@ -194,6 +213,11 @@ module Interfaces::SubmissionInterface
   field :deducted_points, Float, "how many points are being deducted due to late policy", null: true
   def deducted_points
     protect_submission_grades(:points_deducted)
+  end
+
+  field :sticker, String, null: true
+  def sticker
+    protect_submission_grades(:sticker)
   end
 
   field :excused,
@@ -267,13 +291,18 @@ module Interfaces::SubmissionInterface
                     context: assignment.context,
                     in_app: context[:in_app],
                     request: context[:request],
-                    preloaded_attachments: preloaded_attachments,
+                    preloaded_attachments:,
                     user: current_user
                   )
                 end
             end
           end
       end
+  end
+
+  field :custom_grade_status, String, null: true
+  def custom_grade_status
+    submission.custom_grade_status&.name.to_s
   end
 
   field :media_object, Types::MediaObjectType, null: true
@@ -377,6 +406,8 @@ module Interfaces::SubmissionInterface
 
   field :extra_attempts, Integer, null: true
 
+  field :proxy_submitter_id, ID, null: true
+
   field :proxy_submitter, String, null: true
   def proxy_submitter
     object.proxy_submitter&.short_name
@@ -386,4 +417,6 @@ module Interfaces::SubmissionInterface
   def assigned_assessments
     load_association(:assigned_assessments)
   end
+
+  field :assignment_id, ID, null: false
 end

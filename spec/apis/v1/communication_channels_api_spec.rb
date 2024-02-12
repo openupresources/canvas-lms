@@ -30,7 +30,9 @@ describe "CommunicationChannels API", type: :request do
 
       @path = "/api/v1/users/#{@someone.id}/communication_channels"
       @path_options = { controller: "communication_channels",
-                        action: "index", format: "json", user_id: @someone.id.to_param }
+                        action: "index",
+                        format: "json",
+                        user_id: @someone.id.to_param }
     end
 
     context "an authorized user" do
@@ -61,6 +63,7 @@ describe "CommunicationChannels API", type: :request do
           "position" => cc.position,
           "workflow_state" => "unconfirmed",
           "user_id" => cc.user_id,
+          "bounce_count" => 0,
           "last_bounce_at" => nil,
           "last_bounce_summary" => nil,
           "last_suppression_bounce_at" => nil,
@@ -74,7 +77,7 @@ describe "CommunicationChannels API", type: :request do
       it "returns 401" do
         user_with_pseudonym
         raw_api_call(:get, @path, @path_options)
-        expect(response.code).to eql "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "does not list channels for a teacher's students" do
@@ -83,7 +86,7 @@ describe "CommunicationChannels API", type: :request do
         @user = @teacher
 
         raw_api_call(:get, @path, @path_options)
-        expect(response.code).to eql "401"
+        expect(response).to have_http_status :unauthorized
       end
     end
   end
@@ -99,7 +102,8 @@ describe "CommunicationChannels API", type: :request do
 
       @path = "/api/v1/users/#{@someone.id}/communication_channels"
       @path_options = { controller: "communication_channels",
-                        action: "create", format: "json",
+                        action: "create",
+                        format: "json",
                         user_id: @someone.id.to_param, }
       @post_params = { communication_channel: {
         address: "new+api@example.com", type: "email"
@@ -157,6 +161,7 @@ describe "CommunicationChannels API", type: :request do
                            "workflow_state" => "active",
                            "user_id" => @someone.id,
                            "position" => 2,
+                           "bounce_count" => 0,
                            "last_bounce_at" => nil,
                            "last_bounce_summary" => nil,
                            "last_suppression_bounce_at" => nil,
@@ -230,10 +235,12 @@ describe "CommunicationChannels API", type: :request do
       end
 
       it "is not able to create channels for others" do
-        raw_api_call(:post, "/api/v1/users/#{@admin.id}/communication_channels",
-                     @path_options.merge(user_id: @admin.to_param), @post_params)
+        raw_api_call(:post,
+                     "/api/v1/users/#{@admin.id}/communication_channels",
+                     @path_options.merge(user_id: @admin.to_param),
+                     @post_params)
 
-        expect(response.code).to eql "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       context "not configured push" do
@@ -248,7 +255,7 @@ describe "CommunicationChannels API", type: :request do
           @post_params[:communication_channel] = { token: "registration_token", type: "push" }
           raw_api_call(:post, @path, @path_options, @post_params)
 
-          expect(response.code).to eql "400"
+          expect(response).to have_http_status :bad_request
         end
       end
 
@@ -307,14 +314,16 @@ describe "CommunicationChannels API", type: :request do
     let_once(:someone) { user_with_pseudonym }
     let_once(:admin) do
       user = user_with_pseudonym
-      Account.default.account_users.create!(user: user)
+      Account.default.account_users.create!(user:)
       user
     end
     let_once(:channel) { someone.communication_channel }
     let(:path) { "/api/v1/users/#{someone.id}/communication_channels/#{channel.id}" }
     let(:path_options) do
       { controller: "communication_channels",
-        action: "destroy", user_id: someone.to_param, format: "json",
+        action: "destroy",
+        user_id: someone.to_param,
+        format: "json",
         id: channel.to_param }
     end
 
@@ -356,35 +365,48 @@ describe "CommunicationChannels API", type: :request do
       it "404s if already deleted" do
         api_call(:delete, path, path_options)
         raw_api_call(:delete, path, path_options)
-        expect(response.code).to eq "404"
+        expect(response).to have_http_status :not_found
       end
 
       it "is not able to delete others' channels" do
         admin_channel = admin.communication_channel
-        raw_api_call(:delete, "/api/v1/users/#{admin.id}/communication_channels/#{admin_channel.id}",
+        raw_api_call(:delete,
+                     "/api/v1/users/#{admin.id}/communication_channels/#{admin_channel.id}",
                      path_options.merge(user_id: admin.to_param, id: admin_channel.to_param))
 
-        expect(response.code).to eql "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "is able to delete by path, instead of id" do
-        api_call(:delete, "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
+        api_call(:delete,
+                 "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
                  controller: "communication_channels",
-                 action: "destroy", user_id: someone.to_param, format: "json",
-                 type: channel.path_type, address: channel.path)
+                 action: "destroy",
+                 user_id: someone.to_param,
+                 format: "json",
+                 type: channel.path_type,
+                 address: channel.path)
         expect(CommunicationChannel.find(channel.id)).to be_retired # for some reason, .reload on a let() bound model returns nil
       end
 
       it "404s if already deleted by path" do
-        api_call(:delete, "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
+        api_call(:delete,
+                 "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
                  controller: "communication_channels",
-                 action: "destroy", user_id: someone.to_param, format: "json",
-                 type: channel.path_type, address: channel.path)
-        raw_api_call(:delete, "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
+                 action: "destroy",
+                 user_id: someone.to_param,
+                 format: "json",
+                 type: channel.path_type,
+                 address: channel.path)
+        raw_api_call(:delete,
+                     "/api/v1/users/#{someone.id}/communication_channels/#{channel.path_type}/#{URI::DEFAULT_PARSER.escape(channel.path)}",
                      controller: "communication_channels",
-                     action: "destroy", user_id: someone.to_param, format: "json",
-                     type: channel.path_type, address: channel.path)
-        expect(response.code).to eq "404"
+                     action: "destroy",
+                     user_id: someone.to_param,
+                     format: "json",
+                     type: channel.path_type,
+                     address: channel.path)
+        expect(response).to have_http_status :not_found
       end
     end
   end

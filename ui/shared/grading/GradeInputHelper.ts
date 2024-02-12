@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -17,14 +18,15 @@
  */
 
 import Big from 'big.js'
-import {
-  gradeToScoreLowerBound,
-  gradeToScoreUpperBound,
-  indexOfGrade,
-  scoreToGrade,
-} from './GradingSchemeHelper'
+import {gradeToScoreLowerBound, gradeToScoreUpperBound, indexOfGrade} from './GradingSchemeHelper'
+import {scoreToGrade} from '@instructure/grading-utils'
 import numberHelper from '@canvas/i18n/numberHelper'
 import type {GradeInput, GradeResult} from './grading.d'
+import {EnvGradebookCommon} from '@canvas/global/env/EnvGradebook'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+
+// Allow unchecked access to ENV variables that should exist in this context
+declare const ENV: GlobalEnv & EnvGradebookCommon
 
 const MAX_PRECISION = 15 // the maximum precision of a score persisted to the database
 const PERCENTAGES = /[%％﹪٪]/

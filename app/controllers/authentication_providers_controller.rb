@@ -739,7 +739,7 @@ class AuthenticationProvidersController < ApplicationController
     if aac.auth_type != data[:auth_type]
       render(json: {
                message: t("no_changing_auth_types",
-                          "Can not change type of authorization config, "\
+                          "Can not change type of authorization config, " \
                           "please delete and create new config.")
              },
              status: :bad_request)
@@ -947,6 +947,43 @@ class AuthenticationProvidersController < ApplicationController
     redirect_to :account_authentication_providers
   end
 
+  def refresh_saml_metadata
+    ap = @account.authentication_providers.active.find(params[:authentication_provider_id])
+
+    if ap&.auth_type != "saml"
+      respond_to do |format|
+        format.html do
+          flash[:error] = t("Unsupported authentication type")
+          redirect_to(account_authentication_providers_path(@account))
+        end
+        format.json do
+          return render(status: :bad_request, json: { errors: ["Unsupported authentication type"] })
+        end
+      end
+    elsif ap&.metadata_uri.blank?
+      respond_to do |format|
+        format.html do
+          flash[:error] = t("IdP metadata URI cannot be blank")
+          redirect_to(account_authentication_providers_path(@account))
+        end
+        format.json do
+          return render(status: :bad_request, json: { errors: ["A valid metadata URI is required"] })
+        end
+      end
+    else
+      AuthenticationProvider::SAML::MetadataRefresher.refresh_providers(providers: [ap])
+      respond_to do |format|
+        format.html do
+          flash[:notice] = t("Metadata refresh has been initiated. Please check back")
+          redirect_to(account_authentication_providers_path(@account))
+        end
+        format.json { render json: { status: "ok" } }
+      end
+    end
+  rescue ActiveRecord::RecordNotFound => e
+    render json: { message: e.message }, status: :not_found
+  end
+
   def start_debugging
     ap = @account.authentication_providers.active.find(params[:authentication_provider_id])
 
@@ -991,23 +1028,32 @@ class AuthenticationProvidersController < ApplicationController
   def filter_data(data)
     auth_type = data.delete(:auth_type)
     klass = AuthenticationProvider.find_sti_class(auth_type)
+
     federated_attributes = data[:federated_attributes]
     federated_attributes = {} if federated_attributes == ""
     federated_attributes = federated_attributes.to_unsafe_h if federated_attributes.is_a?(ActionController::Parameters)
+
     # mfa_option is so we can keep mfa_required a boolean for backwards compatibility but still use a radio input for it
     data = data.permit(klass.recognized_params + [:mfa_option])
-    data = data.reject { |k, _| klass.site_admin_params.include?(k.to_sym) } unless @domain_root_account.grants_right?(@current_user, :manage_site_settings)
+    unless @domain_root_account.grants_right?(@current_user, :manage_site_settings)
+      data = data.reject { |k, _| klass.site_admin_params.include?(k.to_sym) }
+    end
+
+    data[:jit_provisioning] = value_to_boolean(data[:jit_provisioning]) if data.include?(:jit_provisioning)
     data[:federated_attributes] = federated_attributes if federated_attributes
     data[:auth_type] = auth_type
     if data[:auth_type] == "ldap"
       data[:auth_over_tls] = "start_tls" unless data.key?(:auth_over_tls)
-      data[:auth_over_tls] = AuthenticationProvider::LDAP.auth_over_tls_setting(data[:auth_over_tls])
+      data[:auth_over_tls] = AuthenticationProvider::LDAP.auth_over_tls_setting(
+        data[:auth_over_tls], tls_required: @account.feature_enabled?(:verify_ldap_certs)
+      )
     end
     if data[:mfa_option]
       data[:mfa_required] = data[:mfa_option] == "required"
       data[:skip_internal_mfa] = data[:mfa_option] == "bypass"
       data.delete(:mfa_option)
     end
+
     data
   end
 
@@ -1026,7 +1072,7 @@ class AuthenticationProvidersController < ApplicationController
     return if data.empty?
 
     data.each do |setting, value|
-      @account.public_send("#{setting}=".to_sym, value.presence)
+      @account.public_send(:"#{setting}=", value.presence)
     end
     @account.save!
   end

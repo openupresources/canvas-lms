@@ -23,12 +23,12 @@ import {Text} from '@instructure/ui-text'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {Flex} from '@instructure/ui-flex'
 import {IconAddSolid, IconXSolid} from '@instructure/ui-icons'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {TruncateText} from '@instructure/ui-truncate-text'
 
-const themeOverride = {
-  [Tag.theme]: {
+const componentOverrides = {
+  Tag: {
     defaultBackground: 'white',
   },
 }
@@ -56,7 +56,7 @@ function renderText(text, truncatedText, textColor) {
   }
 }
 
-function renderIcon(selected) {
+function renderIcon(selected: boolean) {
   if (selected) {
     return <IconXSolid data-testid="item-selected" />
   } else {
@@ -78,9 +78,9 @@ const Pill = ({studentId, observerId = null, text, onClick, selected = false}) =
   )
 
   return (
-    <ApplyTheme theme={themeOverride}>
+    <InstUISettingsProvider theme={{componentOverrides}}>
       <Tag text={contents} onClick={() => onClick(studentId, observerId)} />
-    </ApplyTheme>
+    </InstUISettingsProvider>
   )
 }
 

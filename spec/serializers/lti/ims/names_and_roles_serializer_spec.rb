@@ -52,7 +52,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
 
   def be_lti_membership
     matcher_opts = {
-      privacy_level: privacy_level
+      privacy_level:
     }
     if page[:opts].present? && page[:opts][:rlid].present?
       matcher_opts[:message_matcher] = message_matcher
@@ -124,7 +124,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
 
     context "with past lti ids" do
       before do
-        UserPastLtiId.create!(user: user, context: course, user_lti_id: "current_lti_key", user_lti_context_id: "old_lti_id", user_uuid: "old")
+        UserPastLtiId.create!(user:, context: course, user_lti_id: "current_lti_key", user_lti_context_id: "old_lti_id", user_uuid: "old")
       end
 
       it "properly formats NRPS json" do
@@ -161,8 +161,8 @@ describe Lti::IMS::NamesAndRolesSerializer do
     let(:message_matcher) do
       {
         "https://purl.imsglobal.org/spec/lti/claim/custom" => {
-          "user_id" => user.id,
-          "canvas_user_id" => user.id,
+          "user_id" => user.id.to_s,
+          "canvas_user_id" => user.id.to_s,
           "unsupported_param_1" => "$unsupported.param.1",
           "unsupported_param_2" => "$unsupported.param.2"
         }.merge(custom_params)
@@ -218,7 +218,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
     context "with a course" do
       let(:context_type) { :course }
       let(:enrollment) do
-        enrollment = teacher_in_course(course: course, active_all: true, name: "Marta Perkins")
+        enrollment = teacher_in_course(course:, active_all: true, name: "Marta Perkins")
         user = enrollment.user
         user.email = "marta.perkins@school.edu"
         user.avatar_image_url = "http://school.edu/image/url.png"
@@ -233,13 +233,13 @@ describe Lti::IMS::NamesAndRolesSerializer do
       let(:decorated_course) { Lti::IMS::Providers::CourseMembershipsProvider::CourseContextDecorator.new(course) }
       let(:page) do
         {
-          url: url,
+          url:,
           memberships: [decorated_enrollment],
           context: decorated_course,
           assignment: nil,
           api_metadata: nil,
           controller: nil,
-          tool: tool,
+          tool:,
           opts: {}
         }
       end
@@ -282,7 +282,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
           expect(received_custom_claim["canvas_course_endat"]).to eq course.end_at.utc.iso8601
           expect(received_custom_claim["canvas_course_gradepassbacksetting"]).to eq course.grade_passback_setting
           expect(received_custom_claim["canvas_course_hidedistributiongraphs"]).to eq course.hide_distribution_graphs?
-          expect(received_custom_claim["canvas_course_id"]).to eq course.id
+          expect(received_custom_claim["canvas_course_id"]).to eq course.id.to_s
           expect(received_custom_claim["canvas_course_name"]).to eq course.name
 
           lti_helper = Lti::SubstitutionsHelper.new(course, course.root_account, user, tool)
@@ -319,13 +319,13 @@ describe Lti::IMS::NamesAndRolesSerializer do
       let(:decorated_group) { Lti::IMS::Providers::GroupMembershipsProvider::GroupContextDecorator.new(group_record) }
       let(:page) do
         {
-          url: url,
+          url:,
           memberships: [decorated_group_member],
           context: decorated_group,
           assignment: nil,
           api_metadata: nil,
           controller: nil,
-          tool: tool,
+          tool:,
           opts: {}
         }
       end

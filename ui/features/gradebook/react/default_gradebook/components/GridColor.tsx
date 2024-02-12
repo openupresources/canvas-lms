@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,11 +18,24 @@
  */
 
 import React from 'react'
-import {arrayOf, shape, string} from 'prop-types'
 import {statuses} from '../constants/statuses'
 import {darken} from '../constants/colors'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 
-function GridColor(props) {
+type Props = {
+  colors: {
+    late: string
+    missing: string
+    resubmitted: string
+    dropped: string
+    excused: string
+    extended: string
+  }
+  statuses: string[]
+  customStatuses: GradeStatus[]
+}
+
+function GridColor(props: Props) {
   const styleRules = props.statuses
     .map(status =>
       [
@@ -31,28 +45,30 @@ function GridColor(props) {
       ].join('')
     )
     .join('')
+  const customStyleRules = props.customStatuses
+    ?.map(status =>
+      [
+        `.even .gradebook-cell.custom-grade-status-${status.id} { background-color: ${status.color}; }`,
+        `.odd .gradebook-cell.custom-grade-status-${status.id} { background-color: ${darken(
+          status.color,
+          5
+        )}; }`,
+        `.slick-cell.editable .gradebook-cell.custom-grade-status-${status.id} { background-color: white; }`,
+      ].join('')
+    )
+    .join('')
 
   return (
     <style type="text/css" data-testid="grid-color">
       {styleRules}
+      {customStyleRules}
     </style>
   )
 }
 
-GridColor.propTypes = {
-  colors: shape({
-    late: string,
-    missing: string,
-    resubmitted: string,
-    dropped: string,
-    excused: string,
-    extended: string,
-  }).isRequired,
-  statuses: arrayOf(string),
-}
-
 GridColor.defaultProps = {
   statuses,
+  customStatuses: [],
 }
 
 export default GridColor

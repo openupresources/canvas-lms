@@ -40,7 +40,7 @@ namespace :i18n do
   js_index_file = Rails.root.join("config/locales/generated/en-js-index.json").to_s
 
   # Directory to contain the auto-generated translation files for the frontend.
-  js_translation_files_dir = Rails.root.join("public/javascripts/translations").to_s
+  js_translation_files_dir = Rails.public_path.join("javascripts/translations").to_s
 
   # like the top-level :environment, but just the i18n-y stuff we need.
   # also it's faster and doesn't require a db \o/
@@ -108,15 +108,18 @@ namespace :i18n do
 
   task extract_js: [] do
     exit 1 unless system(
-      js_i18nliner_path, "export",
-      "--translationsFile", js_translations_file,
-      "--indexFile", js_index_file
+      js_i18nliner_path,
+      "export",
+      "--translationsFile",
+      js_translations_file,
+      "--indexFile",
+      js_index_file
     )
   end
 
   # TODO: remove once we're sure all places that called i18n:generate are now
   # calling i18n:extract (e.g. caturday)
-  desc 'Alias for i18n:extract'
+  desc "Alias for i18n:extract"
   task generate: [:extract]
 
   desc "generate JavaScript translation files"
@@ -163,16 +166,14 @@ namespace :i18n do
     end
 
     t = Time.now
-    translations = YAML.safe_load(open(source_translations_file))
+    translations = YAML.safe_load(File.open(source_translations_file))
 
     I18n.extend I18nTasks::Lolcalize
     lolz_translations = {}
     lolz_translations["lolz"] = process_lolz.call(translations["en"])
     puts
 
-    File.open("config/locales/lolz.yml", "w") do |f|
-      f.write(lolz_translations.to_yaml(line_width: -1))
-    end
+    File.write("config/locales/lolz.yml", lolz_translations.to_yaml(line_width: -1))
     print "\nFinished generating LOLZ from #{strings_processed} strings in #{Time.now - t} seconds\n"
 
     # add lolz to the locales.yml file
@@ -185,9 +186,7 @@ namespace :i18n do
         "crowdsourced" => true
       }
 
-      File.open("config/locales/locales.yml", "w") do |f|
-        f.write(locales.to_yaml(line_width: -1))
-      end
+      File.write("config/locales/locales.yml", locales.to_yaml(line_width: -1))
       print "Added LOLZ to locales\n"
     end
   end
@@ -221,7 +220,7 @@ namespace :i18n do
           if $?.exitstatus == 0
             if ret.include?(base_filename)
               `git checkout #{arg}`
-              if (previous = YAML.safe_load(File.read(base_filename)).flatten_keys rescue nil)
+              if (previous = YAML.safe_load_file(base_filename).flatten_keys rescue nil)
                 last_export = { type: :commit, data: previous }
               else
                 warn "Unable to load en.yml file"
@@ -236,7 +235,7 @@ namespace :i18n do
         else
           puts "Loading previous export..."
           if File.exist?(arg)
-            if (previous = YAML.safe_load(File.read(arg)).flatten_keys rescue nil)
+            if (previous = YAML.safe_load_file(arg).flatten_keys rescue nil)
               last_export = { type: :file, data: previous }
             else
               warn "Unable to load yml file"
@@ -251,7 +250,7 @@ namespace :i18n do
       loop do
         puts "Enter local branch containing current en translations (default master):"
         current_branch = $stdin.gets.strip
-        break if current_branch.blank? || current_branch !~ /[^a-z0-9_.\-]/
+        break if current_branch.blank? || current_branch !~ /[^a-z0-9_.-]/
       end
       current_branch = nil if current_branch.blank?
 
@@ -260,7 +259,7 @@ namespace :i18n do
       Rake::Task["i18n:extract"].invoke
 
       puts "Exporting #{last_export[:data] ? "new/changed" : "all"} en translations..."
-      current_strings = YAML.safe_load(File.read(base_filename)).flatten_keys
+      current_strings = YAML.safe_load_file(base_filename).flatten_keys
       new_strings = if last_export[:data]
                       current_strings.each_with_object({}) do |(k, v), h|
                         h[k] = v unless last_export[:data][k] == v
@@ -268,7 +267,7 @@ namespace :i18n do
                     else
                       current_strings
                     end
-      File.open(export_filename, "w") { |f| f.write new_strings.expand_keys.to_yaml(line_width: -1) }
+      File.write(export_filename, new_strings.expand_keys.to_yaml(line_width: -1))
 
       push = "n"
       y_n = %w[y n]
@@ -305,22 +304,22 @@ namespace :i18n do
     Hash.include I18nTasks::HashExtensions unless {}.is_a?(I18nTasks::HashExtensions)
 
     if args[:source_file]
-      source_translations = YAML.safe_load(File.read(args[:source_file]))
+      source_translations = YAML.safe_load_file(args[:source_file])
     else
       loop do
         puts "Enter path to original en.yml file:"
         arg = $stdin.gets.strip
-        break if (source_translations = File.exist?(arg) && YAML.safe_load(File.read(arg)) rescue nil)
+        break if (source_translations = File.exist?(arg) && YAML.safe_load_file(arg) rescue nil)
       end
     end
 
     if args[:translated_file]
-      new_translations = YAML.safe_load(File.read(args[:translated_file]))
+      new_translations = YAML.safe_load_file(args[:translated_file])
     else
       loop do
         puts "Enter path to translated file:"
         arg = $stdin.gets.strip
-        break if (new_translations = File.exist?(arg) && YAML.safe_load(File.read(arg)) rescue nil)
+        break if (new_translations = File.exist?(arg) && YAML.safe_load_file(arg) rescue nil)
       end
     end
 
@@ -344,9 +343,7 @@ namespace :i18n do
 
     next if complete_translations.nil?
 
-    File.open("config/locales/#{import.language}.yml", "w") do |f|
-      f.write({ import.language => complete_translations }.to_yaml(line_width: -1))
-    end
+    File.write("config/locales/#{import.language}.yml", { import.language => complete_translations }.to_yaml(line_width: -1))
   end
 
   desc "Imports new translations, ignores missing or unexpected keys"
@@ -354,11 +351,11 @@ namespace :i18n do
     require "open-uri"
 
     source_translations = if args[:source_file].present?
-                            YAML.safe_load(File.read(args[:source_file]))
+                            YAML.safe_load_file(args[:source_file])
                           else
-                            YAML.safe_load(File.read(source_translations_file))
+                            YAML.safe_load_file(source_translations_file)
                           end
-    new_translations = YAML.safe_load(File.read(args[:translated_file]))
+    new_translations = YAML.safe_load_file(args[:translated_file])
     autoimport(source_translations, new_translations)
   end
 
@@ -394,7 +391,7 @@ namespace :i18n do
 
     puts({
       language: import.language,
-      errors: errors,
+      errors:,
     }.to_json)
   end
 
@@ -434,7 +431,7 @@ namespace :i18n do
       locale = File.basename(filename, ".yml")
       next if options[:locales].present? && !options[:locales].include?(locale)
 
-      data = YAML.safe_load(File.read(filename))
+      data = YAML.safe_load_file(filename)
 
       options[:keys].each do |path|
         search = data[locale]

@@ -2,11 +2,12 @@
 # To update this file please edit the relevant template and run the generation
 # task `build/dockerfile_writer.rb --env development --compose-file docker-compose.yml,docker-compose.override.yml --in build/Dockerfile.template --out Dockerfile`
 
-ARG RUBY=2.7
+ARG RUBY=3.1
 
 FROM instructure/ruby-passenger:$RUBY
 LABEL maintainer="Instructure"
 
+ARG RUBY
 ARG POSTGRES_CLIENT=14
 ENV APP_HOME /usr/src/app/
 ENV RAILS_ENV development
@@ -18,10 +19,11 @@ ENV LC_ALL en_US.UTF-8
 ARG CANVAS_RAILS=7.0
 ENV CANVAS_RAILS=${CANVAS_RAILS}
 
+ENV NODE_MAJOR 18
+ENV NODE_OPTIONS=--openssl-legacy-provider
 ENV YARN_VERSION 1.19.1-1
-ENV BUNDLER_VERSION 2.3.26
 ENV GEM_HOME /home/docker/.gem/$RUBY
-ENV PATH $GEM_HOME/bin:$PATH
+ENV PATH ${APP_HOME}bin:$GEM_HOME/bin:$PATH
 ENV BUNDLE_APP_CONFIG /home/docker/.bundle
 
 WORKDIR $APP_HOME
@@ -34,12 +36,15 @@ ARG USER_ID
 RUN if [ -n "$USER_ID" ]; then usermod -u "${USER_ID}" docker \
         && chown --from=9999 docker /usr/src/nginx /usr/src/app -R; fi
 
-RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - \
+RUN mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
   && curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
   && echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list \
   && printf 'path-exclude /usr/share/doc/*\npath-exclude /usr/share/man/*' > /etc/dpkg/dpkg.cfg.d/01_nodoc \
   && echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && curl -sS https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+  && add-apt-repository ppa:git-core/ppa -ny \
   && apt-get update -qq \
   && apt-get install -qqy --no-install-recommends \
        nodejs \
@@ -59,11 +64,9 @@ RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/docker/.gem/ruby/$RUBY_MAJOR.0
 
-RUN if [ -e /var/lib/gems/$RUBY_MAJOR.0/gems/bundler-* ]; then BUNDLER_INSTALL="-i /var/lib/gems/$RUBY_MAJOR.0"; fi \
-  && gem uninstall --all --ignore-dependencies --force $BUNDLER_INSTALL bundler \
-  && gem install bundler --no-document -v $BUNDLER_VERSION \
+RUN gem install bundler --no-document -v 2.5.3 \
   && find $GEM_HOME ! -user docker | xargs chown docker:docker
-RUN npm install -g npm@latest && npm cache clean --force
+RUN npm install -g npm@9.8.1 && npm cache clean --force
 
 USER docker
 
@@ -75,9 +78,6 @@ RUN set -eux; \
     config/locales/generated \
     log \
     node_modules \
-    packages/canvas-planner/lib \
-    packages/canvas-planner/node_modules \
-    packages/jest-moxios-utils/node_modules \
     packages/js-utils/es \
     packages/js-utils/lib \
     packages/js-utils/node_modules \

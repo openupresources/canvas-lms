@@ -26,10 +26,20 @@ class ContentImportsController < ApplicationController
   include Api::V1::Course
   include ContentImportsHelper
 
-  COPY_TYPES = %w[assignment_groups assignments context_modules
-                  learning_outcomes quizzes assessment_question_banks folders
-                  attachments wiki_pages discussion_topics calendar_events
-                  context_external_tools learning_outcome_groups rubrics].freeze
+  COPY_TYPES = %w[assignment_groups
+                  assignments
+                  context_modules
+                  learning_outcomes
+                  quizzes
+                  assessment_question_banks
+                  folders
+                  attachments
+                  wiki_pages
+                  discussion_topics
+                  calendar_events
+                  context_external_tools
+                  learning_outcome_groups
+                  rubrics].freeze
 
   # these are deprecated, but leaving them for a while so existing links get redirected
   def index
@@ -51,7 +61,7 @@ class ContentImportsController < ApplicationController
         *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS
       ]
     )
-    js_env(return_or_context_url: return_or_context_url, return_to: params[:return_to])
+    js_env(return_or_context_url:, return_to: params[:return_to])
   end
 
   # @API Get course copy status
@@ -120,10 +130,10 @@ class ContentImportsController < ApplicationController
           render json: { "errors" => t("errors.no_only_and_except", 'You can not use "only" and "except" options at the same time.') }, status: :bad_request
           return
         elsif params[:only]
-          convert_to_table_name(params[:only]).each { |o| copy_params["all_#{o}".to_sym] = true }
+          convert_to_table_name(params[:only]).each { |o| copy_params[:"all_#{o}"] = true }
         elsif params[:except]
-          COPY_TYPES.each { |o| copy_params["all_#{o}".to_sym] = true }
-          convert_to_table_name(params[:except]).each { |o| copy_params["all_#{o}".to_sym] = false }
+          COPY_TYPES.each { |o| copy_params[:"all_#{o}"] = true }
+          convert_to_table_name(params[:except]).each { |o| copy_params[:"all_#{o}"] = false }
         else
           copy_params[:everything] = true
         end
@@ -134,7 +144,7 @@ class ContentImportsController < ApplicationController
       end
 
       # make sure the user can copy from the source course
-      return render_unauthorized_action unless @source_course.grants_all_rights?(@current_user, :read, :read_as_admin)
+      return unless authorized_action(@source_course, @current_user, [:read, :read_as_admin], all_rights: true)
 
       cm = ContentMigration.create!(context: @context,
                                     user: @current_user,

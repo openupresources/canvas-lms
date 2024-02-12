@@ -65,7 +65,7 @@ describe PageView::Pv4Client do
       expect(pv.session_id).to eq "c73d248f3e4cec530261c95232ba63fg"
       expect(pv.context_id).to eq 120_000_000_000_002
       expect(pv.context_type).to eq "Account"
-      expect(pv.user_agent).to be_include("Safari")
+      expect(pv.user_agent).to include("Safari")
       expect(pv.account_id).to eq 120_000_000_000_002
       expect(pv.user_id).to eq 31_410_000_000_000_028
       expect(pv.remote_ip).to eq "192.168.0.1"
@@ -85,7 +85,7 @@ describe PageView::Pv4Client do
 
         res = double(body: { "page_views" => [pv4_object] }.to_json)
         expect(CanvasHttp).to receive(:get).with(expect_url, expect_header).and_return(res)
-        client.fetch(1, start_time: start_time, end_time: end_time)
+        client.fetch(1, start_time:, end_time:)
       end
     end
   end
@@ -108,7 +108,7 @@ describe PageView::Pv4Client do
       double = double(body: '{ "page_views": [] }')
       expect(CanvasHttp).to receive(:get).with(
         "http://pv4/users/1/page_views?start_time=#{now.iso8601(PageView::Pv4Client::PRECISION)}&end_time=#{pv4_object["timestamp"]}&last_page_view_id=#{pv4_object["request_id"]}&limit=10",
-        "Authorization" => "Bearer token"
+        { "Authorization" => "Bearer token" }
       ).and_return(double)
       client.for_user(1, oldest: now, newest: now)
             .paginate(page: result.next_page, per_page: 10)

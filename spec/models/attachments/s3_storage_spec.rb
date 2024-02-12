@@ -42,11 +42,12 @@ describe Attachments::S3Storage do
     let(:signature) { "8afdbf4008c03f22c2cd3cdb72e4afbb1f6a588f3255ac628749a66d7f09699e" }
     let(:bucket) do
       config = double("config", {
-                        secret_access_key: secret_access_key,
-                        region: "us-east-1"
+                        secret_access_key:,
+                        region: "us-east-1",
+                        credentials: double(credentials: double(access_key_id:, secret_access_key:)),
                       })
-      client = double("client", config: config)
-      double("bucket", client: client)
+      client = double("client", config:)
+      double("bucket", client:)
     end
 
     it "follows the v4 signing example from AWS" do

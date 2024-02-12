@@ -18,13 +18,13 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map} from 'lodash'
 import Backbone from '@canvas/backbone'
 import QuizItemGroupView from './backbone/views/QuizItemGroupView'
 import NoQuizzesView from './backbone/views/NoQuizzesView'
 import IndexView from './backbone/views/IndexView'
 import QuizCollection from './backbone/collections/QuizCollection'
-import QuizOverrideLoader from './backbone/models/QuizOverrideLoader.coffee'
+import QuizOverrideLoader from './backbone/models/QuizOverrideLoader'
 import vddTooltip from '@canvas/due-dates/jquery/vddTooltip'
 import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
@@ -74,6 +74,7 @@ const QuizzesIndexRouter = Backbone.Router.extend({
       noQuizzesView: this.quizzes.noQuizzes,
       permissions: ENV.PERMISSIONS,
       flags: ENV.FLAGS,
+      features: ENV.FEATURES,
       urls: ENV.URLS,
     })
     this.view.render()
@@ -103,7 +104,7 @@ const QuizzesIndexRouter = Backbone.Router.extend({
 
     // get quiz attributes from root container and add options
     return new QuizItemGroupView({
-      collection: new QuizCollection(_.map(collection, quiz => $.extend(quiz, options[quiz.id]))),
+      collection: new QuizCollection(map(collection, quiz => $.extend(quiz, options[quiz.id]))),
       isSurvey: type === 'surveys',
       listId: `${type}-quizzes`,
       title,

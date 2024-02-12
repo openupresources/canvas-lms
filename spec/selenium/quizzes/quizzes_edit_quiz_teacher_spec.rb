@@ -86,9 +86,9 @@ describe "editing a quiz" do
 
         # verify alert
         alert_box = f(".alert .unpublished_warning")
-        expect(alert_box.text).to \
-          eq "You have made changes to the questions in this quiz.\nThese "\
-             "changes will not appear for students until you save the quiz."
+        expect(alert_box.text)
+          .to eq "You have made changes to the questions in this quiz.\nThese " \
+                 "changes will not appear for students until you save the quiz."
 
         # verify button
         save_it_now_button = fj(".btn.btn-primary", ".edit_quizzes_quiz")
@@ -99,6 +99,12 @@ describe "editing a quiz" do
         expect(f(".alert .unpublished_warning")).not_to be_displayed
 
         expect { @quiz.quiz_questions.count }.to become(1)
+      end
+
+      it "shows the speed grader link" do
+        get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit"
+        f(".al-trigger").click
+        expect(f(".speed-grader-link-quiz")).to be_displayed
       end
     end
 
@@ -209,7 +215,6 @@ describe "editing a quiz" do
 
     context "in a paced course" do
       before(:once) do
-        Account.site_admin.enable_feature!(:course_paces)
         @course.enable_course_paces = true
         @course.save!
       end
@@ -221,6 +226,16 @@ describe "editing a quiz" do
         get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
         expect(f(quiz_edit_form)).not_to contain_css(due_date_container)
         expect(f(quiz_edit_form)).to contain_css(course_pacing_notice)
+      end
+
+      it "does not display the course pacing notice when feature is off in the account" do
+        @course.account.disable_feature!(:course_paces)
+        @quiz = create_quiz_with_due_date
+        item = add_quiz_to_module
+
+        get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
+        expect(f(quiz_edit_form)).to contain_css(due_date_container)
+        expect(f(quiz_edit_form)).not_to contain_css(course_pacing_notice)
       end
     end
   end

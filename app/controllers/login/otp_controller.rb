@@ -18,9 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "barby"
-require "barby/barcode/qr_code"
-require "barby/outputter/png_outputter"
+require "rqrcode"
 require "rotp"
 
 class Login::OtpController < ApplicationController
@@ -59,7 +57,7 @@ class Login::OtpController < ApplicationController
     if session[:pending_otp_secret_key] && params[:otp_login].try(:[], :phone_number)
       path = "#{params[:otp_login][:phone_number].gsub(/[^\d]/, "")}@#{params[:otp_login][:carrier]}"
       cc = @current_user.communication_channels.sms.by_path(path).first
-      cc ||= @current_user.communication_channels.sms.create!(path: path)
+      cc ||= @current_user.communication_channels.sms.create!(path:)
       if cc.retired?
         cc.workflow_state = "unconfirmed"
         cc.save!
@@ -78,7 +76,7 @@ class Login::OtpController < ApplicationController
     # of a maxed out bucket.
     increment_request_cost(150)
 
-    verification_code = params[:otp_login][:verification_code]
+    verification_code = params[:otp_login][:verification_code].delete(" ")
     if Canvas.redis_enabled?
       key = "otp_used:#{@current_user.global_id}:#{verification_code}"
       if Canvas.redis.get(key)
@@ -149,7 +147,11 @@ class Login::OtpController < ApplicationController
 
   def send_otp(cc = nil)
     cc ||= @current_user.otp_communication_channel
-    cc&.send_otp!(ROTP::TOTP.new(secret_key).now, @domain_root_account)
+    key = ROTP::TOTP.new(secret_key).now
+    cc&.send_otp!(key, @domain_root_account)
+    if cc&.otp_impaired?
+      @current_user.email_channel&.send_otp!(key, @domain_root_account)
+    end
   end
 
   def secret_key

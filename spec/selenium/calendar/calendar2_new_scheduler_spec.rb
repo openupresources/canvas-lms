@@ -19,18 +19,23 @@
 
 require_relative "../common"
 require_relative "../helpers/scheduler_common"
+require_relative "pages/calendar_page"
 
 describe "scheduler" do
   include_context "in-process server selenium tests"
   include SchedulerCommon
+  include CalendarPage
+
+  before :once do
+    Account.default.tap do |a|
+      a.settings[:show_scheduler]   = true
+      a.settings[:agenda_view]      = true
+      a.save!
+    end
+  end
 
   context "find appointment mode as a student" do
     before :once do
-      Account.default.tap do |a|
-        a.settings[:show_scheduler]   = true
-        a.settings[:agenda_view]      = true
-        a.save!
-      end
       scheduler_setup
     end
 
@@ -57,6 +62,7 @@ describe "scheduler" do
     end
 
     it "shows appointment slots on calendar in Find Appointment mode", priority: "1" do
+      skip "FOO-3801 (10/7/2023)"
       get "/calendar2"
       open_select_courses_modal(@course1.name)
       # the order they come back could vary depending on whether they split
@@ -116,8 +122,8 @@ describe "scheduler" do
       f(".fc-event.scheduler-event").click
       wait_for_ajaximations
       f(".unreserve_event_link").click
-      expect(f("#delete_event_dialog")).to be_present
-      f(".ui-dialog-buttonset .btn-primary").click
+
+      click_delete_confirm_button
       # save the changes so the appointment object is updated
       @app1.save!
       expect(@app1.appointments.first.workflow_state).to eq("active")
@@ -141,6 +147,52 @@ describe "scheduler" do
       ff(".fc-content .fc-title")[1].click
       wait_for_ajaximations
       expect(f(".event-details")).to contain_css(".reserve_event_link")
+    end
+  end
+
+  context "find appointment mode as an observer" do
+    before :once do
+      account = Account.default
+      account.settings[:allow_observers_in_appointment_groups] = { value: true }
+      account.save!
+
+      course_factory(active_all: true)
+      @observer = user_factory(active_all: true)
+      @course.enroll_user(@user, "ObserverEnrollment", enrollment_state: "active")
+
+      time = Time.zone.now
+      time += 1.hour if time.hour == 23
+      @ag1 = AppointmentGroup.create!(title: "Appointment 1",
+                                      contexts: [@course],
+                                      allow_observer_signup: false,
+                                      new_appointments: [[time, time + 30.minutes]])
+      @ag1.publish!
+      @ag2 = AppointmentGroup.create!(title: "Appointment 2",
+                                      contexts: [@course],
+                                      allow_observer_signup: true,
+                                      new_appointments: [[time, time + 30.minutes]])
+      @ag2.publish!
+    end
+
+    before do
+      user_session(@observer)
+    end
+
+    it "reserves appointment slots in find appointment mode" do
+      get "/calendar2"
+      wait_for_ajaximations
+      open_select_courses_modal(@course.name)
+      events = ff(".fc-content")
+      expect(events.count).to be 1
+      expect(events.first).to include_text("Appointment 2")
+      events.first.click
+      wait_for_ajaximations
+      move_to_click(".reserve_event_link")
+      refresh_page
+      expected_time = calendar_time_string(@ag2.new_appointments.first.start_at)
+      wait_for_ajaximations
+      expect(f(".fc-content .fc-title")).to include_text("Appointment 2")
+      expect(f(".fc-time")).to include_text expected_time
     end
   end
 end

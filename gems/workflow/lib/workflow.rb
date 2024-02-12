@@ -40,8 +40,7 @@
 # THE SOFTWARE.
 #
 
-require "rubygems"
-require "active_support"
+require "active_support/core_ext/module/delegation"
 require "ostruct"
 
 module Workflow
@@ -52,8 +51,8 @@ module Workflow
       @states = {}
     end
 
-    def add(&specification)
-      instance_eval(&specification)
+    def add(&)
+      instance_eval(&)
     end
 
     private
@@ -67,9 +66,9 @@ module Workflow
     end
     alias_method :workflow_state, :state
 
-    def event(name, args = {}, &action)
+    def event(name, args = {}, &)
       @scoped_state.events[name.to_sym] =
-        Event.new(name, args[:transitions_to], &action)
+        Event.new(name, args[:transitions_to], &)
     end
 
     def on_entry(&proc)
@@ -90,7 +89,7 @@ module Workflow
 
     def initialize(msg = nil)
       @halted_because = msg
-      super msg
+      super(msg)
     end
   end
 
@@ -103,13 +102,9 @@ module Workflow
       @name, @events = name, {}
     end
 
-    def to_s
-      name.to_s
-    end
+    delegate :to_s, to: :name
 
-    def to_sym
-      name.to_sym
-    end
+    delegate :to_sym, to: :name
   end
 
   class Event
@@ -129,17 +124,17 @@ module Workflow
       @workflow_states ||= OpenStruct.new(workflow_spec.states.transform_values { |val| val.name.to_s })
     end
 
-    def workflow(&specification)
+    def workflow(&)
       unless const_defined?(:WorkflowMethods, false)
         const_set(:WorkflowMethods, Module.new)
       end
       workflow_methods = const_get(:WorkflowMethods, false)
       self.workflow_spec ||= Specification.new
-      self.workflow_spec.add(&specification)
+      self.workflow_spec.add(&)
       self.workflow_spec.states.each_value do |state|
         state_name = state.name
         workflow_methods.module_eval do
-          define_method "#{state_name}?" do
+          define_method :"#{state_name}?" do
             state_name == current_state.name
           end
         end
@@ -147,7 +142,7 @@ module Workflow
         state.events.each_value do |event|
           event_name = event.name
           workflow_methods.module_eval do
-            define_method "#{event_name}!".to_sym do |*args|
+            define_method :"#{event_name}!" do |*args|
               process_event!(event_name, *args)
             end
             # INSTRUCTURE:
@@ -299,10 +294,10 @@ module Workflow
   end
 
   def self.included(klass)
-    klass.send :include, WorkflowInstanceMethods
+    klass.include WorkflowInstanceMethods
     klass.extend WorkflowClassMethods
     if klass < ActiveRecord::Base
-      klass.send :include, ActiveRecordInstanceMethods
+      klass.include ActiveRecordInstanceMethods
       klass.before_validation :write_initial_state
     end
   end

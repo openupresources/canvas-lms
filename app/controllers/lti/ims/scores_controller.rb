@@ -81,6 +81,24 @@ module Lti::IMS
 
     MIME_TYPE = "application/vnd.ims.lis.v1.score+json"
 
+    def report_grade_progress_metric
+      dynamic_settings_tree = DynamicSettings.find(tree: :private)
+      if dynamic_settings_tree["frontend_data_collection_endpoint"]
+        data_collection_endpoint = dynamic_settings_tree["frontend_data_collection_endpoint"]
+        put_body = [{
+          id: SecureRandom.uuid,
+          type: "ags_grade_progress",
+          account_id: @domain_root_account.id.to_s,
+          account_name: @domain_root_account.name,
+          tool_domain: tool.domain,
+          grading_progress: params[:gradingProgress]
+        }]
+        CanvasHttp.put(data_collection_endpoint, {}, body: put_body.to_json, content_type: "application/json")
+      end
+    rescue
+      Rails.logger.warn("Couldn't send LTI AGS grade progress metric")
+    end
+
     # @API Create a Score
     #
     # Create a new Result from the score params. If this is for the first created line_item for a
@@ -133,11 +151,17 @@ module Lti::IMS
     # @argument comment [String]
     #   Comment visible to the student about this score.
     #
+    # @argument submittedAt [String]
+    #  Date and time that the submission was originally created. Should use ISO8601-formatted date with subsecond precision.
+    #
     # @argument https://canvas.instructure.com/lti/submission [Optional, Object]
     #   (EXTENSION) Optional submission type and data. Fields listed below.
     #
     # @argument https://canvas.instructure.com/lti/submission[new_submission] [Optional, Boolean]
     #   (EXTENSION field) flag to indicate that this is a new submission. Defaults to true unless submission_type is none.
+    #
+    # @argument https://canvas.instructure.com/lti/submission[preserve_score] [Optional, Boolean]
+    #   (EXTENSION field) flag to prevent a request from clearing an existing grade for a submission. Defaults to false.
     #
     # @argument https://canvas.instructure.com/lti/submission[prioritize_non_tool_grade] [Optional, Boolean]
     #   (EXTENSION field) flag to prevent a request from overwriting an existing grade for a submission. Defaults to false.
@@ -149,7 +173,7 @@ module Lti::IMS
     #   (EXTENSION field) submission data (URL or body text). Only used for submission_types basic_lti_launch, online_text_entry, online_url. Ignored if content_items are provided.
     #
     # @argument https://canvas.instructure.com/lti/submission[submitted_at] [Optional, String]
-    #   (EXTENSION field) Date and time that the submission was originally created. Should use ISO8601-formatted date with subsecond precision. This should match the data and time that the original submission happened in Canvas.
+    #   (EXTENSION field) Date and time that the submission was originally created. Should use ISO8601-formatted date with subsecond precision. This should match the date and time that the original submission happened in Canvas.
     #
     # @argument https://canvas.instructure.com/lti/submission[content_items] [Optional, Array]
     #   (EXTENSION field) Files that should be included with the submission. Each item should contain `type: file`, and a url pointing to the file. It can also contain a title, and an explicit MIME type if needed (otherwise, MIME type will be inferred from the title or url). If any items are present, submission_type will be online_upload.
@@ -167,11 +191,13 @@ module Lti::IMS
     #     "scoreGiven": 83,
     #     "scoreMaximum": 100,
     #     "comment": "This is exceptional work.",
+    #     "submittedAt": "2017-04-14T18:54:36.736+00:00"
     #     "activityProgress": "Completed",
     #     "gradingProgress": "FullyGraded",
     #     "userId": "5323497",
     #     "https://canvas.instructure.com/lti/submission": {
     #       "new_submission": true,
+    #       "preserve_score": false,
     #       "submission_type": "online_url",
     #       "submission_data": "https://instructure.com",
     #       "submitted_at": "2017-04-14T18:54:36.736+00:00",
@@ -199,12 +225,13 @@ module Lti::IMS
     #         }
     #   }
     def create
+      report_grade_progress_metric
       ags_scores_multiple_files = @domain_root_account.feature_enabled?(:ags_scores_multiple_files)
       return old_create unless ags_scores_multiple_files
 
       json = {}
       preflights_and_attachments = compute_preflights_and_attachments(
-        ags_scores_multiple_files: ags_scores_multiple_files
+        ags_scores_multiple_files:
       )
       attachments = preflights_and_attachments.pluck(:attachment)
       json[Lti::Result::AGS_EXT_SUBMISSION] = { content_items: preflights_and_attachments.pluck(:json) }
@@ -229,7 +256,7 @@ module Lti::IMS
       update_or_create_result
       json[:resultUrl] = result_url
 
-      render json: json, content_type: MIME_TYPE
+      render json:, content_type: MIME_TYPE
     end
 
     private
@@ -256,13 +283,14 @@ module Lti::IMS
         end
       end
 
-      render json: json, content_type: MIME_TYPE
+      render json:, content_type: MIME_TYPE
     end
 
     REQUIRED_PARAMS = %i[userId activityProgress gradingProgress timestamp].freeze
-    OPTIONAL_PARAMS = %i[scoreGiven scoreMaximum comment].freeze
+    OPTIONAL_PARAMS = %i[scoreGiven scoreMaximum comment submittedAt].freeze
     EXTENSION_PARAMS = [
       :new_submission,
+      :preserve_score,
       :submission_type,
       :prioritize_non_tool_grade,
       :submission_data,
@@ -281,7 +309,7 @@ module Lti::IMS
         update_params = params.permit(REQUIRED_PARAMS + OPTIONAL_PARAMS,
                                       Lti::Result::AGS_EXT_SUBMISSION => EXTENSION_PARAMS).transform_keys do |k|
           k.to_s.underscore
-        end.except(:timestamp, :user_id, :score_given, :score_maximum).to_unsafe_h
+        end.except(:timestamp, :user_id, :score_given, :score_maximum, :submitted_at).to_unsafe_h
         update_params[:extensions] = extract_extensions(update_params)
         update_params.merge(result_score: params[:scoreGiven], result_maximum: params[:scoreMaximum])
       end
@@ -310,19 +338,18 @@ module Lti::IMS
     end
 
     def verify_valid_submitted_at
-      submitted_at = params.dig(Lti::Result::AGS_EXT_SUBMISSION, :submitted_at)
+      submitted_at = params[:submittedAt] || params.dig(Lti::Result::AGS_EXT_SUBMISSION, :submitted_at)
       submitted_at_date = parse_timestamp(submitted_at)
-      future_buffer = Setting.get("ags_submitted_at_future_buffer", 1.minute.to_s).to_i.seconds
 
       if submitted_at.present? && submitted_at_date.nil?
         render_error "Provided submitted_at timestamp of #{submitted_at} not a valid timestamp", :bad_request
-      elsif submitted_at_date.present? && submitted_at_date > Time.zone.now + future_buffer
+      elsif submitted_at_date.present? && submitted_at_date > 1.minute.from_now
         render_error "Provided submitted_at timestamp of #{submitted_at} in the future", :bad_request
       end
     end
 
     def verify_valid_score_maximum
-      return if ignore_score?
+      return if reset_score?
 
       if params.key?(:scoreMaximum)
         if params[:scoreMaximum].to_f >= 0
@@ -339,7 +366,7 @@ module Lti::IMS
     end
 
     def verify_valid_score_given
-      return if ignore_score?
+      return if reset_score?
 
       if params.key?(:scoreGiven)
         return if params[:scoreGiven].to_f >= 0
@@ -373,6 +400,10 @@ module Lti::IMS
       ActiveRecord::Type::Boolean.new.cast(scores_params.dig(:extensions, Lti::Result::AGS_EXT_SUBMISSION, :prioritize_non_tool_grade))
     end
 
+    def preserve_score?
+      ActiveRecord::Type::Boolean.new.cast(scores_params.dig(:extensions, Lti::Result::AGS_EXT_SUBMISSION, :preserve_score))
+    end
+
     def submission_has_score?
       line_item.assignment.find_or_create_submission(user)&.score&.present?
     end
@@ -380,21 +411,22 @@ module Lti::IMS
     def score_submission
       return unless line_item.assignment_line_item?
 
-      if ignore_score?
+      if preserve_score? || reset_score?
         submission = line_item.assignment.find_or_create_submission(user)
-        submission.update(score: nil)
+        submission.update(score: nil) unless preserve_score?
       elsif prioritize_non_tool_grade? && submission_has_score?
         submission = line_item.assignment.find_or_create_submission(user)
       else
         submission_hash = { grader_id: -tool.id }
         if line_item.assignment.grading_type == "pass_fail"
           # This reflects behavior/logic in Basic Outcomes.
-          submission_hash[:grade] = scores_params[:result_score].to_f > 0 ? "pass" : "fail"
+          submission_hash[:grade] = (scores_params[:result_score].to_f > 0) ? "pass" : "fail"
         else
           submission_hash[:score] = submission_score
         end
         submission = line_item.assignment.grade_student(user, submission_hash).first
       end
+
       submission.add_comment(comment: scores_params[:comment], skip_author: true) if scores_params[:comment].present?
       submission
     end
@@ -402,7 +434,7 @@ module Lti::IMS
     def submit_homework(attachments = [])
       return unless line_item.assignment_line_item?
 
-      submission_opts = { submitted_at: submitted_at }
+      submission_opts = { submitted_at: }
       if !submission_type.nil? && SCORE_SUBMISSION_TYPES.include?(submission_type)
         submission_opts[:submission_type] = submission_type
         case submission_type
@@ -424,7 +456,7 @@ module Lti::IMS
         submission = score_submission
         if result.nil?
           @_result = line_item.results.create!(
-            scores_params.merge(created_at: timestamp, updated_at: timestamp, user: user, submission: submission)
+            scores_params.merge(created_at: timestamp, updated_at: timestamp, user:, submission:)
           )
         else
           result.update!(scores_params.merge(updated_at: timestamp))
@@ -451,8 +483,8 @@ module Lti::IMS
           check_quota: false, # we don't check quota when uploading a file for assignment submission
           folder: user.submissions_folder(context), # organize attachment into the course submissions folder
           assignment: line_item.assignment,
-          submit_assignment: submit_assignment,
-          precreate_attachment: precreate_attachment,
+          submit_assignment:,
+          precreate_attachment:,
           return_json: true,
           override_logged_in_user: true,
           override_current_user_with: user,
@@ -474,7 +506,7 @@ module Lti::IMS
         progress_url =
           if line_item.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
             lti_progress_show_url(
-              host: line_item.root_account.domain,
+              host: line_item.root_account.environment_specific_domain,
               id: preflight_json[:progress][:id]
             )
           else
@@ -488,8 +520,8 @@ module Lti::IMS
             title: item[:title],
             progress: progress_url
           },
-          preflight_json: preflight_json,
-          attachment: attachment
+          preflight_json:,
+          attachment:
         }
       end
     end
@@ -521,12 +553,12 @@ module Lti::IMS
       line_item.score_maximum / scores_params[:result_maximum].to_f
     end
 
-    def ignore_score?
+    def reset_score?
       Lti::Result::ACCEPT_GIVEN_SCORE_TYPES.exclude?(params[:gradingProgress]) || params[:scoreGiven].nil?
     end
 
     def result
-      @_result ||= Lti::Result.active.where(line_item: line_item, user: user).first
+      @_result ||= Lti::Result.active.where(line_item:, user:).first
     end
 
     def timestamp
@@ -536,7 +568,7 @@ module Lti::IMS
     def result_url
       if line_item.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
         lti_result_show_url(
-          host: line_item.root_account.domain,
+          host: line_item.root_account.environment_specific_domain,
           course_id: context.id,
           line_item_id: line_item.id,
           id: result.id
@@ -565,7 +597,7 @@ module Lti::IMS
     end
 
     def submitted_at
-      submitted_at = scores_params.dig(:extensions, Lti::Result::AGS_EXT_SUBMISSION, :submitted_at)
+      submitted_at = params[:submittedAt] || scores_params.dig(:extensions, Lti::Result::AGS_EXT_SUBMISSION, :submitted_at)
       parse_timestamp(submitted_at)
     end
 

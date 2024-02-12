@@ -36,8 +36,7 @@ describe Quizzes::QuizExtensionSerializer do
     }
 
     ActiveModel::FakeController.new(options).tap do |controller|
-      allow(controller).to receive(:session).and_return session
-      allow(controller).to receive(:context).and_return context
+      allow(controller).to receive_messages(session:, context:)
     end
   end
 
@@ -54,9 +53,9 @@ describe Quizzes::QuizExtensionSerializer do
 
   let :serializer do
     Quizzes::QuizExtensionSerializer.new(quiz_extension,
-                                         controller: controller,
+                                         controller:,
                                          scope: user,
-                                         session: session)
+                                         session:)
   end
 
   before do

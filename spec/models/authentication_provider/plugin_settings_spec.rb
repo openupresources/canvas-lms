@@ -43,10 +43,10 @@ describe AuthenticationProvider::PluginSettings do
   describe ".globally_configured?" do
     it "chains to the plugin being enabled" do
       allow(plugin).to receive(:enabled?).and_return(false)
-      expect(klass.globally_configured?).to eq false
+      expect(klass.globally_configured?).to be false
 
       allow(plugin).to receive(:enabled?).and_return(true)
-      expect(klass.globally_configured?).to eq true
+      expect(klass.globally_configured?).to be true
     end
   end
 
@@ -54,14 +54,14 @@ describe AuthenticationProvider::PluginSettings do
     context "with plugin config" do
       it "returns nothing" do
         allow(plugin).to receive(:enabled?).and_return(true)
-        expect(klass.recognized_params).to eq %i[mfa_required skip_internal_mfa]
+        expect(klass.recognized_params).to eq %i[mfa_required skip_internal_mfa otp_via_sms]
       end
     end
 
     context "without plugin config" do
       it "returns plugin params" do
         allow(plugin).to receive(:enabled?).and_return(false)
-        expect(klass.recognized_params).to eq %i[auth_host noninherited_method mfa_required skip_internal_mfa]
+        expect(klass.recognized_params).to eq %i[auth_host noninherited_method mfa_required skip_internal_mfa otp_via_sms]
       end
     end
   end

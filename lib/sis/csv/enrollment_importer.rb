@@ -27,7 +27,14 @@ module SIS
       end
 
       def self.identifying_fields
-        %w[course_id section_id user_id user_integration_id role role_id associated_user_id].freeze
+        %w[course_id
+           section_id
+           user_id
+           user_integration_id
+           role
+           role_id
+           associated_user_id
+           temporary_enrollment_source_user_id].freeze
       end
 
       # expected columns
@@ -36,7 +43,7 @@ module SIS
         messages = []
         count = SIS::EnrollmentImporter.new(@root_account, importer_opts).process(messages) do |importer|
           csv_rows(csv, index, count) do |row|
-            importer.add_enrollment(create_enrollment(row, messages, csv: csv))
+            importer.add_enrollment(create_enrollment(row, messages, csv:))
           rescue ImportError => e
             messages << SisBatch.build_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
           end
@@ -47,7 +54,7 @@ module SIS
 
       def persist_errors(csv, messages)
         errors = messages.map do |message|
-          (message.is_a? SisBatchError) ? message : SisBatch.build_error(csv, message, sis_batch: @batch)
+          message.is_a?(SisBatchError) ? message : SisBatch.build_error(csv, message, sis_batch: @batch)
         end
         SisBatch.bulk_insert_sis_errors(errors)
       end
@@ -63,12 +70,13 @@ module SIS
           role: row["role"],
           status: row["status"],
           associated_user_id: row["associated_user_id"],
+          temporary_enrollment_source_user_id: row["temporary_enrollment_source_user_id"],
           root_account_id: row["root_account"],
           role_id: row["role_id"],
           limit_section_privileges: row["limit_section_privileges"],
           notify: row["notify"],
           lineno: row["lineno"],
-          csv: csv
+          csv:
         )
 
         begin

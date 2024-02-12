@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2016 - present Instructure, Inc.
  *
@@ -30,7 +31,7 @@
 // refreshGradesCb executes the normal speedGrader refresh grades
 // actions, plus whatever callback is passed in as an argument
 
-import type {Submission} from './jquery/speed_grader.d'
+import type {Submission} from '../../api.d'
 import $ from 'jquery'
 
 function sendPostMessage($iframe_holder, message) {
@@ -61,7 +62,7 @@ function setup(EG, $iframe_holder, registerCb, refreshGradesCb, speedGraderWindo
     originalSubmission: Submission,
     numRequests: number
   ) {
-    const maxRequests = speedGraderWindow.ENV.speedgrader_grade_sync_max_attempts || 20
+    const maxRequests = 20
     if (numRequests >= maxRequests) return false
     if (!originalSubmission.graded_at) return !submission.graded_at
     if (!submission.graded_at) return true

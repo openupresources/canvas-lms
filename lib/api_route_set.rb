@@ -28,12 +28,12 @@ class ApiRouteSet
   end
   attr_accessor :mapper
 
-  def self.draw(router, prefix = self.prefix, &block)
+  def self.draw(router, prefix = self.prefix, &)
     @@prefixes ||= Set.new
     @@prefixes << prefix
     route_set = new(prefix)
     route_set.mapper = router
-    route_set.instance_eval(&block)
+    route_set.instance_eval(&)
   ensure
     route_set.mapper = nil
   end
@@ -125,8 +125,8 @@ class ApiRouteSet
     # unfortunately, this means that api v1 can't match a sis id that ends with
     # .json -- but see the api docs for info on sending hex-encoded sis ids,
     # which allows any string.
-    ID_REGEX = %r{(?:[^/?.]|\.(?!json(?:\z|[/?])))+}.freeze
-    ID_PARAM = /^:(id|\w+_id)$/.freeze
+    ID_REGEX = %r{(?:[^/?.]|\.(?!json(?:\z|[/?])))+}
+    ID_PARAM = /^:(id|\w+_id)$/
 
     def self.prefix
       "/api/v1"
@@ -142,4 +142,19 @@ class ApiRouteSet
       super(method, path, opts)
     end
   end
+
+  # Hack around rails routing deficiency: setting constraints on a path segment
+  # not only affects parsing, but also causes constructing a url to fail if the
+  # segment doesn't match the constraint. (see git blame, INTEROP-6659, and
+  # https://github.com/rails/rails/issues/43466)
+  #
+  # NOTE: using rails helpers with IDs ending in ".json" will result in
+  # incorrect/invalid URLs; a fix would require even more monkey-patching.
+  module ConstraintsBugHackRequirements
+    def requirements
+      @_constraints_bug_hack_requirements ||= super.reject { |_k, v| v.equal? ApiRouteSet::V1::ID_REGEX } # rubocop:disable Naming/MemoizedInstanceVariableName
+    end
+  end
+
+  ActionDispatch::Journey::Path::Pattern.prepend ConstraintsBugHackRequirements
 end

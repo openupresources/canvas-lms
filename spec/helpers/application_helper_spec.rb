@@ -157,7 +157,7 @@ describe ApplicationHelper do
       end
 
       it "builds a whole time tag with a useful title showing the timezone offset if theres a context" do
-        tag = friendly_datetime(Time.now, context: context)
+        tag = friendly_datetime(Time.now, context:)
         expect(tag).to match(%r{^<time.*</time>$})
         expect(tag).to match(/data-html-tooltip-title=/)
         expect(tag).to match(/Local: Mar 13 at 1:12am/)
@@ -165,7 +165,7 @@ describe ApplicationHelper do
       end
 
       it "can produce an alternate tag type" do
-        tag = friendly_datetime(Time.now, context: context, tag_type: :span)
+        tag = friendly_datetime(Time.now, context:, tag_type: :span)
         expect(tag).to match(%r{^<span.*</span>$})
         expect(tag).to match(/data-html-tooltip-title=/)
         expect(tag).to match(/Local: Mar 13 at 1:12am/)
@@ -173,7 +173,7 @@ describe ApplicationHelper do
       end
 
       it "produces no tooltip for a nil datetime" do
-        tag = friendly_datetime(nil, context: context)
+        tag = friendly_datetime(nil, context:)
         expect(tag).to eq "<time></time>"
       end
     end
@@ -425,30 +425,14 @@ describe ApplicationHelper do
           it "justs include domain root account's when there is no context or @current_user" do
             output = helper.include_account_js
             expect(output).to have_tag "script"
-            expect(output).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+            expect(output).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>")
           end
 
           it "loads custom js even for high contrast users" do
             @current_user = user_factory
             user_factory.enable_feature!(:high_contrast)
             output = helper.include_account_js
-            expect(output).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+            expect(output).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>")
           end
 
           it "includes granchild, child, and root when viewing the grandchild or any course or group in it" do
@@ -456,15 +440,7 @@ describe ApplicationHelper do
             group = course.groups.create!
             [@grandchild_account, course, group].each do |context|
               @context = context
-              expect(helper.include_account_js).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\", \"https://example.com/child/account.js\", \"https://example.com/grandchild/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+              expect(helper.include_account_js).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>\n  <script src=\"https://example.com/child/account.js\" defer=\"defer\"></script>\n  <script src=\"https://example.com/grandchild/account.js\" defer=\"defer\"></script>")
             end
           end
         end
@@ -478,9 +454,14 @@ describe ApplicationHelper do
       expect(helper.help_link_classes).to eq "help_dialog_trigger"
     end
 
+    it "returns the default_support_url setting if set" do
+      Setting.set("default_support_url", "http://help.example.com")
+      expect(helper.help_link_url).to eq "http://help.example.com"
+    end
+
     it "overrides default help link with the configured support url" do
       support_url = "http://instructure.com"
-      Account.default.update_attribute(:settings, { support_url: support_url })
+      Account.default.update_attribute(:settings, { support_url: })
       helper.instance_variable_set(:@domain_root_account, Account.default)
 
       expect(helper.support_url).to eq support_url
@@ -513,7 +494,7 @@ describe ApplicationHelper do
       key2 = collection_cache_key(collection)
       expect(key1).to eq key2
       # verify it's not overly long
-      expect(key1.length).to be <= 40
+      expect(key1.length).to be <= 128
 
       User.where(id: collection[1]).update_all(updated_at: 1.hour.ago)
       collection[1].reload
@@ -872,7 +853,7 @@ describe ApplicationHelper do
     end
 
     it "returns nil if not set" do
-      expect(file_access_user).to be nil
+      expect(file_access_user).to be_nil
     end
   end
 
@@ -916,7 +897,7 @@ describe ApplicationHelper do
       end
 
       it "returns nil if neither set" do
-        expect(file_access_real_user).to be nil
+        expect(file_access_real_user).to be_nil
       end
     end
   end
@@ -935,7 +916,7 @@ describe ApplicationHelper do
       end
 
       it "returns nil without @access_token set" do
-        expect(file_access_developer_key).to be nil
+        expect(file_access_developer_key).to be_nil
       end
     end
 
@@ -951,7 +932,7 @@ describe ApplicationHelper do
       end
 
       it "returns nil if developer key in session not set" do
-        expect(file_access_developer_key).to eql nil
+        expect(file_access_developer_key).to be_nil
       end
     end
   end
@@ -979,7 +960,7 @@ describe ApplicationHelper do
       end
 
       it "returns nil if root account in session not set" do
-        expect(file_access_root_account).to eql nil
+        expect(file_access_root_account).to be_nil
       end
     end
   end
@@ -1013,7 +994,7 @@ describe ApplicationHelper do
       end
 
       it "returns nil if no host in the session" do
-        expect(file_access_oauth_host).to eql nil
+        expect(file_access_oauth_host).to be_nil
       end
     end
   end
@@ -1066,9 +1047,9 @@ describe ApplicationHelper do
       let(:request) { double("request", host_with_port: current_host) }
 
       it "creates a public authenticator" do
-        expect(file_authenticator.user).to be nil
-        expect(file_authenticator.acting_as).to be nil
-        expect(file_authenticator.oauth_host).to be nil
+        expect(file_authenticator.user).to be_nil
+        expect(file_authenticator.acting_as).to be_nil
+        expect(file_authenticator.oauth_host).to be_nil
       end
     end
 
@@ -1126,9 +1107,9 @@ describe ApplicationHelper do
 
       it "creates a public authenticator" do
         authenticator = file_authenticator
-        expect(authenticator.user).to be nil
-        expect(authenticator.acting_as).to be nil
-        expect(authenticator.oauth_host).to be nil
+        expect(authenticator.user).to be_nil
+        expect(authenticator.acting_as).to be_nil
+        expect(authenticator.oauth_host).to be_nil
       end
     end
   end
@@ -1207,16 +1188,16 @@ describe ApplicationHelper do
 
         helper.add_csp_for_root
         helper.include_custom_meta_tags
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' localhost root_account.test root_account2.test; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; "
         expect(headers).to_not have_key("Content-Security-Policy-Report-Only")
-        expect(js_env[:csp]).to eq "frame-src 'self' localhost root_account.test root_account2.test; script-src 'self' 'unsafe-eval' 'unsafe-inline' localhost root_account.test root_account2.test; object-src 'self' localhost root_account.test root_account2.test; "
+        expect(js_env[:csp]).to eq "frame-src 'self' localhost root_account.test root_account2.test blob:; script-src 'self' 'unsafe-eval' 'unsafe-inline' localhost root_account.test root_account2.test; object-src 'self' localhost root_account.test root_account2.test; "
       end
 
       it "includes the report URI" do
         allow(helper).to receive(:csp_report_uri).and_return("; report-uri https://somewhere/")
         helper.add_csp_for_root
         helper.include_custom_meta_tags
-        expect(headers["Content-Security-Policy-Report-Only"]).to eq "frame-src 'self' localhost root_account.test root_account2.test; report-uri https://somewhere/; "
+        expect(headers["Content-Security-Policy-Report-Only"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; report-uri https://somewhere/; "
       end
 
       it "includes the report URI when active" do
@@ -1224,25 +1205,29 @@ describe ApplicationHelper do
         account.enable_csp!
         helper.add_csp_for_root
         helper.include_custom_meta_tags
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' localhost root_account.test root_account2.test; report-uri https://somewhere/; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; report-uri https://somewhere/; "
       end
 
       it "includes canvadocs domain if enabled" do
         account.enable_csp!
 
-        allow(Canvadocs).to receive(:enabled?).and_return(true)
-        allow(Canvadocs).to receive(:config).and_return("base_url" => "https://canvadocs.instructure.com/1")
+        allow(Canvadocs).to receive_messages(
+          enabled?: true,
+          config: { "base_url" => "https://canvadocs.instructure.com/1" }
+        )
         helper.add_csp_for_root
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' canvadocs.instructure.com localhost root_account.test root_account2.test; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: canvadocs.instructure.com localhost root_account.test root_account2.test; "
       end
 
       it "includes inst_fs domain if enabled" do
         account.enable_csp!
 
-        allow(InstFS).to receive(:enabled?).and_return(true)
-        allow(InstFS).to receive(:app_host).and_return("https://inst_fs.instructure.com")
+        allow(InstFS).to receive_messages(
+          enabled?: true,
+          app_host: "https://inst_fs.instructure.com"
+        )
         helper.add_csp_for_root
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' inst_fs.instructure.com localhost root_account.test root_account2.test; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: inst_fs.instructure.com localhost root_account.test root_account2.test; "
       end
     end
   end
@@ -1405,6 +1390,24 @@ describe ApplicationHelper do
         expect(js_env).to have_key :IMPROVED_OUTCOMES_MANAGEMENT
         expect(js_env[:IMPROVED_OUTCOMES_MANAGEMENT]).to be(false)
       end
+    end
+  end
+
+  describe "context_user_name" do
+    before :once do
+      user_factory(short_name: "User Name")
+    end
+
+    it "accepts a user" do
+      expect(context_user_name(Account.default, @user)).to eq "User Name"
+    end
+
+    it "accepts a user_id" do
+      expect(context_user_name(Account.default, @user.id)).to eq "User Name"
+    end
+
+    it "returns nil if supplied the id of a nonexistent user" do
+      expect(context_user_name(Account.default, 0)).to be_nil
     end
   end
 end

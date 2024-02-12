@@ -9,17 +9,14 @@ Gem::Specification.new do |spec|
 
   spec.files         = Dir.glob("{lib,spec}/**/*") + %w[test.sh]
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
-  spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "rails", ">= 3.2"
-  spec.add_runtime_dependency  "google-api-client", "0.8.2"
+  spec.add_runtime_dependency "google-apis-drive_v3", "~> 0.43"
 
   spec.add_development_dependency "bundler"
-  spec.add_development_dependency "byebug"
+  spec.add_development_dependency "debug"
   spec.add_development_dependency "rake"
-  spec.add_development_dependency "rspec", "~> 3.5.0"
+  spec.add_development_dependency "rspec", "~> 3.12"
   spec.add_development_dependency "timecop"
   spec.add_development_dependency "webmock"
-  spec.add_dependency "faraday", "~> 0.17.3"
 end

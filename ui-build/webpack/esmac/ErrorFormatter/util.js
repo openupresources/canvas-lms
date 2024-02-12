@@ -72,6 +72,7 @@ const findPackageJSON = (file, names) => {
     return null
   }
 
+  // eslint-disable-next-line import/no-dynamic-require
   const pjson = require(pjsonFile)
 
   if (pjson.name && names.includes(pjson.name)) {

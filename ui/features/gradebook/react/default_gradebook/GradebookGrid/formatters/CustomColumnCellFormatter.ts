@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -16,7 +17,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 
 export default class CustomColumnCellFormatter {
   render(_row, _cell, content /* value */, _columnDef, _dataContext) {

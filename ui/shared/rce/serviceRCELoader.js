@@ -17,7 +17,7 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {reduce, pick} from 'lodash'
 import editorOptions from './editorOptions'
 import loadEventListeners from './loadEventListeners'
 import polyfill from './polyfill'
@@ -121,7 +121,7 @@ const RCELoader = {
    */
   _attrsToMirror(textarea) {
     const validAttrs = ['name']
-    const attrs = _.reduce(
+    const attrs = reduce(
       textarea.attributes,
       (memo, attr) => {
         memo[attr.name] = attr.value
@@ -130,7 +130,7 @@ const RCELoader = {
       {}
     )
 
-    return _.pick(attrs, validAttrs)
+    return pick(attrs, validAttrs)
   },
 
   /**
@@ -153,7 +153,7 @@ const RCELoader = {
     }
 
     // TODO: let client pass autosave_enabled in as a prop from the outside
-    //       Assignmens2 student view is going to be doing their own autosave
+    //       Assignments2 student view is going to be doing their own autosave
     const autosave = {
       enabled: true,
       maxAge: Number.isNaN(ENV.rce_auto_save_max_age_ms) ? 3600000 : ENV.rce_auto_save_max_age_ms,
@@ -179,7 +179,15 @@ const RCELoader = {
       features: ENV?.FEATURES || {},
       flashAlertTimeout: ENV?.flashAlertTimeout || 10000,
       timezone: ENV?.TIMEZONE,
+      userCacheKey: ENV?.user_cache_key,
       canvasOrigin: ENV?.DEEP_LINKING_POST_MESSAGE_ORIGIN || window.location?.origin || '',
+      externalToolsConfig: {
+        ltiIframeAllowances: window.ENV?.LTI_LAUNCH_FRAME_ALLOWANCES,
+        isA2StudentView: window.ENV?.a2_student_view,
+        maxMruTools: window.ENV?.MAX_MRU_LTI_TOOLS,
+        resourceSelectionUrlOverride:
+          $('#context_external_tool_resource_selection_url').attr('href') || null,
+      },
     }
   },
 }

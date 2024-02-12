@@ -505,6 +505,22 @@ describe SplitUsers do
       expect(submission2.reload.user).to eq source_user
     end
 
+    it "swaps back unsubmitted/deleted submissions conflicting with existing assignments" do
+      assignment = course1.assignments.create!(title: "some assignment",
+                                               submission_types: "online_text_entry",
+                                               points_possible: 10,
+                                               workflow_state: "published")
+      course1.enroll_student(restored_user, enrollment_state: "active")
+
+      UserMerge.from(restored_user).into(source_user)
+      unsubmitted_submission = assignment.find_or_create_submission(restored_user)
+      real_submission = assignment.submit_homework(source_user, submission_type: "online_text_entry", body: "zarf")
+      SplitUsers.split_db_users(source_user)
+
+      expect(real_submission.reload.user).to eq restored_user
+      expect(unsubmitted_submission.reload.user).to eq source_user
+    end
+
     it "does not blow up on deleted courses" do
       course1.enroll_student(restored_user, enrollment_state: "active")
       UserMerge.from(restored_user).into(source_user)
@@ -620,6 +636,22 @@ describe SplitUsers do
         expect(submission2.reload.user).to eq shard1_source_user
       end
 
+      it "swaps out conflicting unsubmitted/deleted submissions across shards" do
+        assignment = shard1_course.assignments.create!(title: "some assignment",
+                                                       submission_types: "online_text_entry",
+                                                       points_possible: 10,
+                                                       workflow_state: "published")
+        shard1_course.enroll_student(restored_user, enrollment_state: "active")
+
+        UserMerge.from(restored_user).into(shard1_source_user)
+        unsubmitted_submission = assignment.find_or_create_submission(restored_user)
+        real_submission = assignment.submit_homework(shard1_source_user, submission_type: "online_text_entry", body: "zarf")
+        SplitUsers.split_db_users(shard1_source_user)
+
+        expect(real_submission.reload.user).to eq restored_user
+        expect(unsubmitted_submission.reload.user).to eq shard1_source_user
+      end
+
       it "restores admins to the original state" do
         admin = account1.account_users.create(user: restored_user)
         shard1_source_user.associate_with_shard(sub_account.shard)
@@ -637,7 +669,7 @@ describe SplitUsers do
         pseudonym1 = restored_user.pseudonyms.create!(unique_id: "sam1@example.com")
         @shard1.activate do
           account = Account.create!
-          @pseudonym2 = shard1_source_user.pseudonyms.create!(account: account, unique_id: "sam1@example.com")
+          @pseudonym2 = shard1_source_user.pseudonyms.create!(account:, unique_id: "sam1@example.com")
           UserMerge.from(restored_user).into(shard1_source_user)
           SplitUsers.split_db_users(shard1_source_user)
         end

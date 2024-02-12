@@ -30,7 +30,7 @@ describe ContentMigration do
       @cm.content_export = ce
       ce.save!
 
-      expect(@cm.progress).to eq nil
+      expect(@cm.progress).to be_nil
       @cm.workflow_state = "exporting"
 
       ce.progress = 10
@@ -66,6 +66,42 @@ describe ContentMigration do
       allow(Delayed::Worker).to receive(:current_job).and_return(double("Delayed::Job", id: 123))
       run_course_copy
       expect(@cm.reload.migration_settings[:job_ids]).to eq([123])
+    end
+
+    it "migrates course home links in rich content on copy" do
+      course_model
+
+      page = @copy_from.wiki_pages.create!(title: "page 1", body: %(<p><a title="Home" href="/courses/#{@copy_from.id}?wrap=1">Home</a></p><p><a title="Home" href="/courses/#{@copy_from.id}">Home 2</a></p>))
+
+      run_course_copy
+
+      new_page = @copy_to.wiki_pages.where(migration_id: mig_id(page)).first
+      expect(new_page).not_to be_nil
+      expect(new_page.body).to match(%r{<p><a title="Home" href="/courses/#{@copy_to.id}/?\?wrap=1">Home</a></p><p><a title="Home" href="/courses/#{@copy_to.id}/?">Home 2</a></p>})
+    end
+
+    context "with precise_link_replacements FF ON" do
+      before { Account.site_admin.enable_feature! :precise_link_replacements }
+
+      it "leaves non-href/non-src 'links' untouched" do
+        course_model
+        @copy_from.wiki_pages.create!(
+          title: "page 1",
+          body: <<~HTML)
+            /courses/#{@copy_from.id}/pages/1
+            <a href="/courses/#{@copy_from.id}/pages/1">http://fake.dom/courses/#{@copy_from.id}/pages/1</a>
+            <a href="/courses/#{@copy_from.id}/pages/1">/courses/#{@copy_from.id}/pages/1</a>
+          HTML
+
+        run_course_copy
+        expected_resulting_body = <<~HTML
+          /courses/#{@copy_from.id}/pages/1
+          <a href="/courses/#{@copy_to.id}/pages/1">/courses/#{@copy_to.id}/pages/1</a>
+          <a href="/courses/#{@copy_to.id}/pages/1">/courses/#{@copy_to.id}/pages/1</a>
+        HTML
+        dest_page = @copy_to.wiki_pages.where(migration_id: mig_id(@copy_from.wiki_pages.last)).first.body
+        expect(dest_page.delete("\n")).to eq(expected_resulting_body.delete("\n"))
+      end
     end
 
     it "migrates syllabus links on copy" do
@@ -120,7 +156,7 @@ describe ContentMigration do
 
       run_course_copy
 
-      expect(@copy_to.syllabus_body).to eq nil
+      expect(@copy_to.syllabus_body).to be_nil
     end
 
     it "merges locked files and retain correct html links" do
@@ -142,7 +178,7 @@ describe ContentMigration do
     it "preserves links to files in poorly named folders" do
       rf = Folder.root_folders(@copy_from).first
       folder = rf.sub_folders.create!(name: "course files", context: @copy_from)
-      att = Attachment.create!(filename: "test.txt", display_name: "testing.txt", uploaded_data: StringIO.new("file"), folder: folder, context: @copy_from)
+      att = Attachment.create!(filename: "test.txt", display_name: "testing.txt", uploaded_data: StringIO.new("file"), folder:, context: @copy_from)
       topic = @copy_from.discussion_topics.create!(title: "some topic", message: "<img src='/courses/#{@copy_from.id}/files/#{att.id}/preview'>")
 
       run_course_copy
@@ -233,8 +269,8 @@ describe ContentMigration do
     end
 
     it "shan't interweave module order when restoring deleting modules in the destination course neither" do
-      ["A", "B"].map { |name| @copy_to.context_modules.create!(name: name) }
-      ["C", "D"].map { |name| @copy_from.context_modules.create!(name: name) }
+      ["A", "B"].map { |name| @copy_to.context_modules.create!(name:) }
+      ["C", "D"].map { |name| @copy_from.context_modules.create!(name:) }
       run_course_copy
       expect(@copy_to.context_modules.ordered.pluck(:name)).to eq(%w[A B C D])
 
@@ -255,7 +291,7 @@ describe ContentMigration do
       body += "<a class='instructure_file_link' href='/courses/#{@copy_from.id}/files/#{att2.id}/download'>link</a>"
       body += "<img src='/courses/#{@copy_from.id}/files/#{img.id}/preview'>"
       dt = @copy_from.discussion_topics.create!(message: body, title: "discussion title")
-      page = @copy_from.wiki_pages.create!(title: "some page", body: body)
+      page = @copy_from.wiki_pages.create!(title: "some page", body:)
 
       run_course_copy
 
@@ -411,7 +447,7 @@ describe ContentMigration do
       expect(@copy_to.wiki_pages.where(migration_id: mig_id(wiki)).first.workflow_state).to eq "active"
       rub2 = @copy_to.rubrics.where(migration_id: mig_id(rub1)).first
       expect(rub2.workflow_state).to eq "active"
-      expect(rub2.rubric_associations.first.bookmarked).to eq true
+      expect(rub2.rubric_associations.first.bookmarked).to be true
       expect(@copy_to.created_learning_outcomes.where(migration_id: mig_id(lo)).first.workflow_state).to eq "active"
       expect(@copy_to.quizzes.where(migration_id: mig_id(quiz)).first.workflow_state).to eq "unpublished" if Qti.qti_enabled?
       expect(@copy_to.context_external_tools.where(migration_id: mig_id(tool)).first.workflow_state).to eq "public"
@@ -459,6 +495,7 @@ describe ContentMigration do
       @copy_from.allow_student_discussion_editing = false
       @copy_from.restrict_student_future_view = true
       @copy_from.restrict_student_past_view = true
+      @copy_from.restrict_quantitative_data = true
       @copy_from.show_total_grade_as_points = true
       @copy_from.organize_epub_by_content_type = true
       @copy_from.enable_offline_web_export = true
@@ -488,19 +525,19 @@ describe ContentMigration do
       run_course_copy
 
       # compare settings
-      expect(@copy_to.conclude_at).to eq nil
-      expect(@copy_to.start_at).to eq nil
-      expect(@copy_to.restrict_enrollments_to_course_dates).to eq true
+      expect(@copy_to.conclude_at).to be_nil
+      expect(@copy_to.start_at).to be_nil
+      expect(@copy_to.restrict_enrollments_to_course_dates).to be true
       expect(@copy_to.storage_quota).to eq 444
-      expect(@copy_to.hide_final_grades).to eq true
-      expect(@copy_to.grading_standard_enabled).to eq true
+      expect(@copy_to.hide_final_grades).to be true
+      expect(@copy_to.grading_standard_enabled).to be true
       gs_2 = @copy_to.grading_standards.where(migration_id: mig_id(gs)).first
       expect(gs_2.data).to eq gs.data
       expect(@copy_to.grading_standard).to eq gs_2
       expect(@copy_to.name).to eq "tocourse"
       expect(@copy_to.course_code).to eq "tocourse"
-      expect(@copy_to.syllabus_course_summary).to eq false
-      expect(@copy_to.homeroom_course).to eq true
+      expect(@copy_to.syllabus_course_summary).to be false
+      expect(@copy_to.homeroom_course).to be true
       expect(@copy_to.course_color).to eq "#123456"
       expect(@copy_to.alt_name).to eq "drama"
       expect(@copy_to.time_zone.name).to eq "Alaska"
@@ -517,7 +554,7 @@ describe ContentMigration do
       expect(rla.url).to eq "http://example.com/resource-link-url"
 
       rlb = @copy_to.lti_resource_links.find { |rl| rl.lookup_uuid == "1b302c1e-c0a2-42dc-88b6-c029699a7c7b" }
-      expect(rlb.url).to eq nil
+      expect(rlb.url).to be_nil
     end
 
     context "with prevent_course_availability_editing_by_teachers on" do
@@ -533,7 +570,7 @@ describe ContentMigration do
 
         run_course_copy
 
-        expect(@copy_to.restrict_enrollments_to_course_dates).to eq false
+        expect(@copy_to.restrict_enrollments_to_course_dates).to be false
       end
 
       it "does copy restrict_enrollments_to_course_dates for admins" do
@@ -550,7 +587,7 @@ describe ContentMigration do
 
         run_course_copy
 
-        expect(@copy_to.restrict_enrollments_to_course_dates).to eq true
+        expect(@copy_to.restrict_enrollments_to_course_dates).to be true
       end
     end
 
@@ -680,7 +717,7 @@ describe ContentMigration do
       mod1.update_attribute(:requirement_count, nil)
       run_course_copy
       expect(mod1_to.reload.require_sequential_progress).to be_falsey
-      expect(mod1_to.requirement_count).to eq nil
+      expect(mod1_to.requirement_count).to be_nil
     end
 
     it "syncs module items (even when removed) on re-copy" do
@@ -726,8 +763,10 @@ describe ContentMigration do
     end
 
     it "copies weird object links" do
-      att = Attachment.create!(filename: "test.txt", uploaded_data: StringIO.new("pixels and frames and stuff"),
-                               folder: Folder.root_folders(@copy_from).first, context: @copy_from)
+      att = Attachment.create!(filename: "test.txt",
+                               uploaded_data: StringIO.new("pixels and frames and stuff"),
+                               folder: Folder.root_folders(@copy_from).first,
+                               context: @copy_from)
       @copy_from.syllabus_body = "<object><param value=\"/courses/#{@copy_from.id}/files/#{att.id}/download\"></object>"
       @copy_from.save!
 
@@ -748,19 +787,147 @@ describe ContentMigration do
       expect(@copy_to.reload.syllabus_body).to include "/courses/#{@copy_to.id}/pages/#{page2.url}"
     end
 
-    it "re-uses kaltura media objects" do
-      expect do
+    context "kaltura media objects" do
+      before do
+        Account.site_admin.enable_feature!(:media_links_use_attachment_id)
+        kaltura_double = double("kaltura")
+        allow(kaltura_double).to receive(:startSession)
+        # rubocop:disable RSpec/ReceiveMessages
+        allow(kaltura_double).to receive(:flavorAssetGetByEntryId).and_return([
+                                                                                {
+                                                                                  isOriginal: 1,
+                                                                                  containerFormat: "mp4",
+                                                                                  fileExt: "mp4",
+                                                                                  id: "one",
+                                                                                  size: 15,
+                                                                                }
+                                                                              ])
+        allow(kaltura_double).to receive(:flavorAssetGetOriginalAsset).and_return(kaltura_double.flavorAssetGetByEntryId.first)
+        # rubocop:enable RSpec/ReceiveMessages
+        allow(CanvasKaltura::ClientV3).to receive_messages(config: true, new: kaltura_double)
+      end
+
+      it "updates media attachment links" do
         media_id = "0_deadbeef"
-        @copy_from.media_objects.create!(media_id: media_id)
+        @copy_from.media_objects.create!(media_id:)
+        att = @copy_from.attachments.where(media_entry_id: media_id).first
+        @copy_from.syllabus_body = %(<p><iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" data-media-id="#{media_id}" allowfullscreen="allowfullscreen" allow="fullscreen" src="/media_attachments_iframe/#{att.id}?type=video"></iframe></p>)
+        run_course_copy
+        new_att = @copy_to.attachments.where(migration_id: mig_id(att)).first
+        expect(@copy_to.syllabus_body).to eq @copy_from.syllabus_body.sub("/media_attachments_iframe/#{att.id}", "/media_attachments_iframe/#{new_att.id}")
+      end
+
+      it "does not update media attachment links from a different course" do
+        media_id = "0_deadbeef"
+        course_with_teacher(course_name: "from course", active_all: true)
+        @course.media_objects.create!(media_id:)
+        att = @course.attachments.where(media_entry_id: media_id).first
+        @copy_from.syllabus_body = %(<p><iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" data-media-id="#{media_id}" allowfullscreen="allowfullscreen" allow="fullscreen" src="/media_attachments_iframe/#{att.id}?type=video"></iframe></p>)
+        run_course_copy
+        expect(@copy_to.attachments.count).to eq 0
+        expect(@copy_to.media_objects.count).to eq 0
+        expect(@copy_to.syllabus_body).to eq @copy_from.syllabus_body
+      end
+
+      it "does not update media attachment links from user media" do
+        media_id = "0_deadbeef"
+        att = attachment_model(display_name: "lolcats.mp4", context: @user, media_entry_id: media_id)
+        @copy_from.syllabus_body = %(<p><iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" data-media-id="#{media_id}" allowfullscreen="allowfullscreen" allow="fullscreen" src="/media_attachments_iframe/#{att.id}?type=video"></iframe></p>)
+        run_course_copy
+        expect(@copy_to.attachments.count).to eq 0
+        expect(@copy_to.media_objects.count).to eq 0
+        expect(@copy_to.syllabus_body).to eq @copy_from.syllabus_body
+      end
+
+      it "copies media attachments linked in HTML for an object copied selectively" do
+        media_id = "0_deadbeef"
+        media_id2 = "0_livecrab"
+        att = attachment_model(display_name: "lolcats.mp4", context: @copy_from, media_entry_id: media_id)
+        att2 = attachment_model(display_name: "yodawg.mp4", context: @copy_from, media_entry_id: media_id2)
+        wiki = @copy_from.wiki_pages.create!(title: "lolcat", body: %(<p><iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" data-media-id="#{media_id}" allowfullscreen="allowfullscreen" allow="fullscreen" src="/media_attachments_iframe/#{att.id}?type=video"></iframe></p>))
+        wiki2 = @copy_from.wiki_pages.create!(title: "yodawg", body: %(<p><iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" data-media-id="#{media_id2}" allowfullscreen="allowfullscreen" allow="fullscreen" src="/media_attachments_iframe/#{att2.id}?type=video"></iframe></p>))
+        @cm = ContentMigration.create!(
+          context: @copy_to,
+          user: @user,
+          source_course: @copy_from,
+          migration_type: "course_copy_importer",
+          copy_options: { wiki_pages: { mig_id(wiki) => "1", mig_id(wiki2) => "0" } }
+        )
+
+        run_course_copy
+        expect(@copy_to.attachments.where(media_entry_id: media_id)).to be_exist
+        expect(@copy_to.attachments.where(media_entry_id: media_id2)).not_to be_exist
+      end
+
+      it "re-uses kaltura media objects" do
+        media_id = "0_deadbeef"
+        @copy_from.media_objects.create!(media_id:)
         att = Attachment.create!(filename: "video.mp4", uploaded_data: StringIO.new("pixels and frames and stuff"), folder: Folder.root_folders(@copy_from).first, context: @copy_from)
         att.media_entry_id = media_id
         att.content_type = "video/mp4"
         att.save!
 
+        expect do
+          run_course_copy
+
+          expect(@copy_to.attachments.where(migration_id: mig_id(att)).first.media_entry_id).to eq media_id
+        end.to change { Delayed::Job.jobs_count(:tag, "MediaObject.add_media_files") }.by(0)
+      end
+
+      it "copies media tracks without creating new media objects" do
+        media_id = "0_deadbeef"
+        media_object = @copy_from.media_objects.create!(media_id:)
+        copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
+
+        expect do
+          run_course_copy
+
+          copy_to_attach = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+          expect(copy_to_attach.media_entry_id).to eq media_id
+          copy_to_track = copy_to_attach.media_tracks.first
+          expect(copy_to_track.slice(:media_object_id, :locale).values).to eq [media_object.id, "en"]
+          expect(copy_to_track.id).not_to eq(copy_from_track.id)
+        end.to change { MediaTrack.count }.by(1)
+      end
+
+      it "copies media tracks from non-default media object attachments" do
+        media_id = "0_deadbeef"
+        media_object = course_factory.media_objects.create!(media_id:)
+        att = Attachment.create!(filename: "video.mp4", uploaded_data: StringIO.new("pixels and frames and stuff"), folder: Folder.root_folders(@copy_from).first, context: @copy_from)
+        att.media_entry_id = media_id
+        att.content_type = "video/mp4"
+        att.save!
+        media_track = att.media_tracks.create!(content: "en subs", media_object_id: media_object, kind: "subtitles", locale: "en", user_id: att.user_id)
+
+        expect do
+          run_course_copy
+
+          copy_to_media_track = @copy_to.attachments.where(migration_id: mig_id(att)).first.media_tracks.first
+          expect(copy_to_media_track.id).not_to eq media_track.id
+          expect(copy_to_media_track.content).to eq "en subs"
+          expect(copy_to_media_track.media_object_id).to eq media_track.media_object_id
+          expect(MediaObject.where(media_id:).count).to eq 1
+        end.to change { MediaTrack.count }.by(1)
+      end
+
+      it "doesn't crash when another type of file is linked in HTML" do
+        img_att = attachment_model(context: @copy_from, uploaded_data: stub_png_data, filename: "homework.png")
+        media_id = "0_deadbeef"
+        media_object = course_factory.media_objects.create!(media_id:)
+        att = Attachment.create!(filename: "video.mp4", uploaded_data: StringIO.new("pixels and frames and stuff"), folder: Folder.root_folders(@copy_from).first, context: @copy_from)
+        att.media_entry_id = media_id
+        att.content_type = "video/mp4"
+        att.save!
+        att.media_tracks.create!(content: "en subs", media_object_id: media_object, kind: "subtitles", locale: "en", user_id: att.user_id)
+
+        @copy_from.announcements.create!(title: "links", message: <<~HTML)
+          <p><img src="/courses/#{@copy_from.id}/files/#{img_att.id}/preview" alt="assoc_1.png" /></p>
+          <p><iframe data-media-type="video" src="/media_attachments_iframe/#{att}?type=video" data-media-id="#{media_id}"></iframe></p>
+        HTML
         run_course_copy
 
-        expect(@copy_to.attachments.where(migration_id: mig_id(att)).first.media_entry_id).to eq media_id
-      end.to change { Delayed::Job.jobs_count(:tag, "MediaObject.add_media_files") }.by(0)
+        expect(@copy_to.attachments.find_by(filename: "video.mp4").media_tracks.length).to eq 1
+      end
     end
 
     it "imports calendar events" do
@@ -781,14 +948,19 @@ describe ContentMigration do
       cal3 = @copy_from.calendar_events.create!(title: "deleted event")
       cal3.destroy
 
+      series_uuid = "8233ffdc-9067-4eaf-a726-19c3718dab29"
+      rrule = "FREQ=DAILY;INTERVAL=1;UNTIL=20241001T055959Z"
+      cal4 = @copy_from.calendar_events.create!(series_uuid:, rrule:, series_head: true)
+      cal5 = @copy_from.calendar_events.create!(series_uuid:, rrule:)
+
       run_course_copy
 
-      expect(@copy_to.calendar_events.count).to eq 2
+      expect(@copy_to.calendar_events.count).to eq 4
       cal_2 = @copy_to.calendar_events.where(migration_id: mig_id(cal)).first
       expect(cal_2.title).to eq cal.title
       expect(cal_2.start_at.to_i).to eq cal.start_at.to_i
       expect(cal_2.end_at.to_i).to eq cal.end_at.to_i
-      expect(cal_2.all_day).to eq true
+      expect(cal_2.all_day).to be true
       expect(cal_2.all_day_date).to eq cal.all_day_date
       cal_2.description = body_with_link % @copy_to.id
 
@@ -797,11 +969,23 @@ describe ContentMigration do
       expect(cal2_2.start_at.to_i).to eq cal2.start_at.to_i
       expect(cal2_2.end_at.to_i).to eq cal2.end_at.to_i
       expect(cal2_2.description).to eq ""
+
+      cal_4 = @copy_to.calendar_events.where(migration_id: mig_id(cal4)).first
+      expect(cal_4.series_head).to be_truthy
+
+      cal_5 = @copy_to.calendar_events.where(migration_id: mig_id(cal5)).first
+      expect(cal_5.rrule).to eq rrule
+      expect(cal_5.series_head).to be_nil
+      expect(cal_5.series_uuid).to be_truthy
+      expect(cal_5.series_uuid).to eq cal_4.series_uuid
     end
 
     it "does not leave link placeholders on catastrophic failure" do
-      att = Attachment.create!(filename: "test.txt", display_name: "testing.txt",
-                               uploaded_data: StringIO.new("file"), folder: Folder.root_folders(@copy_from).first, context: @copy_from)
+      att = Attachment.create!(filename: "test.txt",
+                               display_name: "testing.txt",
+                               uploaded_data: StringIO.new("file"),
+                               folder: Folder.root_folders(@copy_from).first,
+                               context: @copy_from)
       topic = @copy_from.discussion_topics.create!(title: "some topic", message: "<img src='/courses/#{@copy_from.id}/files/#{att.id}/preview'>")
 
       allow(Importers::WikiPageImporter).to receive(:process_migration).and_raise(ArgumentError)
@@ -820,8 +1004,11 @@ describe ContentMigration do
 
     it "is able to copy links to folders" do
       folder = Folder.root_folders(@copy_from).first.sub_folders.create!(context: @copy_from, name: "folder_1")
-      Attachment.create!(filename: "test.txt", display_name: "testing.txt",
-                         uploaded_data: StringIO.new("file"), folder: folder, context: @copy_from)
+      Attachment.create!(filename: "test.txt",
+                         display_name: "testing.txt",
+                         uploaded_data: StringIO.new("file"),
+                         folder:,
+                         context: @copy_from)
 
       topic = @copy_from.discussion_topics.create!(title: "some topic",
                                                    message: "<a href='/courses/#{@copy_from.id}/files/folder/#{folder.name}'>an ill-advised link</a>")
@@ -898,7 +1085,7 @@ describe ContentMigration do
       link_settings = { selection_width: 456, selection_height: 789 }
       tool = @copy_from.context_external_tools.create!(name: "b", url: "http://derp.derp/somethingelse", consumer_key: "12345", shared_secret: "secret")
       mod = @copy_from.context_modules.create!(name: "some module")
-      tag = mod.add_item({ id: tool.id, type: "context_external_tool", url: tool.url, link_settings: link_settings })
+      tag = mod.add_item({ id: tool.id, type: "context_external_tool", url: tool.url, link_settings: })
 
       run_course_copy
 
@@ -924,7 +1111,7 @@ describe ContentMigration do
     it "does not try to translate links to similarishly looking urls" do
       body = %(<p>link to external thing <a href="https://someotherexampledomain.com/users/what">sad</a></p>
         <p>another link to external thing <a href="https://someotherexampledomain2.com/files">so sad</a></p>)
-      page = @copy_from.wiki_pages.create!(title: "some page", body: body)
+      page = @copy_from.wiki_pages.create!(title: "some page", body:)
 
       run_course_copy
 

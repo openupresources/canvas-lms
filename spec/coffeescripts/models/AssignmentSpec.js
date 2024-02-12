@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
 import Submission from '@canvas/assignments/backbone/models/Submission'
 import DateGroup from '@canvas/date-group/backbone/models/DateGroup'
 import fakeENV from 'helpers/fakeENV'
@@ -262,25 +262,6 @@ test('returns false if record is graded', () => {
   equal(assignment.isNotGraded(), false)
 })
 
-QUnit.module('Assignment#isAssignment')
-
-test('returns true if record is not quiz,ungraded,external tool, or discussion', () => {
-  const assignment = new Assignment({name: 'foo'})
-  assignment.set('submission_types', ['online_url'])
-  equal(assignment.isAssignment(), true)
-})
-
-test('returns true if record has no submission types', () => {
-  const assignment = new Assignment({name: 'foo'})
-  equal(assignment.isAssignment(), true)
-})
-
-test('returns false if record is quiz,ungraded, external tool, or discussion', () => {
-  const assignment = new Assignment({name: 'foo'})
-  assignment.set('submission_types', ['online_quiz'])
-  equal(assignment.isAssignment(), false)
-})
-
 QUnit.module('Assignment#asignmentType as a setter')
 
 test("sets the record's submission_types to the value", () => {
@@ -471,7 +452,7 @@ test("sets the record's assignment group id", () => {
 
 QUnit.module('Assignment#canDelete', {
   setup() {
-    fakeENV.setup({current_user_roles: ['teacher']})
+    fakeENV.setup({current_user_roles: ['teacher'], current_user_is_admin: false})
   },
   teardown() {
     fakeENV.teardown()
@@ -499,7 +480,7 @@ test("returns true if 'frozen' and 'in_closed_grading_period' are false", () => 
 
 QUnit.module('Assignment#canMove as teacher', {
   setup() {
-    fakeENV.setup({current_user_roles: ['teacher']})
+    fakeENV.setup({current_user_roles: ['teacher'], current_user_is_admin: false})
   },
   teardown() {
     fakeENV.teardown()
@@ -527,7 +508,7 @@ test('returns true if grading period not closed and and group id is not locked',
 
 QUnit.module('Assignment#canMove as admin', {
   setup() {
-    fakeENV.setup({current_user_roles: ['admin']})
+    fakeENV.setup({current_user_is_admin: true})
   },
   teardown() {
     fakeENV.teardown()
@@ -555,7 +536,7 @@ test('returns true if grading period not closed and and group id is not locked',
 
 QUnit.module('Assignment#inClosedGradingPeriod as a non admin', {
   setup() {
-    fakeENV.setup({current_user_roles: ['teacher']})
+    fakeENV.setup({current_user_roles: ['teacher'], current_user_is_admin: false})
   },
   teardown() {
     fakeENV.teardown()
@@ -572,7 +553,7 @@ test("returns the value of 'in_closed_grading_period' when isAdmin is false", ()
 
 QUnit.module('Assignment#inClosedGradingPeriod as an admin', {
   setup() {
-    fakeENV.setup({current_user_roles: ['admin']})
+    fakeENV.setup({current_user_is_admin: true})
   },
   teardown() {
     fakeENV.teardown()
@@ -917,6 +898,20 @@ test("sets the record's omit_from_final_grade boolean if args passed", () => {
   ok(assignment.omitFromFinalGrade())
 })
 
+QUnit.module('Assignment#hideInGradeBook')
+
+test("gets the record's hide_in_gradebook boolean", () => {
+  const assignment = new Assignment({name: 'foo'})
+  assignment.set('hide_in_gradebook', true)
+  ok(assignment.hideInGradebook())
+})
+
+test("sets the record's hide_in_gradebook boolean if args passed", () => {
+  const assignment = new Assignment({name: 'bar'})
+  assignment.hideInGradebook(true)
+  ok(assignment.hideInGradebook())
+})
+
 QUnit.module('Assignment#toView', {
   setup() {
     fakeENV.setup({current_user_roles: ['teacher']})
@@ -1064,28 +1059,14 @@ test('includes htmlUrl', () => {
   equal(json.htmlUrl, 'http://example.com/assignments/1')
 })
 
-test('uses edit url for htmlUrl when managing a quiz_lti assignment and new_quizzes_modules_support enabled', () => {
+test('uses edit url for htmlUrl when managing a quiz_lti assignment', () => {
   const assignment = new Assignment({
     html_url: 'http://example.com/assignments/1',
     is_quiz_lti_assignment: true,
   })
   ENV.PERMISSIONS = {manage: true}
-  ENV.FLAGS = {new_quizzes_modules_support: true}
   const json = assignment.toView()
   equal(json.htmlUrl, 'http://example.com/assignments/1/edit?quiz_lti')
-  ENV.PERMISSIONS = {}
-  ENV.FLAGS = {}
-})
-
-test('uses htmlUrl when managing a quiz_lti assignment and new_quizzes_modules_support disabled', () => {
-  const assignment = new Assignment({
-    html_url: 'http://example.com/assignments/1',
-    is_quiz_lti_assignment: true,
-  })
-  ENV.PERMISSIONS = {manage: true}
-  ENV.FLAGS = {new_quizzes_modules_support: false}
-  const json = assignment.toView()
-  equal(json.htmlUrl, 'http://example.com/assignments/1')
   ENV.PERMISSIONS = {}
   ENV.FLAGS = {}
 })
@@ -1096,7 +1077,6 @@ test('uses htmlUrl when not managing a quiz_lti assignment', () => {
     is_quiz_lti_assignment: true,
   })
   ENV.PERMISSIONS = {manage: false}
-  ENV.FLAGS = {new_quizzes_modules_support: true}
   const json = assignment.toView()
   equal(json.htmlUrl, 'http://example.com/assignments/1')
   ENV.PERMISSIONS = {}

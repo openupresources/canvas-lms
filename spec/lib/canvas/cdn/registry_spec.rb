@@ -20,10 +20,10 @@
 
 require File.expand_path(File.dirname(__FILE__) + "/../../../spec_helper.rb")
 
-describe ::Canvas::Cdn::Registry do
+describe Canvas::Cdn::Registry do
   subject do
     described_class.new(
-      cache: ::Canvas::Cdn::Registry::StaticCache.new(
+      cache: Canvas::Cdn::Registry::StaticCache.new(
         gulp: @gulp_manifest || {},
         webpack: @webpack_manifest || {}
       )
@@ -34,11 +34,11 @@ describe ::Canvas::Cdn::Registry do
     it "is true when the gulp manifest is available" do
       @gulp_manifest = { "foo" => "bar" }
 
-      expect(subject.statics_available?).to eq(true)
+      expect(subject.statics_available?).to be(true)
     end
 
     it "is false otherwise" do
-      expect(subject.statics_available?).to eq(false)
+      expect(subject.statics_available?).to be(false)
     end
   end
 
@@ -46,11 +46,11 @@ describe ::Canvas::Cdn::Registry do
     it "is true when the webpack manifest is available" do
       @webpack_manifest = { "foo" => "bar" }
 
-      expect(subject.scripts_available?).to eq(true)
+      expect(subject.scripts_available?).to be(true)
     end
 
     it "is false otherwise" do
-      expect(subject.scripts_available?).to eq(false)
+      expect(subject.scripts_available?).to be(false)
     end
   end
 
@@ -68,17 +68,17 @@ describe ::Canvas::Cdn::Registry do
     it "is true given the path to an asset processed by gulp" do
       @gulp_manifest = { "images/foo.png" => "images/foo-1234.png" }
 
-      expect(subject.include?("/dist/images/foo-1234.png")).to eq(true)
-      expect(subject.include?("images/foo-1234.png")).to eq(false)
-      expect(subject.include?("images/foo.png")).to eq(false)
+      expect(subject.include?("/dist/images/foo-1234.png")).to be(true)
+      expect(subject.include?("images/foo-1234.png")).to be(false)
+      expect(subject.include?("images/foo.png")).to be(false)
     end
 
     it "is true given the path to a javascript produced by webpack" do
       @webpack_manifest = { "main" => "a-1234.js" }
 
-      expect(subject.include?("/dist/webpack-dev/a-1234.js")).to eq(true)
-      expect(subject.include?("a-1234.js")).to eq(false)
-      expect(subject.include?("main")).to eq(false)
+      expect(subject.include?("/dist/webpack-dev/a-1234.js")).to be(true)
+      expect(subject.include?("a-1234.js")).to be(false)
+      expect(subject.include?("main")).to be(false)
     end
   end
 
@@ -89,6 +89,32 @@ describe ::Canvas::Cdn::Registry do
       expect(subject.scripts_for("main")).to eq(
         [
           "/dist/webpack-dev/a-1234.js"
+        ]
+      )
+    end
+  end
+
+  describe ".entries" do
+    it "returns realpaths to entries within the bundle" do
+      @webpack_manifest = { "main" => "a-entry-1234.js" }
+
+      expect(subject.entries).to eq(
+        [
+          "/dist/webpack-dev/a-entry-1234.js"
+        ]
+      )
+    end
+
+    it "does not include .map.js files" do
+      @webpack_manifest = {
+        "main" => "a-entry-1234.js",
+        "foo" => "a-entry-1234.map.js",
+        "bar" => "a-entry-1234.js.map.js"
+      }
+
+      expect(subject.entries).to eq(
+        [
+          "/dist/webpack-dev/a-entry-1234.js"
         ]
       )
     end

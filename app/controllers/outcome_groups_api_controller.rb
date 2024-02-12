@@ -455,11 +455,13 @@ class OutcomeGroupsApiController < ApplicationController
   # @argument ratings[][points] [Integer]
   #   The points corresponding to a rating level for the embedded rubric criterion.
   #
-  # @argument calculation_method [String, "decaying_average"|"n_mastery"|"latest"|"highest"|"average"]
+  # @argument calculation_method [String, "weighted_average"|"decaying_average"|"n_mastery"|"latest"|"highest"|"average"]
   #   The new calculation method.  Defaults to "decaying_average"
+  #   if the Outcomes New Decaying Average Calculation Method FF is ENABLED
+  #   then Defaults to "weighted_average"
   #
   # @argument calculation_int [Integer]
-  #   The new calculation int.  Only applies if the calculation_method is "decaying_average" or "n_mastery". Defaults to 65
+  #   The new calculation int.  Only applies if the calculation_method is "weighted_average", "decaying_average" or "n_mastery". Defaults to 65
   #
   # @returns OutcomeLink
   #
@@ -531,8 +533,14 @@ class OutcomeGroupsApiController < ApplicationController
         return
       end
     else
-      outcome_params = params.permit(:title, :description, :mastery_points, :vendor_guid,
-                                     :display_name, :calculation_method, :calculation_int, ratings: strong_anything)
+      outcome_params = params.permit(:title,
+                                     :description,
+                                     :mastery_points,
+                                     :vendor_guid,
+                                     :display_name,
+                                     :calculation_method,
+                                     :calculation_int,
+                                     ratings: strong_anything)
       @outcome = context_create_outcome(outcome_params)
       unless @outcome.valid?
         render json: @outcome.errors, status: :bad_request
@@ -729,6 +737,14 @@ class OutcomeGroupsApiController < ApplicationController
     end
   end
 
+  def self.add_outcome_group_async(progress, target_group, source_group, partial_path)
+    copy = target_group.add_outcome_group(source_group)
+    progress.set_results(
+      outcome_group_id: copy.id,
+      outcome_group_url: "#{partial_path}/#{copy.id}"
+    )
+  end
+
   protected
 
   def can_read_outcomes
@@ -773,13 +789,4 @@ class OutcomeGroupsApiController < ApplicationController
     outcome.save
     outcome
   end
-
-  def self.add_outcome_group_async(progress, target_group, source_group, partial_path)
-    copy = target_group.add_outcome_group(source_group)
-    progress.set_results(
-      outcome_group_id: copy.id,
-      outcome_group_url: "#{partial_path}/#{copy.id}"
-    )
-  end
-  private_class_method :add_outcome_group_async
 end

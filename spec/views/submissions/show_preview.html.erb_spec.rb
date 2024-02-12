@@ -59,8 +59,7 @@ describe "submissions/show_preview" do
 
     before do
       @attachment = Attachment.create!(context: @student, uploaded_data: stub_png_data, filename: "homework.png")
-      allow(Canvadocs).to receive(:enabled?).and_return(true)
-      allow(Canvadocs).to receive(:config).and_return({ a: 1 })
+      allow(Canvadocs).to receive_messages(enabled?: true, config: { a: 1 })
       allow(Canvadoc).to receive(:mime_types).and_return(@attachment.content_type)
       view_context
     end
@@ -85,7 +84,6 @@ describe "submissions/show_preview" do
     end
 
     it "includes an indicator if unread annotations exist" do
-      @course.root_account.enable_feature! :submission_feedback_indicators
       assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_upload")
       submission = assignment.submit_homework(@user, attachments: [@attachment])
       assign(:assignment, assignment)

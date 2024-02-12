@@ -91,6 +91,15 @@ describe MissingPolicyApplicator do
       )
     end
 
+    let(:custom_grade_status) do
+      admin = account_admin_user(account: @course.root_account)
+      @course.root_account.custom_grade_statuses.create!(
+        color: "#ABC",
+        name: "yolo",
+        created_by: admin
+      )
+    end
+
     let(:applicator) { described_class.new }
 
     before(:once) do
@@ -109,6 +118,21 @@ describe MissingPolicyApplicator do
       expect(submission.grade).to eql "F"
     end
 
+    describe "content participation" do
+      it "creates a content participation record after applying deductions" do
+        late_policy_missing_enabled
+        create_recent_assignment
+        submission = @course.submissions.first
+        submission.update_columns(score: nil, grade: nil, workflow_state: "unsubmitted")
+        applicator.apply_missing_deductions
+
+        expect(submission.content_participations.count).to eq 1
+        cpc = ContentParticipationCount.where(context_id: submission.course_id, user_id: submission.user_id, content_type: "Submission")
+        expect(cpc.count).to eq 1
+        expect(cpc.first.unread_count).to eq 1
+      end
+    end
+
     it 'sets the submission workflow state to "graded"' do
       late_policy_missing_enabled
       create_recent_assignment
@@ -119,6 +143,23 @@ describe MissingPolicyApplicator do
       submission.reload
 
       expect(submission.workflow_state).to eql "graded"
+    end
+
+    it "ignores otherwise missing submissions that have been marked with a custom status" do
+      late_policy_missing_enabled
+      create_recent_assignment
+      submission = @course.submissions.first
+      submission.update_columns(
+        grade: nil,
+        posted_at: nil,
+        score: nil,
+        workflow_state: "unsubmitted",
+        custom_grade_status_id: custom_grade_status.id
+      )
+
+      expect { applicator.apply_missing_deductions }.not_to change {
+        submission.reload.score
+      }.from(nil)
     end
 
     it "ignores submissions for unpublished assignments" do
@@ -171,8 +212,8 @@ describe MissingPolicyApplicator do
 
       submission = @course.submissions.first
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "does not apply deductions to assignments that went missing over 24 hours ago" do
@@ -184,8 +225,8 @@ describe MissingPolicyApplicator do
       applicator.apply_missing_deductions
       submission.reload
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "does not apply deductions to assignments in a course without a LatePolicy" do
@@ -194,8 +235,8 @@ describe MissingPolicyApplicator do
 
       submission = @course.submissions.first
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "assigns a score of zero to Complete / Incomplete assignments" do
@@ -217,8 +258,8 @@ describe MissingPolicyApplicator do
 
       submission = @course.submissions.first
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "does not apply deductions to assignments expecting on paper submissions if the due date is past" do
@@ -228,8 +269,8 @@ describe MissingPolicyApplicator do
 
       submission = @course.submissions.first
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "applies deductions to assignments expecting on paper submissions if the " \
@@ -251,8 +292,8 @@ describe MissingPolicyApplicator do
 
       submission = @course.submissions.first
 
-      expect(submission.score).to be nil
-      expect(submission.grade).to be nil
+      expect(submission.score).to be_nil
+      expect(submission.grade).to be_nil
     end
 
     it "does not change the score on missing submissions for concluded students" do
@@ -379,6 +420,32 @@ describe MissingPolicyApplicator do
         it "does not queue a delayed job when the applicator marks submissions as missing" do
           assignment.submissions.update_all(score: nil, grade: nil)
           expect(Canvas::LiveEvents).not_to receive(:delay)
+
+          applicator.apply_missing_deductions
+        end
+      end
+    end
+
+    describe "sending grade change audit events" do
+      let_once(:assignment) { create_recent_assignment }
+      before(:once) do
+        late_policy_missing_enabled
+      end
+
+      context "when the fix_missing_policy_applicator_gradebook_history flag is enabled" do
+        before do
+          Account.site_admin.enable_feature!(:fix_missing_policy_applicator_gradebook_history)
+        end
+
+        it "queues a delayed job if the applicator marks any submissions as missing" do
+          assignment.submissions.update_all(score: nil, grade: nil)
+          expect(Auditors::GradeChange).to receive(:bulk_record_submission_events).with(assignment.submissions.to_a)
+
+          applicator.apply_missing_deductions
+        end
+
+        it "does not queue a delayed job if the applicator marks no submissions as missing" do
+          expect(Auditors::GradeChange).not_to receive(:bulk_record_submission_events)
 
           applicator.apply_missing_deductions
         end

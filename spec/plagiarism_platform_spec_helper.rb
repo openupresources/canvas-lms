@@ -23,16 +23,15 @@ RSpec.shared_context "plagiarism_platform", shared_context: :metadata do
   include_context "lti2_spec_helper"
 
   let(:subscription_service) { class_double(Services::LiveEventsSubscriptionService).as_stubbed_const }
-  let(:assignment) { assignment_model(course: course) }
-  let(:assignment_two) { assignment_model(course: course) }
+  let(:assignment) { assignment_model(course:) }
+  let(:assignment_two) { assignment_model(course:) }
 
   def success_response
     double(code: 200, parsed_response: { "Id" => SecureRandom.uuid }, ok?: true)
   end
 
   before do
-    allow(subscription_service).to receive(:available?).and_return true
-    allow(subscription_service).to receive(:destroy_tool_proxy_subscription).and_return success_response
+    allow(subscription_service).to receive_messages(available?: true, destroy_tool_proxy_subscription: success_response)
     allow(subscription_service).to receive(:create_tool_proxy_subscription).and_return(
       success_response,
       success_response,

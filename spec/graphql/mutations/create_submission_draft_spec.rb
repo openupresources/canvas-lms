@@ -21,6 +21,7 @@
 require_relative "../graphql_spec_helper"
 
 RSpec.describe Mutations::CreateSubmissionDraft do
+  specs_require_sharding
   before(:once) do
     @submission = submission_model
     @attachments = [
@@ -85,8 +86,71 @@ RSpec.describe Mutations::CreateSubmissionDraft do
   end
 
   def run_mutation(opts = {}, current_user = @student)
-    result = CanvasSchema.execute(mutation_str(**opts), context: { current_user: current_user, request: ActionDispatch::TestRequest.create })
+    result = CanvasSchema.execute(mutation_str(**opts), context: { current_user:, request: ActionDispatch::TestRequest.create })
     result.to_h.with_indifferent_access
+  end
+
+  context "when an attachment has been replaced" do
+    before do
+      @attachments.first.update!(file_state: "deleted", replacement_attachment: @attachments.second)
+    end
+
+    it "returns the replacing attachment if the requested attachment has been replaced" do
+      result = run_mutation(
+        submission_id: @submission.id,
+        active_submission_type: "online_upload",
+        attempt: @submission.attempt,
+        file_ids: [@attachments.first.id]
+      )
+
+      expect(
+        result.dig(:data, :createSubmissionDraft, :errors)
+      ).to be_nil
+
+      expect(
+        result.dig(:data, :createSubmissionDraft, :submissionDraft, :attachments, 0, :_id)
+      ).to eq @attachments.second.id.to_s
+    end
+
+    it "does not return duplicates when a replacing attachment and replaced attachment are both requested" do
+      result = run_mutation(
+        submission_id: @submission.id,
+        active_submission_type: "online_upload",
+        attempt: @submission.attempt,
+        file_ids: @attachments.pluck(:id)
+      )
+
+      expect(
+        result.dig(:data, :createSubmissionDraft, :errors)
+      ).to be_nil
+
+      expect(
+        result.dig(:data, :createSubmissionDraft, :submissionDraft, :attachments).length
+      ).to eq 1
+
+      expect(
+        result.dig(:data, :createSubmissionDraft, :submissionDraft, :attachments, 0, :_id)
+      ).to eq @attachments.second.id.to_s
+    end
+
+    it "does not fetch attachments with the same local ID, but on different shard, from requested attachments" do
+      @student.associate_with_shard(@shard1)
+
+      @shard1.activate do
+        @not_requested_attachment = attachment_with_context(@student)
+        @not_requested_attachment.update!(id: @attachments.second.local_id)
+      end
+
+      result = run_mutation(
+        submission_id: @submission.id,
+        active_submission_type: "online_upload",
+        attempt: @submission.attempt,
+        file_ids: @attachments.pluck(:id)
+      )
+
+      returned_attachment_ids = result.dig(:data, :createSubmissionDraft, :submissionDraft, :attachments).pluck("_id")
+      expect(returned_attachment_ids).not_to include @not_requested_attachment.global_id.to_s
+    end
   end
 
   it "creates a new submission draft" do
@@ -194,7 +258,7 @@ RSpec.describe Mutations::CreateSubmissionDraft do
 
     expect(
       result.dig(:data, :createSubmissionDraft, :submissionDraft, :body)
-    ).to be nil
+    ).to be_nil
   end
 
   it "only updates the body when the active submission type is online_text_entry" do
@@ -212,7 +276,7 @@ RSpec.describe Mutations::CreateSubmissionDraft do
 
     expect(
       result.dig(:data, :createSubmissionDraft, :submissionDraft, :url)
-    ).to be nil
+    ).to be_nil
   end
 
   it "only updates the url when the active submission type is online_url" do
@@ -226,7 +290,7 @@ RSpec.describe Mutations::CreateSubmissionDraft do
 
     expect(
       result.dig(:data, :createSubmissionDraft, :submissionDraft, :body)
-    ).to be nil
+    ).to be_nil
 
     expect(
       result.dig(:data, :createSubmissionDraft, :submissionDraft, :url)

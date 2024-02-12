@@ -44,6 +44,48 @@ describe DeveloperKey do
     )
   end
 
+  describe "#site_admin_service_auth?" do
+    subject do
+      developer_key_not_saved.update!(key_attributes)
+      developer_key_not_saved.site_admin_service_auth?
+    end
+
+    let(:service_user) { user_model }
+    let(:root_account) { account_model }
+
+    context "when 'site_admin_service_auth' is enabled" do
+      before { Account.site_admin.enable_feature!(:site_admin_service_auth) }
+
+      context "and the service user association is not set" do
+        let(:key_attributes) { { service_user: nil } }
+
+        it { is_expected.to be false }
+      end
+
+      context "and the service user association is set" do
+        let(:key_attributes) { { service_user: } }
+
+        context "and the key is a site admin key" do
+          let(:key_attributes) { { service_user:, account: nil } }
+
+          it { is_expected.to be false }
+
+          context "and the key is an internal service" do
+            let(:key_attributes) { { service_user:, account: nil, internal_service: true } }
+
+            it { is_expected.to be true }
+          end
+        end
+
+        context "and the key is not a site admin key" do
+          let(:key_attributes) { super().merge(account: root_account) }
+
+          it { is_expected.to be false }
+        end
+      end
+    end
+  end
+
   describe "#find_cached" do
     it "raises error when not found, and caches that" do
       enable_cache do
@@ -77,11 +119,11 @@ describe DeveloperKey do
     end
 
     it "validates when public jwk is present" do
-      expect { DeveloperKey.create!(is_lti_key: true, public_jwk: public_jwk) }.to_not raise_error
+      expect { DeveloperKey.create!(is_lti_key: true, public_jwk:) }.to_not raise_error
     end
 
     it "validates when public jwk url is present" do
-      expect { DeveloperKey.create!(is_lti_key: true, public_jwk_url: public_jwk_url) }.to_not raise_error
+      expect { DeveloperKey.create!(is_lti_key: true, public_jwk_url:) }.to_not raise_error
     end
   end
 
@@ -97,7 +139,7 @@ describe DeveloperKey do
         tool = ContextExternalTool.create!(
           name: "shard 1 tool",
           workflow_state: "public",
-          developer_key: developer_key,
+          developer_key:,
           context: shard_1_account,
           url: "https://www.test.com",
           consumer_key: "key",
@@ -118,7 +160,7 @@ describe DeveloperKey do
         tool = ContextExternalTool.create!(
           name: "shard 2 tool",
           workflow_state: "public",
-          developer_key: developer_key,
+          developer_key:,
           context: shard_2_account,
           url: "https://www.test.com",
           consumer_key: "key",
@@ -284,7 +326,7 @@ describe DeveloperKey do
 
       before do
         developer_key
-        @shard1.activate { tool_configuration.update!(privacy_level: "anonymous") }
+        @shard1.activate { tool_configuration }
         shard_1_tool.update!(workflow_state: "disabled")
         shard_2_tool.update!(workflow_state: "disabled")
         subject
@@ -294,11 +336,11 @@ describe DeveloperKey do
         let(:account) { Account.site_admin }
 
         it "enables tools on shard 1" do
-          expect(shard_1_tool.reload.workflow_state).to eq "anonymous"
+          expect(shard_1_tool.reload.workflow_state).to eq "public"
         end
 
         it "enables tools on shard 2" do
-          expect(shard_2_tool.reload.workflow_state).to eq "anonymous"
+          expect(shard_2_tool.reload.workflow_state).to eq "public"
         end
       end
 
@@ -306,11 +348,24 @@ describe DeveloperKey do
         let(:account) { shard_1_tool.root_account }
 
         it "enables tools on shard 1" do
-          expect(shard_1_tool.reload.workflow_state).to eq "anonymous"
+          expect(shard_1_tool.reload.workflow_state).to eq "public"
         end
 
         it "does not enable tools on shard 2" do
           expect(shard_2_tool.reload.workflow_state).to eq "disabled"
+        end
+      end
+
+      context "privacy_level is not set on tool_configuration" do
+        let(:account) { shard_1_tool.root_account }
+        let(:tool_configuration) do
+          tc = super()
+          tc.update!(privacy_level: nil)
+          tc
+        end
+
+        it "still correctly uses privacy_level from extensions" do
+          expect(shard_1_tool.reload.workflow_state).to eq "public"
         end
       end
     end
@@ -374,12 +429,50 @@ describe DeveloperKey do
           expect(shard_1_tool.reload.workflow_state).to eq "disabled"
         end
       end
+
+      describe "when there are broken tools with no context" do
+        it "does not raise an error" do
+          tool = developer_key.context_external_tools.first
+          tool.save!
+          ContextExternalTool
+            .where(id: tool.id)
+            .update_all(context_id: Course.last&.id.to_i + 1, context_type: "Course")
+          developer_key.tool_configuration.configuration["oidc_initiation_url"] = "example.com"
+          developer_key.tool_configuration.save!
+          subject
+          run_jobs
+          failed_jobs = Delayed::Job.where("tag LIKE ?", "DeveloperKey%").where.not(last_error: nil)
+          expect(failed_jobs.to_a).to eq([])
+        end
+      end
+    end
+
+    describe "#manage_external_tools_multi_shard" do
+      context "when there is an intermittent Postgres error" do
+        it "retries the job" do
+          expect(subject).to receive(:delay).and_raise(PG::ConnectionBad)
+          expect do
+            subject.send(:manage_external_tools_multi_shard, {}, :update_tools_on_active_shard, account_model, Time.now)
+          end.to raise_error(Delayed::RetriableError)
+        end
+      end
+    end
+
+    describe "#manage_external_tools_multi_shard_in_region" do
+      context "when there is an intermittent Postgres error" do
+        it "retries the job" do
+          expect(subject).to receive(:delay).and_raise(PG::ConnectionBad)
+          expect do
+            subject.send(:manage_external_tools_multi_shard_in_region, {}, :update_tools_on_active_shard, account_model, Time.now)
+          end.to raise_error(Delayed::RetriableError)
+        end
+      end
     end
   end
 
   describe "usable_in_context?" do
     let(:account) { account_model }
-    let(:developer_key) { DeveloperKey.create!(account: account) }
+    let(:developer_key) { DeveloperKey.create!(account:) }
 
     shared_examples_for "a boolean indicating the key is usable in context" do
       subject { developer_key.usable_in_context?(context) }
@@ -391,17 +484,17 @@ describe DeveloperKey do
           developer_key.account_binding_for(account).update!(workflow_state: "on")
         end
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "when the key is not usable" do
         before { developer_key.update!(workflow_state: "deleted") }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "when the binding is not on" do
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
     end
 
@@ -413,7 +506,7 @@ describe DeveloperKey do
 
     context "when the context is a course" do
       it_behaves_like "a boolean indicating the key is usable in context" do
-        let(:context) { course_model(account: account) }
+        let(:context) { course_model(account:) }
       end
     end
   end
@@ -466,8 +559,8 @@ describe DeveloperKey do
 
   describe "sets a default value" do
     it "when visible is not specified" do
-      expect(developer_key_not_saved.valid?).to eq(true)
-      expect(developer_key_not_saved.visible).to eq(false)
+      expect(developer_key_not_saved.valid?).to be(true)
+      expect(developer_key_not_saved.visible).to be(false)
     end
 
     it "is false for site admin generated keys" do
@@ -478,7 +571,7 @@ describe DeveloperKey do
         account_id: nil
       )
 
-      expect(key.visible).to eq(false)
+      expect(key.visible).to be(false)
     end
 
     it "is true for non site admin generated keys" do
@@ -489,7 +582,7 @@ describe DeveloperKey do
         account_id: account.id
       )
 
-      expect(key.visible).to eq(true)
+      expect(key.visible).to be(true)
     end
   end
 
@@ -504,19 +597,19 @@ describe DeveloperKey do
       context 'when the kty is not "RSA"' do
         before { developer_key_saved.public_jwk["kty"] = "foo" }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context 'when the alg is not "RS256"' do
         before { developer_key_saved.public_jwk["alg"] = "foo" }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
 
       context "when required claims are missing" do
         before { developer_key_saved.update public_jwk: { foo: "bar" } }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
     end
 
@@ -559,9 +652,45 @@ describe DeveloperKey do
         If these routes must be changed, it will require a data fixup to change
         the scope attribute of any developer keys that refer to those routes.
         The list of API routes used by developer keys can be changed in
-        spec/lib/token_scopes/last_known_accepted_scopes.rb.
+        spec/lib/token_scopes/last_known_scopes.yml.
       TEXT
       expect(modified_scopes).to be_empty, error_message
+    end
+
+    it "ensures that newly added routes are included in the known scopes list" do
+      all_routes_including_plugins = Set.new(TokenScopes.api_routes.pluck(:verb, :path))
+
+      stub_const("CanvasRails::Application", TokenScopesHelper::SpecHelper::MockCanvasRails::Application)
+
+      routes_from_plugins = Set.new
+      Dir[Rails.root.join("{gems,vendor}/plugins/*/config/*routes.rb")].each do |plugin_path|
+        CanvasRails::Application.reset_routes
+        load plugin_path
+        plugin_route_set = Set.new(CanvasRails::Application.routes.routes.map do |route|
+          [route.verb, TokenScopesHelper.path_without_format(route)]
+        end)
+        routes_from_plugins = routes_from_plugins.merge(plugin_route_set)
+      end
+
+      # Take all routes, subtract the ones added in plugins (we'll look for those in their
+      # respective repos), and then omit any that are already in the known route list.
+      # If any routes remain, it must have been added after the known route list was last
+      # updated.
+      newly_added_routes = (all_routes_including_plugins - routes_from_plugins).reject! do |route|
+        TokenScopesHelper::SpecHelper.last_known_accepted_scopes.include? route
+      end
+
+      error_message = <<~TEXT
+        These routes have been added by your commit, and need to be included
+        in spec/lib/token_scopes/last_known_accepted_scopes.rb.
+        #{newly_added_routes.map { |scope| "- #{scope[0]}: #{scope[1]}" }.join("\n")}
+
+        This allows us to keep track of which API routes can be specified on a
+        developer key, so that we can avoid making breaking changes to those
+        API routes later.
+      TEXT
+
+      expect(newly_added_routes).to be_empty, error_message
     end
 
     context "when api token scoping FF is enabled" do
@@ -582,13 +711,13 @@ describe DeveloperKey do
             developer_key_not_saved
           end
 
-          it { is_expected.to eq true }
+          it { is_expected.to be true }
         end
 
         context "when a public jwk is not set" do
           let(:key) { developer_key_not_saved }
 
-          it { is_expected.to eq false }
+          it { is_expected.to be false }
         end
 
         context "when a key requires scopes but has no public jwk" do
@@ -600,7 +729,7 @@ describe DeveloperKey do
             developer_key_not_saved
           end
 
-          it { is_expected.to eq true }
+          it { is_expected.to be true }
         end
       end
 
@@ -723,8 +852,8 @@ describe DeveloperKey do
 
     context "when not site admin" do
       it "creates a binding on save" do
-        key = DeveloperKey.create!(account: account)
-        expect(key.developer_key_account_bindings.find_by(account: account)).to be_present
+        key = DeveloperKey.create!(account:)
+        expect(key.developer_key_account_bindings.find_by(account:)).to be_present
       end
 
       describe "destroy_external_tools!" do
@@ -752,7 +881,7 @@ describe DeveloperKey do
           end
 
           context "when tools are installed at the course level" do
-            let(:course) { course_model(account: account) }
+            let(:course) { course_model(account:) }
             let(:course_tool) do
               t = tool_configuration.new_external_tool(course)
               t.save!
@@ -789,7 +918,7 @@ describe DeveloperKey do
 
           let(:account) { nil }
 
-          before { developer_key_not_saved.update!(account: account) }
+          before { developer_key_not_saved.update!(account:) }
 
           it { is_expected.to eq Account.site_admin }
         end
@@ -810,6 +939,8 @@ describe DeveloperKey do
 
   describe "associations" do
     let(:developer_key_account_binding) { developer_key_saved.developer_key_account_bindings.first }
+
+    it { is_expected.to belong_to(:service_user) }
 
     it "destroys developer key account bindings when destroyed" do
       binding_id = developer_key_account_binding.id
@@ -1026,6 +1157,11 @@ describe DeveloperKey do
     expect(developer_key_not_saved).not_to be_valid
   end
 
+  it "doesn't allow non-URIs" do
+    developer_key_not_saved.redirect_uris = ["@?!"]
+    expect(developer_key_not_saved).not_to be_valid
+  end
+
   it "returns the correct count of access_tokens" do
     expect(developer_key_saved.access_token_count).to eq 0
 
@@ -1033,7 +1169,7 @@ describe DeveloperKey do
     AccessToken.create!(user: user_model, developer_key: developer_key_saved)
     AccessToken.create!(user: user_model, developer_key: developer_key_saved)
 
-    expect(developer_key_saved.access_token_count).to eq 3
+    expect(developer_key_saved.reload.access_token_count).to eq 3
   end
 
   it "returns the last_used_at value for a key" do
@@ -1128,21 +1264,21 @@ describe DeveloperKey do
     it "does not allow subdomains when it matches in redirect_uris" do
       developer_key_not_saved.redirect_uris << "http://example.com/a/b"
 
-      expect(developer_key_not_saved.redirect_domain_matches?("http://example.com/a/b")).to eq true
+      expect(developer_key_not_saved.redirect_domain_matches?("http://example.com/a/b")).to be true
 
       # other paths on the same domain are NOT ok
-      expect(developer_key_not_saved.redirect_domain_matches?("http://example.com/other")).to eq false
+      expect(developer_key_not_saved.redirect_domain_matches?("http://example.com/other")).to be false
       # sub-domains are not ok either
-      expect(developer_key_not_saved.redirect_domain_matches?("http://www.example.com/a/b")).to eq false
-      expect(developer_key_not_saved.redirect_domain_matches?("http://a.b.example.com/a/b")).to eq false
-      expect(developer_key_not_saved.redirect_domain_matches?("http://a.b.example.com/other")).to eq false
+      expect(developer_key_not_saved.redirect_domain_matches?("http://www.example.com/a/b")).to be false
+      expect(developer_key_not_saved.redirect_domain_matches?("http://a.b.example.com/a/b")).to be false
+      expect(developer_key_not_saved.redirect_domain_matches?("http://a.b.example.com/other")).to be false
     end
 
     it "requires scheme to match on lenient matches" do
       developer_key_not_saved.redirect_uri = "http://example.com/a/b"
 
-      expect(developer_key_not_saved.redirect_domain_matches?("http://www.example.com/a/b")).to eq true
-      expect(developer_key_not_saved.redirect_domain_matches?("intents://www.example.com/a/b")).to eq false
+      expect(developer_key_not_saved.redirect_domain_matches?("http://www.example.com/a/b")).to be true
+      expect(developer_key_not_saved.redirect_domain_matches?("intents://www.example.com/a/b")).to be false
     end
   end
 
@@ -1183,7 +1319,7 @@ describe DeveloperKey do
           site_admin_key = nil
 
           Account.site_admin.shard.activate do
-            site_admin_key = DeveloperKey.create!(vendor_code: vendor_code)
+            site_admin_key = DeveloperKey.create!(vendor_code:)
           end
 
           not_site_admin_shard.activate do
@@ -1192,7 +1328,7 @@ describe DeveloperKey do
         end
 
         it "finds keys in the current shard" do
-          local_key = DeveloperKey.create!(vendor_code: vendor_code, account: account_model)
+          local_key = DeveloperKey.create!(vendor_code:, account: account_model)
           expect(DeveloperKey.by_cached_vendor_code(vendor_code)).to include local_key
         end
       end

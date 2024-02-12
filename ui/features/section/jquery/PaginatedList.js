@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-// PaginatedList.coffee
+// PaginatedList.js
 // This class paginates ajax results using a 'View More' link.
 // It accepts two arguments: the element to insert the list into
 // and an object literal of options. The following options are
@@ -34,8 +34,8 @@
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import Spinner from 'spin.js'
-import htmlEscape from 'html-escape'
-import parseLinkHeader from 'parse-link-header'
+import htmlEscape from '@instructure/html-escape'
+import parseLinkHeader from '@canvas/parse-link-header'
 
 const I18n = useI18nScope('paginated_list')
 
@@ -166,7 +166,7 @@ export default class PaginatedList {
   animateInResults($results) {
     $results.css('display', 'none')
     this.el.list.append($results)
-    return $results.slideDown()
+    return $results.filter('*').slideDown()
   }
 
   // #

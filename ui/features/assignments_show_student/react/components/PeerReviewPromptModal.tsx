@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2023 - present Instructure, Inc.
  *
@@ -25,6 +26,12 @@ import React from 'react'
 // @ts-ignore
 import successSVG from '../../images/Success.svg'
 
+import type {ViewProps} from '@instructure/ui-view'
+
+type Spacing = ViewProps['margin']
+type BorderWidth = ViewProps['borderWidth']
+type BorderColor = ViewProps['borderColor']
+
 const I18n = useI18nScope('assignments_2')
 
 export type PeerReviewSubheader = {
@@ -50,7 +57,7 @@ type SubHeaderMap = {
 
 export type PeerReviewPromptModalProps = {
   headerText: string[]
-  headerMargin?: string
+  headerMargin?: Spacing
   subHeaderText?: PeerReviewSubheader[]
   showSubHeaderBorder?: boolean
   peerReviewButtonText: string | null
@@ -73,11 +80,11 @@ export default ({
 }: PeerReviewPromptModalProps) => {
   const subHeaderBorder = showSubHeaderBorder
     ? {
-        borderWidth: 'small none none',
-        borderColor: 'primary',
-        padding: 'small 0 0',
+        borderWidth: 'small none none' as BorderWidth,
+        borderColor: 'primary' as BorderColor,
+        padding: 'small 0 0' as Spacing,
       }
-    : {}
+    : {borderWidth: undefined, borderColor: undefined, padding: undefined}
   const headerTextMap: HeaderMap[] = headerText.map((header, idx) => ({id: idx, header}))
   const subHeaderTextMap: SubHeaderMap[] | undefined = subHeaderText?.map((subHeader, idx) => {
     return {
@@ -95,9 +102,13 @@ export default ({
       data-testid="peer-review-prompt-modal"
     >
       <Modal.Body>
-        <CloseButton placement="end" offset="medium" variant="icon" onClick={onClose}>
-          {I18n.t('Close')}
-        </CloseButton>
+        <CloseButton
+          placement="end"
+          offset="medium"
+          color="primary"
+          onClick={onClose}
+          screenReaderLabel={I18n.t('Close')}
+        />
         <View as="div">
           <View as="div" margin="small 0" textAlign="center">
             <Text lineHeight="fit" size="x-large">
@@ -105,9 +116,14 @@ export default ({
             </Text>
           </View>
           <View as="div" margin="x-small 0" textAlign="center">
-            <img alt={I18n.t('SUCCESS!')} src={successSVG} />
+            <img alt="" src={successSVG} />
           </View>
-          <View as="div" margin={headerMargin || 'small 0 0'} textAlign="center">
+          <View
+            as="div"
+            margin={headerMargin || 'small 0 0'}
+            textAlign="center"
+            data-testid="peer-review-header-text"
+          >
             {headerTextMap.map(({id, header}) => (
               <View as="div" key={`header-${id}`}>
                 <Text size="large">{header}</Text>
@@ -116,7 +132,13 @@ export default ({
           </View>
           {subHeaderTextMap != null && subHeaderTextMap.length > 0 && (
             <>
-              <View as="div" margin="small 0 0" textAlign="center" {...subHeaderBorder}>
+              <View
+                as="div"
+                margin="small 0 0"
+                data-testid="peer-review-sub-header-text"
+                textAlign="center"
+                {...subHeaderBorder}
+              >
                 {subHeaderTextMap?.map(({props, text, id}) => (
                   <View as="div" key={`subHeader-${id}`}>
                     <Text {...props}>{text}</Text>
@@ -129,13 +151,14 @@ export default ({
       </Modal.Body>
       {peerReviewButtonText && (
         <Modal.Footer style={{display: 'none'}}>
-          <Button onClick={onClose} margin="0 x-small">
+          <Button onClick={onClose} margin="0 x-small" data-testid="peer-review-close-button">
             {I18n.t('Close')}
           </Button>
           <Button
             interaction={peerReviewButtonDisabled ? 'disabled' : 'enabled'}
             onClick={onRedirect}
-            variant="primary"
+            color="primary"
+            data-testid="peer-review-next-button"
           >
             {peerReviewButtonText}
           </Button>

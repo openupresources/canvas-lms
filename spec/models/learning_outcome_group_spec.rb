@@ -106,7 +106,7 @@ describe LearningOutcomeGroup do
     it "returns non-empty array" do
       group = @course.learning_outcome_groups.create!(title: "groupage")
 
-      expect(group.parent_ids).to be_a_kind_of(Array)
+      expect(group.parent_ids).to be_a(Array)
       expect(group.parent_ids).not_to be_empty
     end
 
@@ -161,6 +161,15 @@ describe LearningOutcomeGroup do
       expect(group.child_outcome_links.map(&:content_id)).not_to include(outcome.id)
       LearningOutcomeGroup.bulk_link_outcome(outcome, LearningOutcomeGroup.where(id: group.id), root_account_id: Account.default.id)
       expect(group.reload.child_outcome_links.map(&:content_id)).to include(outcome.id)
+    end
+
+    it "triggers live event manually to create outcome edge" do
+      group = @course.learning_outcome_groups.create!(title: "groupage")
+      outcome = @course.created_learning_outcomes.create!(title: "o1")
+
+      expect(group.child_outcome_links.map(&:content_id)).not_to include(outcome.id)
+      expect(Canvas::LiveEvents).to receive(:learning_outcome_link_created)
+      LearningOutcomeGroup.bulk_link_outcome(outcome, LearningOutcomeGroup.where(id: group.id), root_account_id: Account.default.id)
     end
 
     it "touches context when adding outcome to group" do
@@ -332,6 +341,71 @@ describe LearningOutcomeGroup do
     end
   end
 
+  describe "#archive" do
+    it "sets the workflow_state to archived and sets archived_at" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      group.archive!
+      expect(group.workflow_state).to eq("archived")
+      expect(group.archived_at).not_to be_nil
+    end
+
+    it "won't update an already archived group" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      group.archive!
+      archived_at = group.archived_at
+      expect(group.workflow_state).to eq("archived")
+      expect(group.archived_at).not_to be_nil
+      group.archive!
+      expect(group.workflow_state).to eq("archived")
+      expect(group.archived_at).to eq(archived_at)
+    end
+
+    it "raises an ActiveRecord::RecordNotSaved error if we try to archive a deleted group" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      group.destroy!
+      expect(group.workflow_state).to eq("deleted")
+      expect { group.archive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot archive a deleted LearningOutcomeGroup"
+      )
+      expect(group.workflow_state).to eq("deleted")
+      expect(group.archived_at).to be_nil
+    end
+  end
+
+  describe "#unarchive" do
+    it "sets the workflow_state to active and sets archived_at to nil" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      group.archive!
+      expect(group.workflow_state).to eq("archived")
+      expect(group.archived_at).not_to be_nil
+      group.unarchive!
+      expect(group.workflow_state).to eq("active")
+      expect(group.archived_at).to be_nil
+    end
+
+    it "won't update an active group" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      expect(group.workflow_state).to eq("active")
+      expect(group.archived_at).to be_nil
+      group.unarchive!
+      expect(group.workflow_state).to eq("active")
+      expect(group.archived_at).to be_nil
+    end
+
+    it "raises an ActiveRecord::RecordNotSaved error if we try to unarchive a deleted group" do
+      group = @course.learning_outcome_groups.create!(title: "group")
+      group.destroy!
+      expect(group.workflow_state).to eq("deleted")
+      expect { group.unarchive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot unarchive a deleted LearningOutcomeGroup"
+      )
+      expect(group.workflow_state).to eq("deleted")
+      expect(group.archived_at).to be_nil
+    end
+  end
+
   context "root account resolution" do
     it "sets root_account_id using Account context" do
       group = LearningOutcomeGroup.create!(title: "group", context: Account.default)
@@ -359,7 +433,11 @@ describe LearningOutcomeGroup do
         title = group[:title]
         childs = group[:groups]
 
-        db_group = db_parent_group.child_outcome_groups.find_by!(title: title)
+        # root_account_id should match the context of the db_parent_group.context root_account_id
+        log_db_root_account_id = LearningOutcomeGroup.find_by(context: db_parent_group.context, title:).root_account_id
+        expect(log_db_root_account_id).to eq(db_parent_group.context.resolved_root_account_id)
+
+        db_group = db_parent_group.child_outcome_groups.find_by!(title:)
 
         db_outcomes = db_group.child_outcome_links.map(&:content)
 
@@ -379,16 +457,19 @@ describe LearningOutcomeGroup do
                                groups: [{
                                  title: "Group D",
                                  outcomes: 1
-                               }, {
-                                 title: "Group E",
-                                 outcomes: 1
-                               }]
+                               },
+                                        {
+                                          title: "Group E",
+                                          outcomes: 1
+                                        }]
                              }]
-                           }, Account.default)
+                           },
+                           Account.default)
 
       group_a = LearningOutcomeGroup.find_by(title: "Group A")
       @course_group_a = LearningOutcomeGroup.create!(
-        title: "Group A", context: @course,
+        title: "Group A",
+        context: @course,
         source_outcome_group: group_a
       )
     end
@@ -397,7 +478,8 @@ describe LearningOutcomeGroup do
       assert_tree_exists([{
                            title: "Group A",
                            outcomes: []
-                         }], @root)
+                         }],
+                         @root)
 
       @course_group_a.sync_source_group
 
@@ -410,12 +492,14 @@ describe LearningOutcomeGroup do
                              groups: [{
                                title: "Group D",
                                outcomes: ["0 Group D outcome"]
-                             }, {
-                               title: "Group E",
-                               outcomes: ["0 Group E outcome"]
-                             }]
+                             },
+                                      {
+                                        title: "Group E",
+                                        outcomes: ["0 Group E outcome"]
+                                      }]
                            }]
-                         }], @root)
+                         }],
+                         @root)
     end
 
     it "restore previous deleted group" do
@@ -425,6 +509,41 @@ describe LearningOutcomeGroup do
       @course_group_a.sync_source_group
       group_d.reload
       expect(group_d.workflow_state).to eql("active")
+      expect(group_d.root_account_id).to eql(@course.resolved_root_account_id)
+    end
+  end
+
+  describe "scope" do
+    before do
+      @active = @course.learning_outcome_groups.create!(title: "active")
+      @archived = @course.learning_outcome_groups.create!(title: "archived")
+      @archived.archive!
+      @deleted = @course.learning_outcome_groups.create!(title: "deleted")
+      @deleted.destroy!
+    end
+
+    it "active does not include archived or deleted groups" do
+      expect(LearningOutcomeGroup.active.include?(@active)).to be true
+      expect(LearningOutcomeGroup.active.include?(@archived)).to be false
+      expect(LearningOutcomeGroup.active.include?(@deleted)).to be false
+    end
+
+    it "active includes unarchived groups" do
+      expect(LearningOutcomeGroup.active.include?(@archived)).to be false
+      @archived.unarchive!
+      expect(LearningOutcomeGroup.active.include?(@archived)).to be true
+    end
+
+    it "archived only includes archived groups" do
+      expect(LearningOutcomeGroup.archived.include?(@active)).to be false
+      expect(LearningOutcomeGroup.archived.include?(@archived)).to be true
+      expect(LearningOutcomeGroup.archived.include?(@deleted)).to be false
+    end
+
+    it "archived does not include unarchived groups" do
+      expect(LearningOutcomeGroup.archived.include?(@archived)).to be true
+      @archived.unarchive!
+      expect(LearningOutcomeGroup.archived.include?(@archived)).to be false
     end
   end
 end

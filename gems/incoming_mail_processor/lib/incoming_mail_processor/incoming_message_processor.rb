@@ -19,6 +19,7 @@
 #
 
 require "mail"
+require "canvas_errors"
 
 module IncomingMailProcessor
   class IncomingMessageProcessor
@@ -104,8 +105,8 @@ module IncomingMailProcessor
         MailboxClasses.fetch(account.protocol)
       end
 
-      def timeout_method(&block)
-        Canvas.timeout_protection("incoming_message_processor", raise_on_timeout: true, &block)
+      def timeout_method(&)
+        Canvas.timeout_protection("incoming_message_processor", raise_on_timeout: true, &)
       end
 
       def configure_settings(config)
@@ -114,10 +115,10 @@ module IncomingMailProcessor
 
         config.symbolize_keys.each do |key, value|
           if IncomingMailProcessor::Settings.members.map(&:to_sym).include?(key)
-            settings.send("#{key}=", value)
+            settings.send(:"#{key}=", value)
           elsif IncomingMailProcessor::DeprecatedSettings.members.map(&:to_sym).include?(key)
             logger&.warn("deprecated setting sent to IncomingMessageProcessor: #{key}")
-            deprecated_settings.send("#{key}=", value)
+            deprecated_settings.send(:"#{key}=", value)
           else
             raise "unrecognized setting sent to IncomingMessageProcessor: #{key}"
           end
@@ -132,8 +133,8 @@ module IncomingMailProcessor
           IncomingMailProcessor::MailboxAccount.new({
                                                       protocol: mailbox_protocol.to_sym,
                                                       config: mailbox_config,
-                                                      address: address,
-                                                      error_folder: error_folder,
+                                                      address:,
+                                                      error_folder:,
                                                     })
         end
       end
@@ -169,12 +170,12 @@ module IncomingMailProcessor
             # Launch one per mailbox
             mailbox_accounts.each do |account|
               imp.delay(singleton: "IncomingMailProcessor::IncomingMessageProcessor#process:#{worker_id}:#{account.address}")
-                 .process({ worker_id: worker_id, mailbox_account_address: account.address })
+                 .process({ worker_id:, mailbox_account_address: account.address })
             end
           else
             # Just launch the one
             imp.delay(singleton: "IncomingMailProcessor::IncomingMessageProcessor#process:#{worker_id}")
-               .process({ worker_id: worker_id })
+               .process({ worker_id: })
           end
         end
       end
@@ -279,7 +280,8 @@ module IncomingMailProcessor
       age = age(incoming_message)
       if age
         stat_name = "incoming_mail_processor.message_age.#{mailbox_account.escaped_address}"
-        InstStatsd::Statsd.timing(stat_name, age,
+        InstStatsd::Statsd.timing(stat_name,
+                                  age,
                                   short_stat: "incoming_mail_processor.message_age",
                                   tags: { mailbox: mailbox_account.escaped_address })
       end
@@ -314,7 +316,7 @@ module IncomingMailProcessor
     rescue => e
       # any exception that makes it here probably means the connection is broken
       # skip this account, but the rest of the accounts should still be tried
-      @error_reporter.log_exception(self.class.error_report_category, e, {})
+      CanvasErrors.capture_exception(self.class.error_report_category, e, {})
     end
 
     def parse_message(raw_contents)
@@ -326,7 +328,7 @@ module IncomingMailProcessor
 
       [message, errors]
     rescue => e
-      @error_reporter.log_exception(self.class.error_report_category, e, {})
+      CanvasErrors.capture_exception(self.class.error_report_category, e, {})
       nil
     end
 
@@ -345,9 +347,10 @@ module IncomingMailProcessor
 
       process_single(message, tag, account)
     rescue => e
-      @error_reporter.log_exception(self.class.error_report_category, e,
-                                    from: message.from.try(:first),
-                                    to: message.to.to_s)
+      CanvasErrors.capture_exception(self.class.error_report_category,
+                                     e,
+                                     from: message.from.try(:first),
+                                     to: message.to.to_s)
     end
   end
 end

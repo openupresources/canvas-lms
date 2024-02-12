@@ -89,12 +89,14 @@ module Api::V1::OutcomeResults
     outcomes.map do |o|
       hash = outcome_json(
         o,
-        @current_user, session,
-        assessed_outcomes: assessed_outcomes,
+        @current_user,
+        session,
+        assessed_outcomes:,
         rating_percents: percents[o.id],
-        context: context,
-        friendly_descriptions: friendly_descriptions
+        context:,
+        friendly_descriptions:
       )
+
       hash[:alignments] = alignment_asset_string_map[o.id]
       hash
     end
@@ -111,7 +113,7 @@ module Api::V1::OutcomeResults
   #
   # Returns a Hash containing serialized outcome links.
   def outcome_results_include_outcome_links_json(outcome_links, context)
-    outcome_links_json(outcome_links, @current_user, session, { context: context })
+    outcome_links_json(outcome_links, @current_user, session, { context: })
   end
 
   # Public: Returns an Array of serialized Course objects for linked hash.
@@ -198,9 +200,9 @@ module Api::V1::OutcomeResults
     # is in multiple sections, they will have multiple rollup results. pagination is
     # still by user, so the counts won't match up. again, this is a very rare thing
     section_func = if @section
-                     ->(user) { [[@section.id, @context.all_accepted_student_enrollments.where(user_id: user.id, course_section_id: @section.id).first.workflow_state]] }
+                     ->(user) { [[@section.id, @context.all_student_enrollments.where(user_id: user.id, course_section_id: @section.id).first.workflow_state]] }
                    else
-                     enrollments = @context.all_accepted_student_enrollments.where(user_id: serialized_rollup_pairs.map { |pair| pair.first.context.id }).to_a
+                     enrollments = @context.all_student_enrollments.where(user_id: serialized_rollup_pairs.map { |pair| pair.first.context.id }).to_a
                      ->(user) { enrollments.select { |e| e.user_id == user.id }.map { |e| [e&.course_section_id, e.workflow_state] } }
                    end
 
@@ -258,16 +260,19 @@ module Api::V1::OutcomeResults
       row = []
       row << I18n.t(:student_name, "Student name")
       row << I18n.t(:student_id, "Student ID")
+      row << I18n.t(:student_sis_id, "Student SIS ID")
       outcomes.each do |outcome|
         pathParts = outcome_paths.find { |x| x[:id] == outcome.id }[:parts]
         path = pathParts.pluck(:name).join(" > ")
-        row << I18n.t(:outcome_path_result, "%{path} result", path: path)
-        row << I18n.t(:outcome_path_mastery_points, "%{path} mastery points", path: path)
+        row << I18n.t(:outcome_path_result, "%{path} result", path:)
+        row << I18n.t(:outcome_path_mastery_points, "%{path} mastery points", path:)
       end
       csv << row
       mastery_points = @context.root_account.feature_enabled?(:account_level_mastery_scales) && @context.resolved_outcome_proficiency&.mastery_points
       rollups.each do |rollup|
         row = [rollup.context.name, rollup.context.id]
+        sis_user_id = @context.root_account.pseudonyms.active.where("sis_user_id IS NOT NULL AND user_id = ?", rollup.context.id).pick(:sis_user_id) || "N/A"
+        row << sis_user_id
         outcomes.each do |outcome|
           score = rollup.scores.find { |x| x.outcome == outcome }
           row << (score ? score.score : nil)

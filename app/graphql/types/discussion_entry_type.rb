@@ -33,11 +33,6 @@ module Types
     field :rating_count, Integer, null: true
     field :rating_sum, Integer, null: true
 
-    field :isolated_entry_id, ID, null: true
-    def isolated_entry_id
-      object.legacy? ? object.parent_id : object.root_entry_id
-    end
-
     field :message, String, null: true
     def message
       if object.deleted?
@@ -49,8 +44,8 @@ module Types
               object.message,
               context: topic.context,
               in_app: true,
-              request: request,
-              preloaded_attachments: preloaded_attachments,
+              request:,
+              preloaded_attachments:,
               user: current_user,
               options: { rewrite_api_urls: true }
             )
@@ -70,8 +65,8 @@ module Types
     def quoted_entry
       if object.deleted?
         nil
-      elsif object.include_reply_preview
-        load_association(:parent_entry)
+      elsif object.quoted_entry_id
+        load_association(:quoted_entry)
       end
     end
 
@@ -90,7 +85,7 @@ module Types
               user
             else
               course_id = topic.course.id if course_id.nil?
-              Loaders::CourseRoleLoader.for(course_id: course_id, role_types: role_types, built_in_only: built_in_only).load(user).then do |roles|
+              Loaders::CourseRoleLoader.for(course_id:, role_types:, built_in_only:).load(user).then do |roles|
                 if roles&.include?("TeacherEnrollment") || roles&.include?("TaEnrollment") || roles&.include?("DesignerEnrollment") || (topic.anonymous_state == "partial_anonymity" && !object.is_anonymous_author)
                   user
                 end
@@ -106,11 +101,15 @@ module Types
       load_association(:discussion_topic).then do |topic|
         if topic.anonymous_state == "full_anonymity" || (topic.anonymous_state == "partial_anonymity" && object.is_anonymous_author)
           Loaders::DiscussionTopicParticipantLoader.for(topic.id).load(object.user_id).then do |participant|
-            {
-              id: participant.id.to_s(36),
-              short_name: object.user_id == current_user.id ? "current_user" : participant.id.to_s(36),
-              avatar_url: nil
-            }
+            if participant.nil?
+              nil
+            else
+              {
+                id: participant.id.to_s(36),
+                short_name: (object.user_id == current_user.id) ? "current_user" : participant.id.to_s(36),
+                avatar_url: nil
+              }
+            end
           end
         end
       end
@@ -135,7 +134,7 @@ module Types
             if !topic.anonymous? || !user
               user
             else
-              Loaders::CourseRoleLoader.for(course_id: course_id, role_types: role_types, built_in_only: built_in_only).load(user).then do |roles|
+              Loaders::CourseRoleLoader.for(course_id:, role_types:, built_in_only:).load(user).then do |roles|
                 if roles&.include?("TeacherEnrollment") || roles&.include?("TaEnrollment") || roles&.include?("DesignerEnrollment") || (topic.anonymous_state == "partial_anonymity" && !object.is_anonymous_author)
                   user
                 end
@@ -150,7 +149,7 @@ module Types
     def root_entry_participant_counts
       return nil unless object.root_entry_id.nil?
 
-      Loaders::DiscussionEntryCountsLoader.for(current_user: current_user).load(object)
+      Loaders::DiscussionEntryCountsLoader.for(current_user:).load(object)
     end
 
     field :discussion_topic, Types::DiscussionType, null: false
@@ -166,18 +165,25 @@ module Types
     end
     def discussion_subentries_connection(sort_order: :asc, relative_entry_id: nil, before_relative_entry: true, include_relative_entry: true)
       Loaders::DiscussionEntryLoader.for(
-        current_user: current_user,
-        sort_order: sort_order,
-        relative_entry_id: relative_entry_id,
-        before_relative_entry: before_relative_entry,
-        include_relative_entry: include_relative_entry
+        current_user:,
+        sort_order:,
+        relative_entry_id:,
+        before_relative_entry:,
+        include_relative_entry:
       ).load(object)
+    end
+
+    field :all_root_entries, [Types::DiscussionEntryType], null: true
+    def all_root_entries
+      return nil unless object.root_entry_id.nil?
+
+      load_association(:flattened_discussion_subentries)
     end
 
     field :entry_participant, Types::EntryParticipantType, null: true
     def entry_participant
       Loaders::EntryParticipantLoader.for(
-        current_user: current_user
+        current_user:
       ).load(object)
     end
 
@@ -195,9 +201,6 @@ module Types
 
     field :subentries_count, Integer, null: true
     def subentries_count
-      # don't try to count subentries if isolated view is active
-      return nil if Account.site_admin.feature_enabled?(:isolated_view)
-
       Loaders::AssociationCountLoader.for(DiscussionEntry, :discussion_subentries).load(object)
     end
 
@@ -205,7 +208,7 @@ module Types
     def permissions
       load_association(:discussion_topic).then do
         {
-          loader: Loaders::PermissionsLoader.for(object, current_user: current_user, session: session),
+          loader: Loaders::PermissionsLoader.for(object, current_user:, session:),
           discussion_entry: object
         }
       end
@@ -226,6 +229,19 @@ module Types
         nil
       else
         load_association(:discussion_entry_versions)
+      end
+    end
+
+    field :report_type_counts, Types::DiscussionEntryReportTypeCountsType, null: true
+    def report_type_counts
+      is_course_teacher = object.context.is_a?(Course) && object.context.user_is_instructor?(current_user)
+      is_group_teacher = object.context.is_a?(Group) && object.context&.course&.user_is_instructor?(current_user)
+      return nil unless is_course_teacher || is_group_teacher
+
+      if object.deleted?
+        nil
+      else
+        object.report_type_counts
       end
     end
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -42,8 +43,10 @@ export default function SpeedGraderPostGradesMenu(props: Props) {
     <IconButton
       withBackground={false}
       withBorder={false}
+      focusColor="inverse"
       screenReaderLabel={I18n.t('Post or Hide Grades')}
       data-testid="post-or-hide-grades-button"
+      size="small"
     >
       <Icon className="speedgrader-postgradesmenu-icon" />
     </IconButton>

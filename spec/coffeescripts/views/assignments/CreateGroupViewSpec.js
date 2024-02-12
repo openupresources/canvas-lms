@@ -18,14 +18,14 @@
 
 import {isEmpty, keys} from 'lodash'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import Course from '@canvas/courses/backbone/models/Course'
 import CreateGroupView from 'ui/features/assignment_index/backbone/views/CreateGroupView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const group = (opts = {}) =>
   new AssignmentGroup({
@@ -55,13 +55,15 @@ QUnit.module('CreateGroupView', {
   },
 })
 
+// eslint-disable-next-line qunit/resolve-async
 test('should be accessible', assert => {
   const view = createView()
   const done = assert.async()
   assertions.isAccessible(view, done, {a11yReport: true})
 })
 
-test('hides drop options for no assignments', () => {
+// when creating a new Assignment Group
+test('it does hides drop options for no assignments and undefined assignmentGroup id', () => {
   const view = createView()
   view.render()
   ok(view.$('[name="rules[drop_lowest]"]').length)

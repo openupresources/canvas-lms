@@ -23,7 +23,7 @@ module RubricsCommon
   def create_rubric_with_criterion_points(points)
     get rubric_url
 
-    f("#right-side-wrapper .add_rubric_link").click
+    f(".add_rubric_link").click
     check_element_has_focus(fj("#rubric_new :text:first"))
     criterion_points = f("#criterion_1 .criterion_points")
     set_value(criterion_points, points.to_s)
@@ -47,14 +47,16 @@ module RubricsCommon
 
   def assignment_with_rubric(points, title = "new rubric")
     @assignment = create_assignment_with_points(points)
-    rubric_model(title: title, data:
+    rubric_model(title:,
+                 data:
                                         [{
                                           description: "Some criterion",
-                                          points: points,
+                                          points:,
                                           id: "crit1",
                                           ratings:
-                                                 [{ description: "Good", points: points, id: "rat1", criterion_id: "crit1" }]
-                                        }], description: "new rubric description")
+                                                 [{ description: "Good", points:, id: "rat1", criterion_id: "crit1" }]
+                                        }],
+                 description: "new rubric description")
     @association = @rubric.associate_with(@assignment, @course, purpose: "grading", use_for_grading: false)
   end
 
@@ -62,16 +64,16 @@ module RubricsCommon
     @assignment = create_assignment_with_points(points)
     @rubric = @course.rubrics.build
     rubric_params = {
-      title: title,
+      title:,
       hide_score_total: false,
       criteria: {
         "0" => {
-          points: points,
+          points:,
           description: "no outcome row",
           long_description: "non outcome criterion",
           ratings: {
             "0" => {
-              points: points,
+              points:,
               description: "Amazing",
             },
             "1" => {
@@ -141,7 +143,7 @@ module RubricsCommon
   end
 
   def import_outcome
-    f("#right-side .edit_rubric_link").click
+    f("#rubric-action-buttons .edit_rubric_link").click
     wait_for_ajaximations
     f(".rubric.editing tr.criterion .delete_criterion_link").click
     wait_for_ajaximations

@@ -39,9 +39,10 @@ class CoursePacing::PacesApiController < ApplicationController
     return not_found if pace.nil?
 
     render json: {
-      pace: pacing_presenter.new(pace).as_json,
-      progress: progress_json(pacing_service.progress(pace), @current_user, session)
-    }, status: :created
+             pace: pacing_presenter.new(pace).as_json,
+             progress: progress_json(pacing_service.progress(pace), @current_user, session)
+           },
+           status: :created
   end
 
   def update
@@ -96,7 +97,7 @@ class CoursePacing::PacesApiController < ApplicationController
   end
 
   def authorize_action
-    authorized_action(course, @current_user, :manage_content)
+    authorized_action(course, @current_user, [:manage_content, :manage_course_content_edit])
   end
 
   def load_contexts

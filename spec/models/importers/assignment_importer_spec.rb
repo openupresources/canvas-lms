@@ -33,7 +33,7 @@ describe "Importing assignments" do
       data[:assignments_to_import] = {}
       expect do
         expect(Importers::AssignmentImporter.import_from_migration(data, context, migration)).to be_nil
-      end.to change(Assignment, :count).by(0)
+      end.not_to change(Assignment, :count)
 
       data[:assignments_to_import][data[:migration_id]] = true
       expect do
@@ -57,7 +57,7 @@ describe "Importing assignments" do
 
     assignment_hash = file_data.find { |h| h["migration_id"] == "4469882339231" }.with_indifferent_access
 
-    rubric = rubric_model(context: context)
+    rubric = rubric_model(context:)
     rubric.migration_id = assignment_hash[:grading][:rubric_id]
     rubric.points_possible = 42
     rubric.save!
@@ -73,7 +73,7 @@ describe "Importing assignments" do
     migration = context.content_migrations.create!
 
     assignment_hash = file_data.find { |h| h["migration_id"] == "4469882339231" }.with_indifferent_access
-    rubric_model({ context: context, migration_id: assignment_hash[:grading][:rubric_id] })
+    rubric_model({ context:, migration_id: assignment_hash[:grading][:rubric_id] })
     assignment_hash[:rubric_use_for_grading] = true
     assignment_hash[:rubric_hide_points] = true
     assignment_hash[:rubric_hide_outcome_results] = true
@@ -193,7 +193,7 @@ describe "Importing assignments" do
     }
     Importers::AssignmentImporter.import_from_migration(nameless_assignment_hash, @course, migration)
     assignment = @course.assignments.where(migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6").first
-    expect(assignment.turnitin_enabled).to eq true
+    expect(assignment.turnitin_enabled).to be true
     settings = assignment.turnitin_settings
     expect(settings["originality_report_visibility"]).to eq("after_due_date")
     expect(settings["exclude_value"]).to eq("5")
@@ -257,6 +257,37 @@ describe "Importing assignments" do
     migration = @course.content_migrations.create! user: User.create!
     Importers::AssignmentImporter.import_from_migration({ "title" => "Imported", "anonymous_grading" => true }, @course, migration)
     expect(AnonymousOrModerationEvent.last.user).to eq migration.user
+  end
+
+  context "when assignments are new quizzes/quiz lti" do
+    subject do
+      new_quiz
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+      new_quiz.reload
+    end
+
+    let(:course) { course_model }
+    let(:migration) { course.content_migrations.create! }
+    let(:new_quiz) do
+      new_quizzes_assignment(course:, title: "Some New Quiz", migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6")
+    end
+    let(:assignment_hash) do
+      {
+        migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6",
+        workflow_state: "published",
+        title: "Tool Assignment",
+        submission_types: "external_tool",
+      }
+    end
+
+    it "sets the content tag workflow state back to active when a previously deleted quiz lti assignment is re-imported back into the course" do
+      subject
+      new_quiz.destroy
+      new_quiz.save!
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+      new_quiz.reload
+      expect(new_quiz.external_tool_tag).to be_active
+    end
   end
 
   context "when assignments use an LTI tool" do
@@ -323,6 +354,26 @@ describe "Importing assignments" do
       end
     end
 
+    context "when previously deleted LTI assignment is re-imported" do
+      let(:tool) { external_tool_model(context: course.root_account) }
+      let(:tool_id) { tool.id }
+      let(:tool_url) { tool.url }
+
+      before do
+        assignment
+        Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+        assignment.reload
+        assignment.destroy
+        assignment.save!
+      end
+
+      it "un-deletes content tag" do
+        expect(assignment.external_tool_tag).to be_deleted
+        subject
+        expect(assignment.external_tool_tag).to be_active
+      end
+    end
+
     context "and the tool uses LTI 1.3" do
       let(:tool_id) { tool.id }
       let(:tool_url) { tool.url }
@@ -375,11 +426,11 @@ describe "Importing assignments" do
         let(:migration) { course.content_migrations.create! }
         let(:assignment) do
           Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
-          course.assignments.find_by(migration_id: migration_id)
+          course.assignments.find_by(migration_id:)
         end
         let(:assignment_hash) do
           {
-            migration_id: migration_id,
+            migration_id:,
             title: "my assignment",
             grading_type: "points",
             points_possible: 123,
@@ -395,7 +446,7 @@ describe "Importing assignments" do
         let(:line_items_array) { [line_item_hash] }
         let(:line_item_hash) do
           {
-            coupled: coupled,
+            coupled:,
           }.merge(extra_line_item_params).with_indifferent_access
         end
         let(:extra_line_item_params) { {} }
@@ -495,7 +546,7 @@ describe "Importing assignments" do
 
           it "does not create an Lti::ResourceLink" do
             expect(created_resource_link_ids).to eq([])
-            expect(assignment.line_items.take.lti_resource_link_id).to eq(nil)
+            expect(assignment.line_items.take.lti_resource_link_id).to be_nil
           end
 
           context "without an explicit client_id" do
@@ -535,8 +586,7 @@ describe "Importing assignments" do
           end
 
           it "creates the line items with the same Lti::ResourceLink" do
-            expect(assignment.line_items.pluck(:lti_resource_link_id)).to \
-              eq(created_resource_link_ids * 3)
+            expect(assignment.line_items.pluck(:lti_resource_link_id)).to eq(created_resource_link_ids * 3)
           end
         end
 
@@ -560,13 +610,13 @@ describe "Importing assignments" do
           end
 
           it "creates all line items" do
-            expect(assignment.line_items.pluck(:label, :coupled, :score_maximum).sort_by(&:first)).to \
-              eq(expected_created_line_items_fields)
+            expect(assignment.line_items.pluck(:label, :coupled, :score_maximum)
+            .sort_by(&:first)).to eq(expected_created_line_items_fields)
           end
 
           it "creates the line items with the same Lti::ResourceLink" do
-            expect(assignment.line_items.pluck(:lti_resource_link_id)).to \
-              eq(created_resource_link_ids * 4)
+            expect(assignment.line_items.pluck(:lti_resource_link_id))
+              .to eq(created_resource_link_ids * 4)
           end
 
           context "when the same line items are imported again in an additional run" do
@@ -576,10 +626,35 @@ describe "Importing assignments" do
                 Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
                 Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
               end.to_not change { Assignment.count }
-              expect(assignment.line_items.pluck(:label, :coupled, :score_maximum).sort_by(&:first)).to \
-                eq(expected_created_line_items_fields)
+              expect(assignment.line_items.pluck(:label, :coupled, :score_maximum).sort_by(&:first))
+                .to eq(expected_created_line_items_fields)
             end
           end
+        end
+      end
+
+      context "when previously deleted LTI assignment is re-imported" do
+        let(:line_item) { assignment.line_items.first }
+        let(:resource_link) { assignment.lti_resource_links.first }
+
+        before do
+          assignment
+          Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+          assignment.reload
+          assignment.destroy
+          assignment.save!
+        end
+
+        it "un-deletes resource links" do
+          expect(line_item).to be_deleted
+          subject
+          expect(line_item.reload).to be_active
+        end
+
+        it "un-deletes line items" do
+          expect(resource_link).to be_deleted
+          subject
+          expect(resource_link.reload).to be_active
         end
       end
     end
@@ -657,7 +732,7 @@ describe "Importing assignments" do
     it "does not attempt to recreate tool settings if they already exist" do
       tool_proxy.tool_settings.create!(
         context: course,
-        tool_proxy: tool_proxy,
+        tool_proxy:,
         resource_link_id: assignment.lti_context_id
       )
       expect do
@@ -692,10 +767,10 @@ describe "Importing assignments" do
         "lock_at" => nil,
         "unlock_at" => nil,
         "similarity_detection_tool" => {
-          resource_type_code: resource_type_code,
-          vendor_code: vendor_code,
-          product_code: product_code,
-          visibility: visibility
+          resource_type_code:,
+          vendor_code:,
+          product_code:,
+          visibility:
         }
       }
     end
@@ -710,7 +785,7 @@ describe "Importing assignments" do
           unlock_at: 1.day.ago,
           lock_at: 1.day.from_now,
           peer_reviews_due_at: 2.days.from_now,
-          migration_id: migration_id
+          migration_id:
         )
       end
 
@@ -757,7 +832,7 @@ describe "Importing assignments" do
     it "sets the vendor/product/resource_type codes" do
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: migration_id
+      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       tool_lookup = assignment.assignment_configuration_tool_lookups.first
@@ -769,7 +844,7 @@ describe "Importing assignments" do
     it "sets the tool_type to 'LTI::MessageHandler'" do
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: migration_id
+      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       tool_lookup = assignment.assignment_configuration_tool_lookups.first
@@ -779,7 +854,7 @@ describe "Importing assignments" do
     it "sets the visibility" do
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: migration_id
+      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       expect(assignment.turnitin_settings.with_indifferent_access[:originality_report_visibility]).to eq visibility
@@ -788,7 +863,7 @@ describe "Importing assignments" do
     it "adds a warning to the migration without an active tool_proxy" do
       course_model
       migration = @course.content_migrations.create!
-      @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: migration_id
+      @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       expect(migration).to receive(:add_warning).with("We were unable to find a tool profile match for vendor_code: \"abc\" product_code: \"qrx\".")
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
     end
@@ -798,7 +873,7 @@ describe "Importing assignments" do
         .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
-      @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: migration_id
+      @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       expect(migration).to_not receive(:add_warning).with("We were unable to find a tool profile match for vendor_code: \"abc\" product_code: \"qrx\".")
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
     end
@@ -817,7 +892,7 @@ describe "Importing assignments" do
 
     let(:imported_assignment) do
       Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
-      course.assignments.find_by(migration_id: migration_id)
+      course.assignments.find_by(migration_id:)
     end
 
     before do
@@ -871,7 +946,7 @@ describe "Importing assignments" do
 
     let(:imported_assignment) do
       Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
-      course.assignments.find_by(migration_id: migration_id)
+      course.assignments.find_by(migration_id:)
     end
 
     it "adds a warning to the migration if the post_to_sis validation will fail without due dates" do

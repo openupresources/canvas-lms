@@ -43,16 +43,16 @@ namespace :db do
 
   desc "Make sure all message templates have notifications in the db"
   task evaluate_notification_templates: :load_environment do
-    Dir.glob(Rails.root.join("app/messages/*.erb")) do |filename|
+    Rails.root.glob("app/messages/*.erb") do |filename|
       filename = File.split(filename)[1]
       name = filename.split(".")[0]
       unless name[0, 1] == "_"
-        titled = name.titleize.gsub(/Sms/, "SMS")
+        titled = name.titleize.gsub("Sms", "SMS")
         puts "No notification found in db for #{name}" unless Notification.where(name: titled).first
       end
     end
     Notification.all_cached.each do |n|
-      puts "No notification files found for #{n.name}" if Dir.glob(Rails.root.join("app", "messages", "#{n.name.downcase.gsub(/\s/, "_")}.*.erb")).empty?
+      puts "No notification files found for #{n.name}" if Rails.root.glob("app/messages/#{n.name.downcase.gsub(/\s/, "_")}.*.erb").empty?
     end
   end
 
@@ -94,7 +94,9 @@ namespace :db do
         # picky. the admin should know what they're doing, and we'd rather not
         # fail here.
         pseudonym = user.pseudonyms.create!(unique_id: email,
-                                            password: "validpassword", password_confirmation: "validpassword", account: Account.site_admin)
+                                            password: "validpassword",
+                                            password_confirmation: "validpassword",
+                                            account: Account.site_admin)
         user.communication_channels.create!(path: email) { |cc| cc.workflow_state = "active" }
       end
       # set the password later.
@@ -130,7 +132,7 @@ namespace :db do
 
         while true do
           email = ask("What email address will the site administrator account use? > ") { |q| q.echo = obfuscate_input_or_echo }
-          email_confirm = ask("Please confirm > ") { |q| q.echo =  obfuscate_input_or_echo }
+          email_confirm = ask("Please confirm > ") { |q| q.echo = obfuscate_input_or_echo }
           break if email == email_confirm
         end
 
@@ -183,7 +185,8 @@ namespace :db do
   end
 
   desc "generate data"
-  task generate_data: %i[configure_default_settings load_notifications
+  task generate_data: %i[configure_default_settings
+                         load_notifications
                          evaluate_notification_templates]
 
   desc "Configure Default Account Name"

@@ -317,18 +317,13 @@ describe "admin settings tab" do
     end
 
     it "clicks on the google help dialog" do
-      fj("label['for'='account_services_google_docs_previews'] .icon-question").click
+      f("label[for='account_services_google_docs_previews'] .icon-question").click
       expect(fj(".ui-dialog-title:visible")).to include_text("About Google Docs Previews")
     end
 
     it "unclicks and then click on skype" do
       check_box_verifier("#account_services_skype", { allowed_services: :skype }, false)
       check_box_verifier("#account_services_skype", { allowed_services: :skype })
-    end
-
-    it "unclicks and then click on delicious" do
-      check_box_verifier("#account_services_delicious", { allowed_services: :delicious }, false)
-      check_box_verifier("#account_services_delicious", { allowed_services: :delicious })
     end
 
     it "unclicks and click on google docs previews" do
@@ -600,7 +595,7 @@ describe "admin settings tab" do
 
   it "shows all feature flags that are expected to be visible" do
     user = account_admin_user({ active_user: true }.merge(account: Account.site_admin))
-    course_with_admin_logged_in(account: Account.default, user: user)
+    course_with_admin_logged_in(account: Account.default, user:)
     provision_quizzes_next(Account.default)
     get "/accounts/#{Account.default.id}/settings"
     f("#tab-features-link").click
@@ -619,7 +614,7 @@ describe "admin settings tab" do
     end
   end
 
-  context "Canvas for Elementary (enable_as_k5_mode) setting", ignore_js_errors: true do
+  context "Canvas for Elementary (enable_as_k5_mode) setting", :ignore_js_errors do
     before :once do
       @account = Account.default
       @subaccount = Account.create!(name: "subaccount1", parent_account_id: @account.id)

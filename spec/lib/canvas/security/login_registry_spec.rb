@@ -47,19 +47,29 @@ describe Canvas::Security::LoginRegistry do
       expect(registry.audit_login(@p, "7.7.7.7", true)).to eq(:too_many_attempts)
     end
 
+    it "allows 3 rapid fire successful logins" do
+      3.times { expect(registry.audit_login(@p, "7.7.7.7", true)).to be_nil }
+    end
+
+    it "prohibits rapid fire successful logins" do
+      6.times { registry.audit_login(@p, "7.7.7.7", true) }
+      expect(registry.audit_login(@p, "7.7.7.7", true)).to be :too_recent_login
+      expect(registry.audit_login(@p, "7.7.7.7", false)).to be_nil
+    end
+
     describe "internal implementation" do
       it "is limited for the same ip" do
-        expect(registry.allow_login_attempt?(@p, "5.5.5.5")).to eq true
+        expect(registry.allow_login_attempt?(@p, "5.5.5.5")).to be true
         registry.failed_login!(@p, "5.5.5.5")
-        expect(registry.allow_login_attempt?(@p, "5.5.5.5")).to eq false
+        expect(registry.allow_login_attempt?(@p, "5.5.5.5")).to be false
       end
 
       it "has a higher limit for other ips" do
         registry.failed_login!(@p, "5.5.5.5")
-        expect(registry.allow_login_attempt?(@p, "5.5.5.6")).to eq true
+        expect(registry.allow_login_attempt?(@p, "5.5.5.6")).to be true
         registry.failed_login!(@p, "5.5.5.7")
-        expect(registry.allow_login_attempt?(@p, "5.5.5.8")).to eq false # different ip but too many total failures
-        expect(registry.allow_login_attempt?(@p, nil)).to eq false # no ip but too many total failures
+        expect(registry.allow_login_attempt?(@p, "5.5.5.8")).to be false # different ip but too many total failures
+        expect(registry.allow_login_attempt?(@p, nil)).to be false # no ip but too many total failures
       end
 
       it "does not block other users with the same ip" do
@@ -68,8 +78,8 @@ describe Canvas::Security::LoginRegistry do
         # ever block the IP address as a whole
         u2 = user_with_pseudonym(active_user: true, username: "second@example.com", password: "12341234")
         u2.save!
-        expect(registry.allow_login_attempt?(u2.pseudonym, "5.5.5.5")).to eq true
-        expect(registry.allow_login_attempt?(u2.pseudonym, "5.5.5.6")).to eq true
+        expect(registry.allow_login_attempt?(u2.pseudonym, "5.5.5.5")).to be true
+        expect(registry.allow_login_attempt?(u2.pseudonym, "5.5.5.6")).to be true
       end
 
       it "timeouts the login block after a waiting period" do

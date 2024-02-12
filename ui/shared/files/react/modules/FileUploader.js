@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import BBFile from '../../backbone/models/File.coffee'
+import BBFile from '../../backbone/models/File'
 import BaseUploader from './BaseUploader'
 
 export default class FileUploader extends BaseUploader {
@@ -39,11 +39,10 @@ export default class FileUploader extends BaseUploader {
       // exists on the Files page, but nowhere else
       const uploadedFile = new BBFile(attrs, 'no/url/needed/') // we've already done the upload, no preflight needed
 
-      this.folder.files.add(uploadedFile)
-      // remove old version if it was just overwritten
-      if (this.options.dup === 'overwrite') {
-        const name = this.options.name || this.file.name
-        const previous = this.folder.files.findWhere({display_name: name})
+      this.folder.files.add(uploadedFile, {merge: true})
+      // remove old version if it was just overwritten (unless it was overwritten in place and the id is unchanged)
+      if (this.options.dup === 'overwrite' && this.options.replacingFileId !== attrs.id) {
+        const previous = this.folder.files.get(this.options.replacingFileId)
         if (previous) {
           this.folder.files.remove(previous)
         }

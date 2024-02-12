@@ -56,6 +56,8 @@ describe Gradebook::FinalGradeOverrides do
     @assignment.grade_student(@student_1, grade: "85%", grader: @teacher)
     @assignment.grade_student(@student_2, grade: "85%", grader: @teacher)
     @assignment.grade_student(@test_student, grade: "85%", grader: @teacher)
+
+    @custom_status = CustomGradeStatus.create(name: "Test Status", color: "#000000", root_account: @course.root_account, created_by: @teacher)
   end
 
   it "includes user ids for each user with an overridden course grade" do
@@ -119,6 +121,26 @@ describe Gradebook::FinalGradeOverrides do
     expect(final_grade_overrides).to be_empty
   end
 
+  it "includes custom grade status id on the course grade & grading period grade" do
+    @student_enrollment_1.scores.find_by!(grading_period: @grading_period_1).update!(override_score: 90, custom_grade_status: @custom_status)
+    @student_enrollment_2.scores.find_by!(course_score: true).update!(override_score: 88, custom_grade_status: @custom_status)
+
+    grading_period_overrides = final_grade_overrides[@student_1.id][:grading_period_grades]
+    expect(grading_period_overrides[@grading_period_1.id][:custom_grade_status_id]).to equal(@custom_status.id)
+
+    expect(final_grade_overrides[@student_2.id][:course_grade][:custom_grade_status_id]).to equal(@custom_status.id)
+  end
+
+  it "includes custom grade status id on the course grade & grading period grade where override_score is nil" do
+    @student_enrollment_1.scores.find_by!(grading_period: @grading_period_1).update!(override_score: nil, custom_grade_status: @custom_status)
+    @student_enrollment_2.scores.find_by!(course_score: true).update!(override_score: nil, custom_grade_status: @custom_status)
+
+    grading_period_overrides = final_grade_overrides[@student_1.id][:grading_period_grades]
+    expect(grading_period_overrides[@grading_period_1.id][:custom_grade_status_id]).to equal(@custom_status.id)
+
+    expect(final_grade_overrides[@student_2.id][:course_grade][:custom_grade_status_id]).to equal(@custom_status.id)
+  end
+
   describe "bulk updates" do
     let(:grading_period) { @grading_period_1 }
     let(:other_grading_period) { @grading_period_2 }
@@ -151,18 +173,18 @@ describe Gradebook::FinalGradeOverrides do
 
     describe ".queue_bulk_update" do
       it "returns a progress object" do
-        progress = ::Gradebook::FinalGradeOverrides.queue_bulk_update(course, teacher, override_updates, nil)
+        progress = Gradebook::FinalGradeOverrides.queue_bulk_update(course, teacher, override_updates, nil)
 
         expect(progress).to be_a(Progress)
       end
     end
 
     describe ".process_bulk_update" do
-      let(:grade_change_records) { Auditors::ActiveRecord::GradeChangeRecord.where(course: course) }
+      let(:grade_change_records) { Auditors::ActiveRecord::GradeChangeRecord.where(course:) }
 
       def run(updates: override_updates, grading_period: nil, updating_user: teacher, progress: nil)
         course.recompute_student_scores(run_immediately: true)
-        ::Gradebook::FinalGradeOverrides.process_bulk_update(progress, course, updating_user, updates, grading_period)
+        Gradebook::FinalGradeOverrides.process_bulk_update(progress, course, updating_user, updates, grading_period)
       end
 
       it "updates the override score for each included record" do
@@ -175,12 +197,12 @@ describe Gradebook::FinalGradeOverrides do
           expect(student1_enrollment.override_score).to eq 70.0
           expect(student2_enrollment.override_score).to eq 75.0
 
-          expect(unaffected_student.enrollments.first.override_score).to eq nil
+          expect(unaffected_student.enrollments.first.override_score).to be_nil
         end
       end
 
       it "updates scores for the specific grading period if one is given" do
-        run(grading_period: grading_period)
+        run(grading_period:)
 
         student1_enrollment = student.enrollments.first
         student2_enrollment = multiple_enrollment_student.enrollments.first
@@ -188,19 +210,19 @@ describe Gradebook::FinalGradeOverrides do
 
         aggregate_failures do
           expect(student1_enrollment.override_score({ grading_period_id: grading_period.id })).to eq 70.0
-          expect(student1_enrollment.override_score).to eq nil
+          expect(student1_enrollment.override_score).to be_nil
           expect(student2_enrollment.override_score({ grading_period_id: grading_period.id })).to eq 75.0
-          expect(student2_enrollment.override_score).to eq nil
+          expect(student2_enrollment.override_score).to be_nil
 
-          expect(unaffected_enrollment.override_score({ grading_period_id: grading_period.id })).to eq nil
+          expect(unaffected_enrollment.override_score({ grading_period_id: grading_period.id })).to be_nil
         end
       end
 
       it "does not update grading periods other than the one requested" do
         student1_enrollment = student.enrollments.first
 
-        run(grading_period: grading_period)
-        expect(student1_enrollment.override_score({ grading_period_id: other_grading_period.id })).to be nil
+        run(grading_period:)
+        expect(student1_enrollment.override_score({ grading_period_id: other_grading_period.id })).to be_nil
       end
 
       it "updates all enrollments for students with multiple enrollments" do
@@ -217,7 +239,7 @@ describe Gradebook::FinalGradeOverrides do
           expect(grade_change_records.count).to eq 2
           expect(grade_change_records.where(grader: teacher).count).to eq 2
 
-          student1_records = grade_change_records.where(student: student)
+          student1_records = grade_change_records.where(student:)
           expect(student1_records.count).to eq 1
           student1_course_record = student1_records.find_by(grading_period_id: nil)
           expect(student1_course_record.score_after).to eq 70.0
@@ -239,7 +261,7 @@ describe Gradebook::FinalGradeOverrides do
         some_other_student = User.create!
         updates = [{ student_id: some_other_student.id, override_score: 100.0 }]
 
-        run(updates: updates)
+        run(updates:)
         expect(grade_change_records).to be_empty
       end
 
@@ -266,14 +288,14 @@ describe Gradebook::FinalGradeOverrides do
             { student_id: section2_student.id, override_score: 70.0 }
           ]
 
-          run(updates: updates, updating_user: section1_ta)
+          run(updates:, updating_user: section1_ta)
 
           section1_student_enrollment = section1_student.enrollments.first
           section2_student_enrollment = section2_student.enrollments.first
 
           aggregate_failures do
             expect(section1_student_enrollment.override_score).to eq 50.0
-            expect(section2_student_enrollment.override_score).to eq nil
+            expect(section2_student_enrollment.override_score).to be_nil
           end
         end
 
@@ -287,7 +309,7 @@ describe Gradebook::FinalGradeOverrides do
 
           updates = [{ student_id: section2_student.id, override_score: 70.0 }]
 
-          run(updates: updates, updating_user: section1_ta)
+          run(updates:, updating_user: section1_ta)
 
           student2_enrollments = section2_student.enrollments
           aggregate_failures do
@@ -297,19 +319,126 @@ describe Gradebook::FinalGradeOverrides do
         end
       end
 
+      context "handles grade override statuses" do
+        before do
+          Account.site_admin.enable_feature!(:custom_gradebook_statuses)
+          @student1_enrollment = student.enrollments.first
+          @student2_enrollment = multiple_enrollment_student.enrollments.first
+
+          @student1_score = @student1_enrollment.scores.create!(course_score: true, override_score: 100)
+          @student2_score = @student2_enrollment.scores.create!(course_score: true, override_score: 100)
+          @custom_status_2 = CustomGradeStatus.create(
+            name: "NEW Status",
+            color: "#000000",
+            root_account: @course.root_account,
+            created_by: @teacher
+          )
+        end
+
+        let(:override_status_updates) do
+          [
+            { student_id: student.id, override_status_id: @custom_status.id },
+            { student_id: multiple_enrollment_student.id, override_status_id: @custom_status.id }
+          ]
+        end
+
+        it "sucessfully sets the override statuses" do
+          run(updates: override_status_updates)
+
+          aggregate_failures do
+            expect(@student1_score.reload.custom_grade_status_id).to eq @custom_status.id
+            expect(@student2_score.reload.custom_grade_status_id).to eq @custom_status.id
+
+            expect(unaffected_student.enrollments.first.override_score).to be_nil
+          end
+        end
+
+        it "sucessfully changes an override status" do
+          @student1_score.update(custom_grade_status_id: @custom_status.id)
+          override_status_updates_test = [
+            { student_id: student.id, override_status_id: @custom_status_2.id },
+            { student_id: multiple_enrollment_student.id, override_status_id: @custom_status.id }
+          ]
+          run(updates: override_status_updates_test)
+
+          aggregate_failures do
+            expect(@student1_score.reload.custom_grade_status_id).to eq @custom_status_2.id
+            expect(@student2_score.reload.custom_grade_status_id).to eq @custom_status.id
+          end
+        end
+
+        it "sucessfully clears out a custom status" do
+          @student2_score.update(custom_grade_status_id: @custom_status.id)
+          override_status_updates_test = [
+            { student_id: student.id, override_status_id: @custom_status.id },
+            { student_id: multiple_enrollment_student.id, override_status_id: nil }
+          ]
+          run(updates: override_status_updates_test)
+
+          aggregate_failures do
+            expect(@student1_score.reload.custom_grade_status_id).to eq @custom_status.id
+            expect(@student2_score.reload.custom_grade_status_id).to be_nil
+          end
+        end
+
+        it "sucessfully modifies both override_status and override_score" do
+          @student2_score.update(override_score: nil)
+          override_status_updates_test = [
+            { student_id: student.id, override_status_id: @custom_status.id },
+            { student_id: multiple_enrollment_student.id, override_score: 90.0, override_status_id: @custom_status.id }
+          ]
+          run(updates: override_status_updates_test)
+
+          @student1_score.reload
+          @student2_score.reload
+
+          aggregate_failures do
+            expect(@student1_score.reload.custom_grade_status_id).to eq @custom_status.id
+            expect(@student2_score.custom_grade_status_id).to eq @custom_status.id
+            expect(@student1_score.override_score).to eq 100.0
+            expect(@student2_score.override_score).to eq 90.0
+          end
+        end
+
+        it "sucessfully modifies override status with a grading period" do
+          grading_period_score_1 = @student1_enrollment.scores.create!(course_score: false, override_score: 100, grading_period:)
+          grading_period_score_2 = @student2_enrollment.scores.create!(course_score: false, override_score: 100, grading_period:)
+          override_status_updates_test = [
+            { student_id: student.id, override_status_id: @custom_status.id },
+            { student_id: multiple_enrollment_student.id, override_status_id: @custom_status.id }
+          ]
+          run(updates: override_status_updates_test, grading_period:)
+
+          aggregate_failures do
+            expect(grading_period_score_1.reload.custom_grade_status_id).to eq @custom_status.id
+            expect(grading_period_score_2.reload.custom_grade_status_id).to eq @custom_status.id
+          end
+        end
+
+        it "does not modify override status if the feature flag is OFF" do
+          Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+          run(updates: override_status_updates)
+
+          aggregate_failures do
+            expect(@student1_score.reload.custom_grade_status_id).to be_nil
+            expect(@student2_score.reload.custom_grade_status_id).to be_nil
+          end
+        end
+      end
+
       describe "error handling" do
-        let(:progress) { Progress.create!(course: course, tag: "override_grade_update") }
+        let(:progress) { Progress.create!(course:, tag: "override_grade_update") }
 
         it "notes an error of type invalid_student_id for invalid student IDs" do
           updates = [{ student_id: "fred", override_score: 100.0 }]
-          run(updates: updates, progress: progress)
+          run(updates:, progress:)
 
           expect(progress.results[:errors]).to contain_exactly({ student_id: "fred", error: :invalid_student_id })
         end
 
         it "notes an error of type failed_to_update when a score value cannot be saved" do
           updates = [{ student_id: student.id, override_score: "asdfasdfasdf" }]
-          run(updates: updates, progress: progress)
+          run(updates:, progress:)
 
           expect(progress.results[:errors]).to contain_exactly({ student_id: student.id, error: :failed_to_update })
         end
@@ -323,7 +452,7 @@ describe Gradebook::FinalGradeOverrides do
           )
 
           updates = [{ student_id: student.id, override_score: 80.0 }]
-          run(grading_period: other_grading_period, updates: updates, progress: progress)
+          run(grading_period: other_grading_period, updates:, progress:)
 
           expect(progress.results[:errors]).to contain_exactly({ student_id: student.id, error: :failed_to_update })
         end

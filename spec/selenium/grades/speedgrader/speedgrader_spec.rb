@@ -108,8 +108,8 @@ describe "Speedgrader" do
           Speedgrader.visit(@course.id, @quiz.assignment_id)
           Speedgrader.wait_for_grade_input
         end
-        Rails.logger.debug "SpeedGrader for course #{@course.id} and assignment"\
-                           " #{@quiz.assignment_id} loaded in #{page_load_time.real} seconds"
+        Rails.logger.debug "SpeedGrader for course #{@course.id} and assignment " \
+                           "#{@quiz.assignment_id} loaded in #{page_load_time.real} seconds"
         expect(page_load_time.real).to be > 0.0
       end
 
@@ -398,6 +398,7 @@ describe "Speedgrader" do
 
     context "submission status" do
       before do
+        Account.site_admin.enable_feature!(:custom_gradebook_statuses)
         assignment = @course.assignments.create!(points_possible: 20)
         @submission = assignment.submissions.find_by!(user: @students[0])
         @submission.update!(late_policy_status: "missing")
@@ -406,11 +407,15 @@ describe "Speedgrader" do
         @submission = assignment.submissions.find_by!(user: @students[2])
         @submission.update!(late_policy_status: "late")
         assignment.grade_student(@students[3], grader: @teacher, excused: true)
+        @submission = assignment.submissions.find_by!(user: @students[4])
+        @custom_status = CustomGradeStatus.create!(name: "Custom Status", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher)
+        @second_custom_status = CustomGradeStatus.create!(name: "Second Status", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher)
+        @submission.update!(custom_grade_status: @custom_status)
         user_session(@teacher)
         Speedgrader.visit(@course.id, assignment.id)
       end
 
-      it "displays correct missing status pill for each student submission" do
+      it "displays correct status pill for each student submission" do
         expect(f(".submission-missing-pill")).to be_displayed
         Speedgrader.click_next_student_btn
         expect(f(".submission-extended-pill")).to be_displayed
@@ -418,6 +423,46 @@ describe "Speedgrader" do
         expect(f(".submission-late-pill")).to be_displayed
         Speedgrader.click_next_student_btn
         expect(f(".submission-excused-pill")).to be_displayed
+        Speedgrader.click_next_student_btn
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when standard status is changed to another standard status" do
+        expect(f(".submission-missing-pill")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        late_status = f("[data-testid='speedGraderStatusMenu-late']")
+        expect(late_status).to be_displayed
+        late_status.click
+        expect(f(".submission-late-pill")).to be_displayed
+      end
+
+      it "updates status pill when standard status is changed to custom status" do
+        expect(f(".submission-missing-pill")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        custom_status = f("[data-testid='speedGraderStatusMenu-#{@custom_status.id}']")
+        expect(custom_status).to be_displayed
+        custom_status.click
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when custom status is changed to another custom status" do
+        Speedgrader.visit(@course.id, @submission.assignment_id, 10, @submission.user_id)
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        second_custom_status_button = f("[data-testid='speedGraderStatusMenu-#{@second_custom_status.id}']")
+        expect(second_custom_status_button).to be_displayed
+        second_custom_status_button.click
+        expect(f(".submission-custom-grade-status-pill-#{@second_custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when custom status is changed to standard status" do
+        Speedgrader.visit(@course.id, @submission.assignment_id, 10, @submission.user_id)
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        late_status = f("[data-testid='speedGraderStatusMenu-late']")
+        expect(late_status).to be_displayed
+        late_status.click
+        expect(f(".submission-late-pill")).to be_displayed
       end
     end
   end
@@ -807,7 +852,7 @@ describe "Speedgrader" do
       seed_groups 1, 1
       scores = [5, 7, 10]
 
-      (0..2).each do |i|
+      3.times do |i|
         @testgroup[0].add_user @students[i]
       end
 
@@ -956,7 +1001,7 @@ describe "Speedgrader" do
 
     it "list all students", priority: "1" do
       Speedgrader.click_students_dropdown
-      (0..2).each { |num| expect(Speedgrader.student_dropdown_menu).to include_text(@students[num].name) }
+      3.times { |num| expect(Speedgrader.student_dropdown_menu).to include_text(@students[num].name) }
     end
 
     it "list alias when hide student name is selected", priority: "2" do
@@ -988,7 +1033,7 @@ describe "Speedgrader" do
         student_options = Speedgrader.student_dropdown_menu.find_elements(tag_name: "li")
 
         graded = %w[resubmitted graded not_submitted]
-        (0..2).each { |num| expect(student_options[num]).to have_class(graded[num]) }
+        3.times { |num| expect(student_options[num]).to have_class(graded[num]) }
       end
     end
   end
@@ -1053,6 +1098,44 @@ describe "Speedgrader" do
       Speedgrader.click_submissions_to_view
       Speedgrader.select_option_submission_to_view("0")
       expect(Speedgrader.submission_file_name.text).to eq @attachment.filename
+    end
+
+    it "identifies the proxy submitter in the submission dropdown" do
+      Timecop.freeze(1.hour.ago) { submit_with_attachment }
+      resubmit_with_text
+      Account.site_admin.enable_feature!(:proxy_file_uploads)
+      teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
+      RoleOverride.create!(
+        permission: "proxy_assignment_submission",
+        enabled: true,
+        role: teacher_role,
+        account: @course.root_account
+      )
+      file_attachment = attachment_model(content_type: "application/pdf", context: @students.first)
+      submission = @assignment_for_course.submit_homework(@students.first, submission_type: "online_upload", attachments: [file_attachment])
+      @teacher.update!(short_name: "Test Teacher")
+      submission.update!(proxy_submitter: @teacher)
+      user_session(@teacher)
+      Speedgrader.visit(@course.id, @assignment_for_course.id)
+      expect(Speedgrader.submission_to_view_dropdown).to include_text("(Test Teacher)")
+    end
+
+    it "identifies the proxy submitter in the submission details tray with only a single submission" do
+      Account.site_admin.enable_feature!(:proxy_file_uploads)
+      teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
+      RoleOverride.create!(
+        permission: "proxy_assignment_submission",
+        enabled: true,
+        role: teacher_role,
+        account: @course.root_account
+      )
+      file_attachment = attachment_model(content_type: "application/pdf", context: @students.first)
+      submission = @assignment_for_course.submit_homework(@students.first, submission_type: "online_upload", attachments: [file_attachment])
+      @teacher.update!(short_name: "Test Teacher")
+      submission.update!(proxy_submitter: @teacher)
+      user_session(@teacher)
+      Speedgrader.visit(@course.id, @assignment_for_course.id)
+      expect(Speedgrader.submitter_info).to include_text("by Test Teacher")
     end
   end
 

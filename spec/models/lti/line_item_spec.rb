@@ -20,7 +20,7 @@
 
 require_relative "../../spec_helper"
 
-RSpec.describe Lti::LineItem, type: :model do
+RSpec.describe Lti::LineItem do
   context "when validating" do
     let(:line_item) { line_item_model }
 
@@ -58,19 +58,19 @@ RSpec.describe Lti::LineItem, type: :model do
     let(:assignment) { assignment_model }
 
     it "returns true if the line item was created before all others in the assignment" do
-      line_item_one = line_item_model(assignment: assignment)
-      line_item_two = line_item_model(assignment: assignment)
+      line_item_one = line_item_model(assignment:)
+      line_item_two = line_item_model(assignment:)
       line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
 
-      expect(line_item_one.assignment_line_item?).to eq true
+      expect(line_item_one.assignment_line_item?).to be true
     end
 
     it "returns false if the line item is not the first in the assignment" do
-      line_item_one = line_item_model(assignment: assignment)
-      line_item_two = line_item_model(assignment: assignment)
+      line_item_one = line_item_model(assignment:)
+      line_item_two = line_item_model(assignment:)
       line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
 
-      expect(line_item_two.assignment_line_item?).to eq false
+      expect(line_item_two.assignment_line_item?).to be false
     end
   end
 
@@ -78,11 +78,11 @@ RSpec.describe Lti::LineItem, type: :model do
     let(:url) { "https://example.com/launch" }
     let(:assignment) do
       a = assignment_model
-      a.external_tool_tag = ContentTag.create!(context: a, url: url)
+      a.external_tool_tag = ContentTag.create!(context: a, url:)
       a.save!
       a
     end
-    let(:line_item) { line_item_model(assignment: assignment) }
+    let(:line_item) { line_item_model(assignment:) }
 
     it "returns hash with extension key" do
       expect(line_item.launch_url_extension).to have_key(Lti::LineItem::AGS_EXT_LAUNCH_URL)
@@ -95,8 +95,8 @@ RSpec.describe Lti::LineItem, type: :model do
 
   context "with lti_link not matching assignment" do
     let(:resource_link) { resource_link_model }
-    let(:line_item) { line_item_model resource_link: resource_link }
-    let(:line_item_two) { line_item_model resource_link: resource_link }
+    let(:line_item) { line_item_model resource_link: }
+    let(:line_item_two) { line_item_model resource_link: }
 
     it "returns true if the line item was created before all others in the resource" do
       line_item
@@ -112,36 +112,56 @@ RSpec.describe Lti::LineItem, type: :model do
     let(:creation_arguments) { base_line_item_params(assignment_model, DeveloperKey.create!) }
   end
 
-  context "when destroying a line item" do
+  describe "when destroying" do
+    subject { line_item.destroy }
+
     let(:line_item) { line_item_model }
-    let(:assignment) { assignment_model }
-    let(:resource_link) { resource_link_model }
+    let(:result) { lti_result_model(line_item:) }
 
-    it "destroys the assignment if it is the first line item and is not coupled" do
-      line_item_one = line_item_model(assignment: assignment, coupled: false)
-      line_item_two = line_item_model(assignment: assignment)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_one.destroy!
-      end.to change(assignment, :workflow_state).from("published").to("deleted")
+    it "destroys associated results" do
+      expect(result).to be_active
+      subject
+      expect(result.reload).to be_deleted
+    end
+  end
+
+  describe "when undestroying" do
+    subject { line_item.undestroy }
+
+    let(:line_item) { line_item_model }
+    let(:result) { lti_result_model(line_item:) }
+
+    before do
+      result
+      line_item.destroy
     end
 
-    it "doesn't destroy the assignment if the line item is not the first line item" do
-      line_item_one = line_item_model(assignment: assignment)
-      line_item_two = line_item_model(assignment: assignment, coupled: false)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_two.destroy!
-      end.not_to change(assignment, :workflow_state)
+    it "undestroys associated results" do
+      expect(result.reload).to be_deleted
+      subject
+      expect(result.reload).to be_active
     end
+  end
 
-    it "doesn't destroy the assignment if the line item is coupled" do
-      line_item_one = line_item_model(assignment: assignment, coupled: true)
-      line_item_two = line_item_model(assignment: assignment)
-      line_item_two.update!(created_at: line_item_one.created_at + 5.seconds)
-      expect do
-        line_item_one.destroy!
-      end.not_to change(assignment, :workflow_state)
+  context "when updating the associated assignment" do
+    it "updates the line item's end_date_time to match assignment's due date" do
+      current_time = Time.now
+      next_week = current_time + 7.days
+      tool = AccessToken.create!
+      line_item_params = { end_date_time: Time.now, score_maximum: 10.0, label: "a line item" }
+      line_item = Lti::LineItem.create_line_item!(nil, course_model, tool, line_item_params)
+      # This is necessary because the line item only gets associated to the assignment after
+      # the assignment is created. This line_item variable is up-to-date with "knowing" its
+      # relation to the assignment, but the assignment variable is not yet up-to-date with
+      # its relation to the line item, even though we are referencing it with
+      # line_item.assignment -- in the assignment model, when it calls self.line_items,
+      # it will still get nil. So it needs to be reloaded. Since Lti::LineItem.create_line_item!
+      # is only ever called in an API request, this "need to reload" scenario should not
+      # happen in real life.
+      line_item.assignment.reload
+      line_item.assignment.due_at = next_week
+      line_item.assignment.save!
+      expect(line_item.reload.end_date_time).to eq(next_week)
     end
   end
 end

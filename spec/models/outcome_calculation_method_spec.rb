@@ -18,13 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-describe OutcomeCalculationMethod, type: :model do
+describe OutcomeCalculationMethod do
   subject { OutcomeCalculationMethod.create!(creation_params) }
 
   let_once(:account) { account_model }
   let(:calculation_method) { "latest" }
   let(:calculation_int) { nil }
-  let(:creation_params) { { context: account, calculation_method: calculation_method, calculation_int: calculation_int } }
+  let(:creation_params) { { context: account, calculation_method:, calculation_int: } }
 
   describe "validations" do
     it { is_expected.to validate_presence_of :context }
@@ -48,6 +48,34 @@ describe OutcomeCalculationMethod, type: :model do
           expect(subject).not_to allow_values(
             -1,
             0,
+            100,
+            1000,
+            nil
+          ).for(:calculation_int)
+        end
+      end
+
+      context "standard_decaying_average" do
+        before do
+          account.enable_feature!(:outcomes_new_decaying_average_calculation)
+        end
+
+        let(:calculation_method) { "standard_decaying_average" }
+        let(:calculation_int) { 65 }
+
+        it do
+          expect(subject).to allow_values(
+            50,
+            72,
+            99
+          ).for(:calculation_int)
+        end
+
+        it do
+          expect(subject).not_to allow_values(
+            -1,
+            0,
+            49,
             100,
             1000,
             nil
@@ -118,7 +146,16 @@ describe OutcomeCalculationMethod, type: :model do
       calculation_method = OutcomeCalculationMethod.find_or_create_default!(account)
       expect(calculation_method.calculation_method).to eq "highest"
       expect(calculation_method.workflow_state).to eq "active"
-      expect(calculation_method.calculation_int).to eq nil
+      expect(calculation_method.calculation_int).to be_nil
+      expect(calculation_method.context).to eq account
+    end
+
+    it "creates the default calculation method if outcomes_new_decaying_average_calculation FF enabled" do
+      account.enable_feature!(:outcomes_new_decaying_average_calculation)
+      calculation_method = OutcomeCalculationMethod.find_or_create_default!(account)
+      expect(calculation_method.calculation_method).to eq "highest"
+      expect(calculation_method.workflow_state).to eq "active"
+      expect(calculation_method.calculation_int).to be_nil
       expect(calculation_method.context).to eq account
     end
 

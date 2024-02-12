@@ -97,12 +97,12 @@ module SendToStream
     def clear_stream_items
       # We need to pass the asset_string, not the asset itself, since we're about to delete the asset
       root_object = StreamItem.root_object(self)
-      StreamItem.delay_if_production.delete_all_for([root_object.class.base_class.name, root_object.id], [self.class.base_class.name, id])
+      StreamItem.delay_if_production.delete_all_for([root_object.class.polymorphic_name, root_object.id], [self.class.polymorphic_name, id])
     end
   end
 
   def self.included(klass)
-    klass.send :include, SendToStreamInstanceMethods
+    klass.include SendToStreamInstanceMethods
     klass.extend SendToStreamClassMethods
   end
 end

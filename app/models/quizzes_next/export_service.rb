@@ -29,7 +29,7 @@ module QuizzesNext
           selected_assignment_ids = opts[:exported_assets].filter_map { |asset| (match = asset.match(/assignment_(\d+)/)) && match[1] }
           return unless selected_assignment_ids.any?
         end
-        assignments = QuizzesNext::Service.active_lti_assignments_for_course(course, selected_assignment_ids: selected_assignment_ids)
+        assignments = QuizzesNext::Service.active_lti_assignments_for_course(course, selected_assignment_ids:)
         return if assignments.empty?
 
         {
@@ -54,18 +54,24 @@ module QuizzesNext
 
       def send_imported_content(new_course, content_migration, imported_content)
         send_quizzes_next_quiz_duplicated = false
+        original_course = Course.find_by(uuid: imported_content[:original_course_uuid])
+        return unless original_course
+
         imported_content[:assignments].each do |assignment|
           next if QuizzesNext::Service.assignment_not_in_export?(assignment)
           next unless QuizzesNext::Service.assignment_duplicated?(assignment)
+
+          old_assignment_id = assignment.fetch(:original_assignment_id)
+          old_assignment = Assignment.find_by(id: old_assignment_id, context_id: original_course.id)
+          next unless old_assignment
 
           new_assignment_id = assignment.fetch(:$canvas_assignment_id)
           new_assignment = Assignment.find(new_assignment_id)
           next unless new_assignment.created_at > content_migration.started_at # no more recopies
 
           send_quizzes_next_quiz_duplicated = true
-          old_assignment_id = assignment.fetch(:original_assignment_id)
-          old_assignment = Assignment.find(old_assignment_id)
 
+          new_assignment.skip_downstream_changes! # don't let these updates prevent future blueprint syncs
           new_assignment.duplicate_of = old_assignment
           new_assignment.workflow_state = "duplicating"
           new_assignment.duplication_started_at = Time.zone.now
@@ -77,6 +83,7 @@ module QuizzesNext
             content_migration.migration_type == "master_course_import" &&
             MasterCourses::ChildSubscription.is_child_course?(new_course)
 
+          remove_alignments = content_migration.migration_type == "course_copy_importer" && content_migration.copy_options.exclude?(:everything) && content_migration.copy_options.exclude?(:all_learning_outcomes)
           Canvas::LiveEvents.quizzes_next_quiz_duplicated(
             {
               original_course_uuid: imported_content[:original_course_uuid],
@@ -85,7 +92,9 @@ module QuizzesNext
               domain: new_course.root_account&.domain(ApplicationController.test_cluster_name),
               new_course_name: new_course.name,
               created_on_blueprint_sync: is_blueprint_sync,
-              resource_map_url: content_migration.asset_map_url(generate_if_needed: true)
+              resource_map_url: content_migration.asset_map_url(generate_if_needed: true),
+              remove_alignments:,
+              status: "duplicating"
             }
           )
         end

@@ -156,9 +156,9 @@ describe PageView do
 
         other_root = Account.create!
         user.pseudonyms.create!(account: other_root, unique_id: "bob")
-        expect(user.associated_accounts).to be_include(other_root)
+        expect(user.associated_accounts).to include(other_root)
         viewer4 = account_admin_user(account: other_root)
-        expect(user.grants_right?(viewer4, :view_statistics)).to eq true
+        expect(user.grants_right?(viewer4, :view_statistics)).to be true
 
         expect(user.page_views(viewer: viewer1).paginate(per_page: 2)).to eq []
         expect(user.page_views(viewer: viewer2).paginate(per_page: 2)).to eq [@page_view]
@@ -305,9 +305,9 @@ describe PageView do
 
     let(:params) { { action: "path", controller: "some" } }
     let(:session) { { id: "42" } }
-    let(:request) { double(url: (@url || "host.com/some/path"), path_parameters: params, user_agent: "Mozilla", session_options: session, method: :get, remote_ip: "0.0.0.0", request_method: "GET") }
+    let(:request) { double(url: @url || "host.com/some/path", path_parameters: params, user_agent: "Mozilla", session_options: session, method: :get, remote_ip: "0.0.0.0", request_method: "GET") }
     let(:user) { User.new }
-    let(:attributes) { { real_user: user, user: user } }
+    let(:attributes) { { real_user: user, user: } }
 
     before { allow(RequestContextGenerator).to receive_messages(request_id: "xyz") }
 
@@ -397,7 +397,7 @@ describe PageView do
     end
 
     it "forces encoding on string fields" do
-      request = double(url: (@url || "host.com/some/path"), path_parameters: params, user_agent: "Mozilla", session_options: session, method: :get, remote_ip: "0.0.0.0".encode(Encoding::US_ASCII), request_method: "GET")
+      request = double(url: @url || "host.com/some/path", path_parameters: params, user_agent: "Mozilla", session_options: session, method: :get, remote_ip: "0.0.0.0".encode(Encoding::US_ASCII), request_method: "GET")
       pv = PageView.generate(request, attributes)
 
       expect(pv.remote_ip.encoding).to eq Encoding::UTF_8
@@ -418,7 +418,7 @@ describe PageView do
       end
 
       it "returns nothing with unknown request id" do
-        expect(PageView.find_all_by_id(["unknown", "unknown"]).size).to eql(0)
+        expect(PageView.find_all_by_id(["unknown", "unknown"]).size).to be(0)
       end
     end
 
@@ -433,7 +433,7 @@ describe PageView do
       end
 
       it "returns nothing with unknown request id" do
-        expect(PageView.find_all_by_id(["unknown", "unknown"]).size).to eql(0)
+        expect(PageView.find_all_by_id(["unknown", "unknown"]).size).to be(0)
       end
     end
   end
@@ -586,8 +586,7 @@ describe PageView do
 
   context "pv4" do
     before do
-      allow(PageView).to receive(:pv4?).and_return(true)
-      allow(PageView).to receive(:page_view_method).and_return(:pv4)
+      allow(PageView).to receive_messages(pv4?: true, page_view_method: :pv4)
     end
 
     it "store doesn't do anything" do
@@ -601,7 +600,7 @@ describe PageView do
     it "do_update still updates fields" do
       pv = PageView.new
       pv.do_update("interaction_seconds" => 5)
-      expect(pv.is_update).to eq true
+      expect(pv.is_update).to be true
       expect(pv.interaction_seconds).to eq 5
     end
 

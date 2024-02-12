@@ -19,11 +19,26 @@
 
 module Api::V1
   class CourseJson
-    BASE_ATTRIBUTES = %w[id name course_code account_id created_at start_at default_view enrollment_term_id is_public
-                         grading_standard_id root_account_id uuid license grade_passback_setting].freeze
+    BASE_ATTRIBUTES = %w[id
+                         name
+                         course_code
+                         account_id
+                         created_at
+                         start_at
+                         default_view
+                         enrollment_term_id
+                         is_public
+                         grading_standard_id
+                         root_account_id
+                         uuid
+                         license
+                         grade_passback_setting].freeze
 
-    INCLUDE_CHECKERS = { grading: "needs_grading_count", syllabus: "syllabus_body",
-                         url: "html_url", description: "public_description", permissions: "permissions" }.freeze
+    INCLUDE_CHECKERS = { grading: "needs_grading_count",
+                         syllabus: "syllabus_body",
+                         url: "html_url",
+                         description: "public_description",
+                         permissions: "permissions" }.freeze
 
     OPTIONAL_FIELDS = %w[needs_grading_count public_description enrollments].freeze
 
@@ -51,6 +66,7 @@ module Api::V1
       methods << "hide_final_grades" if @includes.include?(:hide_final_grades)
       methods << "storage_quota_used_mb" if @includes.include?(:storage_quota_used_mb)
       methods << "account_name" if @includes.include?(:account_name)
+      methods << "global_id" if @includes.include?(:global_id)
       methods
     end
 
@@ -76,11 +92,11 @@ module Api::V1
     end
 
     def self.to_hash(course, user, includes, enrollments, precalculated_permissions: nil, &block)
-      new(course, user, includes, enrollments, precalculated_permissions: precalculated_permissions, &block).to_hash
+      new(course, user, includes, enrollments, precalculated_permissions:, &block).to_hash
     end
 
     def clear_unneeded_fields(hash)
-      hash.reject { |k, v| (OPTIONAL_FIELDS.include?(k) && v.nil?) }
+      hash.reject { |k, v| OPTIONAL_FIELDS.include?(k) && v.nil? }
     end
 
     def description(course)
@@ -133,7 +149,7 @@ module Api::V1
     end
 
     INCLUDE_CHECKERS.each do |key, val|
-      define_method("include_#{key}".to_sym) do
+      define_method(:"include_#{key}") do
         @includes.include?(val.to_sym)
       end
     end
@@ -185,6 +201,9 @@ module Api::V1
       else
         scores[:computed_current_grade] = student_enrollment.effective_current_grade
         scores[:computed_current_score] = student_enrollment.effective_current_score
+        # score_to_grade will return nil if user is not quantitative data restricted.
+        # consumers can continue using :computed_current_grade instead
+        scores[:computed_current_letter_grade] = @course.score_to_grade(student_enrollment.effective_current_score, user: @user)
         scores[:computed_final_grade] = student_enrollment.effective_final_grade
         scores[:computed_final_score] = student_enrollment.effective_final_score
       end
@@ -252,7 +271,7 @@ module Api::V1
                end
 
       enrollment.send(
-        "#{prefix}_#{current_or_final}_#{score_or_grade}",
+        :"#{prefix}_#{current_or_final}_#{score_or_grade}",
         grading_period_id: current_grading_period.id
       )
     end

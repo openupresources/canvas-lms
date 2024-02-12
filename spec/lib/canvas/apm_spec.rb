@@ -40,8 +40,9 @@ describe Canvas::Apm do
   describe "settings parsing" do
     describe "analytics setting" do
       it "is true for bool string" do
+        Canvas::Apm.reset!
         inject_apm_settings("sample_rate: 0.5\nhost_sample_rate: 1.0\napp_analytics_enabled: true")
-        expect(Canvas::Apm.config["app_analytics_enabled"]).to eq(true)
+        expect(Canvas::Apm.config["app_analytics_enabled"]).to be(true)
         expect(Canvas::Apm).to be_analytics_enabled
       end
 
@@ -59,13 +60,13 @@ describe Canvas::Apm do
   describe ".configured?" do
     it "is false for empty config" do
       DynamicSettings.fallback_data = {}
-      expect(Canvas::Apm.configured?).to eq(false)
+      expect(Canvas::Apm.configured?).to be(false)
     end
 
     it "is false for 0 sampling rate" do
       inject_apm_settings("sample_rate: 0.0\nhost_sample_rate: 1.0")
       Canvas::Apm.hostname = "testbox"
-      expect(Canvas::Apm.configured?).to eq(false)
+      expect(Canvas::Apm.configured?).to be(false)
     end
 
     it "is true for >0 sampling rate" do
@@ -75,7 +76,7 @@ describe Canvas::Apm do
       expect(Canvas::Apm.config.fetch("sample_rate")).to eq(0.5)
       expect(Canvas::Apm.sample_rate).to eq(0.5)
       expect(Canvas::Apm.host_sample_rate).to eq(1.0)
-      expect(Canvas::Apm.configured?).to eq(true)
+      expect(Canvas::Apm.configured?).to be(true)
     end
 
     it "is false when no hosts are sampled" do
@@ -84,7 +85,7 @@ describe Canvas::Apm do
       Canvas::Apm.hostname = "testbox"
       expect(Canvas::Apm.config.fetch("sample_rate")).to eq(0.5)
       expect(Canvas::Apm.host_sample_rate).to eq(0.0)
-      expect(Canvas::Apm.configured?).to eq(false)
+      expect(Canvas::Apm.configured?).to be(false)
     end
   end
 
@@ -149,7 +150,7 @@ describe Canvas::Apm do
       Canvas::Apm.reset!
       Canvas::Apm.hostname = "testbox"
       expect(Canvas::Apm).to be_configured
-      expect(Canvas::Apm.tracer).to eq(Datadog.tracer)
+      expect(Canvas::Apm.tracer).to eq(Datadog::Tracing)
     end
 
     it "traces arbitrary code" do

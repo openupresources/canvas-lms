@@ -39,7 +39,7 @@ describe "External Tools" do
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      form = doc.at_css("form#tool_form")
+      form = doc.at_css(".tool_content_wrapper > form")
 
       expect(form.at_css("input#launch_presentation_locale")["value"]).to eq "en"
       expect(form.at_css("input#oauth_callback")["value"]).to eq "about:blank"
@@ -62,9 +62,9 @@ describe "External Tools" do
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
 
-      expect(doc.at_css("form#tool_form input#lis_result_sourcedid")["value"]).to eq BasicLTI::Sourcedid.new(@tool, @course, @assignment, @user).to_s
-      expect(doc.at_css("form#tool_form input#lis_outcome_service_url")["value"]).to eq lti_grade_passback_api_url(@tool)
-      expect(doc.at_css("form#tool_form input#ext_ims_lis_basic_outcome_url")["value"]).to eq blti_legacy_grade_passback_api_url(@tool)
+      expect(doc.at_css(".tool_content_wrapper > form input#lis_result_sourcedid")["value"]).to eq BasicLTI::Sourcedid.new(@tool, @course, @assignment, @user).to_s
+      expect(doc.at_css(".tool_content_wrapper > form input#lis_outcome_service_url")["value"]).to eq lti_grade_passback_api_url(@tool)
+      expect(doc.at_css(".tool_content_wrapper > form input#ext_ims_lis_basic_outcome_url")["value"]).to eq blti_legacy_grade_passback_api_url(@tool)
     end
 
     it "does not include outcome service sourcedid when viewing as teacher" do
@@ -73,8 +73,8 @@ describe "External Tools" do
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      expect(doc.at_css("form#tool_form input#lis_result_sourcedid")).to be_nil
-      expect(doc.at_css("form#tool_form input#lis_outcome_service_url")).not_to be_nil
+      expect(doc.at_css(".tool_content_wrapper > form input#lis_result_sourcedid")).to be_nil
+      expect(doc.at_css(".tool_content_wrapper > form input#lis_outcome_service_url")).not_to be_nil
     end
 
     it "includes time zone in LTI paramaters if included in custom fields" do
@@ -92,7 +92,7 @@ describe "External Tools" do
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      expect(doc.at_css("form#tool_form input#custom_time_zone")["value"]).to eq "America/Juneau"
+      expect(doc.at_css(".tool_content_wrapper > form input#custom_time_zone")["value"]).to eq "America/Juneau"
 
       @user.time_zone = "Hawaii"
       @user.save!
@@ -100,7 +100,7 @@ describe "External Tools" do
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      expect(doc.at_css("form#tool_form input#custom_time_zone")["value"]).to eq "Pacific/Honolulu"
+      expect(doc.at_css(".tool_content_wrapper > form input#custom_time_zone")["value"]).to eq "Pacific/Honolulu"
     end
 
     it "redirects if the tool can't be configured" do
@@ -119,7 +119,7 @@ describe "External Tools" do
       get "/courses/#{@course.id}/external_tools/retrieve?url=#{CGI.escape(@tag.url)}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      expect(doc.at_css("#tool_form")).not_to be_nil
+      expect(doc.at_css(".tool_content_wrapper > form")).not_to be_nil
       expect(doc.at_css("input[name='launch_presentation_return_url']")["value"]).to match(/^http/)
     end
 
@@ -133,7 +133,7 @@ describe "External Tools" do
       get "/users/#{@user.id}/external_tools/#{tool.id}"
       expect(response).to be_successful
       doc = Nokogiri::HTML5(response.body)
-      expect(doc.at_css("#tool_form")).not_to be_nil
+      expect(doc.at_css(".tool_content_wrapper > form")).not_to be_nil
       expect(doc.at_css("input[name='launch_presentation_return_url']")["value"]).to match(/^http/)
     end
   end
@@ -179,8 +179,9 @@ describe "External Tools" do
       @member_tool.global_navigation = { url: "http://www.example.com", text: "Example URL 2" }
       @member_tool.save!
       @permissiony_tool = Account.default.context_external_tools.new(name: "b", domain: "google.com", consumer_key: "12345", shared_secret: "secret")
-      @permissiony_tool.global_navigation = { required_permissions: "manage_assignments,manage_calendar",
-                                              url: "http://www.example.com", text: "Example URL 3" }
+      @permissiony_tool.global_navigation = { required_permissions: "manage_assignments_add,manage_calendar",
+                                              url: "http://www.example.com",
+                                              text: "Example URL 3" }
       @permissiony_tool.save!
     end
 
@@ -219,11 +220,16 @@ describe "External Tools" do
     context "caching" do
       specs_require_cache(:redis_cache_store)
 
+      let(:highlight_nav_css_class) { "ic-app-header__menu-list-item--active" }
+
       it "caches the template" do
         course_with_teacher_logged_in(account: @account, active_all: true)
         get "/courses" # populate the cache once
-
-        expect(ContextExternalTool).not_to receive(:filtered_global_navigation_tools)
+        # We can't cache the lookup for global navigation tools due to highlighting issues,
+        # so we can't assert that we don't look things up, cause we have to.
+        # We can assert that we don't look up extraneous information
+        # again though.
+        expect(ContextExternalTool).not_to receive(:label_for)
         get "/courses"
         doc = Nokogiri::HTML5(response.body)
         expect(doc.at_css("##{@admin_tool.asset_string}_menu_item a")).to be_present
@@ -265,7 +271,10 @@ describe "External Tools" do
         expect(doc.at_css("##{@permissiony_tool.asset_string}_menu_item a")).to be_present
 
         c2 = course_with_teacher(account: @account, active_all: true, user: @teacher).course
-        expect(ContextExternalTool).not_to receive(:filtered_global_navigation_tools)
+        # We can't cache the lookup for global navigation tools due to highlighting issues,
+        # so we can't assert on that. We can asssert that we don't look up extraneous information
+        # again though.
+        expect(ContextExternalTool).not_to receive(:label_for)
         get "/courses/#{c2.id}" # viewing different course but permissions are the same - should remain cached
         doc = Nokogiri::HTML5(response.body)
         expect(doc.at_css("##{@permissiony_tool.asset_string}_menu_item a")).to be_present
@@ -302,6 +311,24 @@ describe "External Tools" do
         expect(doc.at_css("##{@permissiony_tool.asset_string}_menu_item a")).to_not be_present
       end
 
+      it "doesn't highlight the tool if the tool is no longer the current page" do
+        admin = account_admin_user(account: @account)
+        user_session(admin)
+        get "/accounts/#{Account.default.id}/external_tools/#{@admin_tool.id}?launch_type=global_navigation"
+        doc = Nokogiri::HTML5(response.body)
+        external_tool_link = doc.at_css("##{@admin_tool.asset_string}_menu_item")
+        # Expect the tool to be highlighted
+        expect(external_tool_link.attributes["class"].value).to include(highlight_nav_css_class)
+
+        get "/accounts/#{Account.default.id}"
+        doc = Nokogiri::HTML5(response.body)
+        external_tool_link = doc.at_css("##{@admin_tool.asset_string}_menu_item")
+        expect(external_tool_link.attributes["class"].value).not_to include(highlight_nav_css_class)
+
+        account_nav = doc.at_css("#global_nav_accounts_link").parent
+        expect(account_nav.attributes["class"].value).to include(highlight_nav_css_class)
+      end
+
       it "doesn't rebuild the html unless it detects a global_nav root account tool change" do
         skip("Fails in RSpecQ") if ENV["RSPECQ_REDIS_URL"]
         course_with_teacher_logged_in(account: @account, active_all: true)
@@ -310,8 +337,10 @@ describe "External Tools" do
         expect(doc.at_css("##{@admin_tool.asset_string}_menu_item a")).to be_present
 
         # trigger the global_nav cache register clearing in a callback
-        Account.default.context_external_tools.new(name: "b", domain: "google.com",
-                                                   consumer_key: "12345", shared_secret: "secret")
+        Account.default.context_external_tools.new(name: "b",
+                                                   domain: "google.com",
+                                                   consumer_key: "12345",
+                                                   shared_secret: "secret")
         new_secret_settings = @admin_tool.settings
         new_secret_settings[:global_navigation][:text] = "new text"
         # update the url secretly in the db but don't update the cache_key (updated_at)

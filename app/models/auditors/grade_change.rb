@@ -186,9 +186,9 @@ class Auditors::GradeChange
 
       submission.shard.activate do
         @submission_version = SubmissionVersion.where(
-          context_type: context_type,
-          context_id: context_id,
-          version_id: version_id
+          context_type:,
+          context_id:,
+          version_id:
         ).first
       end
 
@@ -218,14 +218,10 @@ class Auditors::GradeChange
     scope.unscope(where: :assignment_id).where(assignment_id: nil)
   end
 
-  Stream = Audits.stream do
+  Stream = Auditors.stream do
     grades_ar_type = Auditors::ActiveRecord::GradeChangeRecord
-    backend_strategy -> { Audits.backend_strategy }
     active_record_type grades_ar_type
-    database -> { CanvasCassandra::DatabaseBuilder.from_config(:auditors) }
-    table :grade_changes
     record_type Auditors::GradeChange::Record
-    read_consistency_level -> { CanvasCassandra::DatabaseBuilder.read_consistency_setting(:auditors) }
 
     add_index :assignment do
       table :grade_changes_by_assignment
@@ -368,33 +364,60 @@ class Auditors::GradeChange
     event_record
   end
 
+  def self.bulk_record_submission_events(submissions)
+    event_records = submissions.map do |submission|
+      stream_record = Auditors::GradeChange::Record.generate(submission)
+      Auditors::ActiveRecord::GradeChangeRecord.ar_attributes_from_event_stream(stream_record)
+    end
+    bulk_insert_records(event_records)
+  end
+
+  def self.create_content_participations(plucked_submissions, assignment, unique_users)
+    root_account_id = assignment.root_account_id
+    content_participations = []
+    content_participation_counts = []
+    plucked_submissions.each do |user_id, submission_id, course_id|
+      context_type = course_id ? "Course" : assignment.context_type
+      context_id = course_id || assignment.context_id
+      content_participations << { content_type: "Submission", user_id:, content_id: submission_id, workflow_state: "unread", content_item: "grade", root_account_id:, }
+      content_participation_counts << { content_type: "Submission", context_type:, user_id:, root_account_id:, unread_count: 0, context_id:, }
+    end
+    content_participations.each_slice(1000) { |batch| ContentParticipation.insert_all(batch) }
+    content_participation_counts.each_slice(1000) { |batch| ContentParticipationCount.insert_all(batch) }
+    assignment.course.refresh_content_participation_counts_for_users(unique_users)
+  end
+
   def self.insert_record(event_record)
-    Auditors::GradeChange::Stream.insert(event_record, { backend_strategy: :cassandra }) if Audits.write_to_cassandra?
-    Auditors::GradeChange::Stream.insert(event_record, { backend_strategy: :active_record }) if Audits.write_to_postgres?
+    Auditors::GradeChange::Stream.insert(event_record)
   end
   private_class_method :insert_record
 
+  def self.bulk_insert_records(event_records)
+    event_records.each_slice(1000) { |batch| Auditors::ActiveRecord::GradeChangeRecord.insert_all(batch) }
+  end
+  private_class_method :bulk_insert_records
+
   def self.for_root_account_student(account, student, options = {})
     account.shard.activate do
-      Auditors::GradeChange::Stream.for_root_account_student(account, student, Audits.read_stream_options(options))
+      Auditors::GradeChange::Stream.for_root_account_student(account, student, options)
     end
   end
 
   def self.for_course(course, options = {})
     course.shard.activate do
-      Auditors::GradeChange::Stream.for_course(course, Audits.read_stream_options(options))
+      Auditors::GradeChange::Stream.for_course(course, options)
     end
   end
 
   def self.for_root_account_grader(account, grader, options = {})
     account.shard.activate do
-      Auditors::GradeChange::Stream.for_root_account_grader(account, grader, Audits.read_stream_options(options))
+      Auditors::GradeChange::Stream.for_root_account_grader(account, grader, options)
     end
   end
 
   def self.for_assignment(assignment, options = {})
     assignment.shard.activate do
-      Auditors::GradeChange::Stream.for_assignment(assignment, Audits.read_stream_options(options))
+      Auditors::GradeChange::Stream.for_assignment(assignment, options)
     end
   end
 
@@ -407,25 +430,33 @@ class Auditors::GradeChange
   # course grader student
   # course student
   def self.for_course_and_other_arguments(course, arguments, options = {})
-    options = Audits.read_stream_options(options)
     course.shard.activate do
       if arguments[:assignment] && arguments[:grader] && arguments[:student]
         Auditors::GradeChange::Stream.for_course_assignment_grader_student(course,
-                                                                           arguments[:assignment], arguments[:grader], arguments[:student], options)
+                                                                           arguments[:assignment],
+                                                                           arguments[:grader],
+                                                                           arguments[:student],
+                                                                           options)
 
       elsif arguments[:assignment] && arguments[:grader]
-        Auditors::GradeChange::Stream.for_course_assignment_grader(course, arguments[:assignment],
-                                                                   arguments[:grader], options)
+        Auditors::GradeChange::Stream.for_course_assignment_grader(course,
+                                                                   arguments[:assignment],
+                                                                   arguments[:grader],
+                                                                   options)
 
       elsif arguments[:assignment] && arguments[:student]
-        Auditors::GradeChange::Stream.for_course_assignment_student(course, arguments[:assignment],
-                                                                    arguments[:student], options)
+        Auditors::GradeChange::Stream.for_course_assignment_student(course,
+                                                                    arguments[:assignment],
+                                                                    arguments[:student],
+                                                                    options)
 
       elsif arguments[:assignment]
         Auditors::GradeChange::Stream.for_course_assignment(course, arguments[:assignment], options)
 
       elsif arguments[:grader] && arguments[:student]
-        Auditors::GradeChange::Stream.for_course_grader_student(course, arguments[:grader], arguments[:student],
+        Auditors::GradeChange::Stream.for_course_grader_student(course,
+                                                                arguments[:grader],
+                                                                arguments[:student],
                                                                 options)
 
       elsif arguments[:grader]

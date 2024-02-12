@@ -121,7 +121,7 @@ RSpec.describe Mutations::CreateConversation do
     result = CanvasSchema.execute(
       mutation_str(**opts),
       context: {
-        current_user: current_user,
+        current_user:,
         domain_root_account: @course.account.root_account,
         request: ActionDispatch::TestRequest.create
       }
@@ -194,7 +194,7 @@ RSpec.describe Mutations::CreateConversation do
 
     result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
 
-    expect(result.dig("data", "createConversation", "conversations")).to be nil
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Unable to send messages to users in #{@course.name}"
@@ -206,7 +206,7 @@ RSpec.describe Mutations::CreateConversation do
 
     result = run_mutation({ recipients: [teacher2.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
 
-    expect(result.dig("data", "createConversation", "conversations")).to be nil
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Unable to send messages to users in #{@course.name}"
@@ -217,7 +217,7 @@ RSpec.describe Mutations::CreateConversation do
     @course.save
     result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
 
-    expect(result.dig("data", "createConversation", "conversations")).to be nil
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Course concluded, unable to send messages"
@@ -229,7 +229,7 @@ RSpec.describe Mutations::CreateConversation do
     @course.save
     result = run_mutation({ recipients: [teacher2.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
 
-    expect(result.dig("data", "createConversation", "conversations")).to be nil
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Course concluded, unable to send messages"
@@ -389,7 +389,7 @@ RSpec.describe Mutations::CreateConversation do
       @course.account.role_overrides.create!(permission: :send_messages, role: student_role, enabled: false)
       result = run_mutation(recipients: [@new_user2.id.to_s], body: "ooo eee", group_conversation: true, context_code: @course.asset_string)
 
-      expect(result.dig("data", "createConversation", "conversations")).to be nil
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
       expect(
         result.dig("data", "createConversation", "errors", 0, "message")
       ).to eql "Invalid recipients"
@@ -402,16 +402,28 @@ RSpec.describe Mutations::CreateConversation do
       @students = create_users_in_course(@course, 2, account_associations: true, return_type: :record)
     end
 
-    it "creates user notes" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
-      @students.each { |x| expect(x.user_notes.size).to be(1) }
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
+    context "when the deprecate_faculty_journal feature flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "creates user notes" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
+        @students.each { |x| expect(x.user_notes.size).to be(1) }
+        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
+      end
+
+      it "includes the domain root account in the user note" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "hi there", subject: "hi there", user_note: true, context_code: @course.asset_string }, @teacher)
+        note = UserNote.last
+        expect(note.root_account_id).to eql Account.default.id
+      end
     end
 
-    it "includes the domain root account in the user note" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "hi there", subject: "hi there", user_note: true, context_code: @course.asset_string }, @teacher)
-      note = UserNote.last
-      expect(note.root_account_id).to eql Account.default.id
+    context "when the deprecate_faculty_journal feature flag is enabled" do
+      it "does not create user notes" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
+        @students.each { |x| expect(x.user_notes.size).to be(0) }
+        expect(InstStatsd::Statsd).to_not have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
+      end
     end
   end
 
@@ -419,7 +431,7 @@ RSpec.describe Mutations::CreateConversation do
     it "fails for normal users" do
       result = run_mutation(recipients: [User.create.id.to_s], body: "foo")
 
-      expect(result.dig("data", "createConversation", "conversations")).to be nil
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
       expect(
         result.dig("data", "createConversation", "errors", 0, "message")
       ).to eql "Invalid recipients"

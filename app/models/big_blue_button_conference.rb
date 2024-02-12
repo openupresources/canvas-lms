@@ -100,7 +100,7 @@ class BigBlueButtonConference < WebConference
 
   class << self
     def send_request(action, options, use_fallback_config: false)
-      url_str = generate_request(action, options, use_fallback_config: use_fallback_config)
+      url_str = generate_request(action, options, use_fallback_config:)
       http_response = nil
       Canvas.timeout_protection("big_blue_button") do
         logger.debug "big blue button api call: #{url_str}"
@@ -188,7 +188,7 @@ class BigBlueButtonConference < WebConference
       :voiceBridge => format("%020d", global_id),
       :attendeePW => settings[:user_key],
       :moderatorPW => settings[:admin_key],
-      :logoutURL => (settings[:default_return_url] || "http://www.instructure.com"),
+      :logoutURL => settings[:default_return_url] || "http://www.instructure.com",
       :record => settings[:record] ? true : false,
       "meta_canvas-recording-ready-user" => recording_ready_user,
       "meta_canvas-recording-ready-url" => recording_ready_url(current_host)
@@ -263,7 +263,8 @@ class BigBlueButtonConference < WebConference
   def recording_formats(recording)
     recording_formats = recording.fetch(:playback, []).map do |format|
       show_to_students = !!format[:length] || format[:type] == "notes" # either is an actual recording or shared notes
-      format.merge(show_to_students: show_to_students)
+      format[:translated_type] = translate_playback_format_type(format[:type])
+      format.merge(show_to_students:)
     end
     {
       recording_id: recording[:recordID],
@@ -273,6 +274,23 @@ class BigBlueButtonConference < WebConference
       playback_formats: recording_formats,
       created_at: recording[:startTime].to_i,
     }
+  end
+
+  def translate_playback_format_type(format_type)
+    case format_type
+    when "notes"
+      I18n.t("playback.notes", "Notes")
+    when "presentation"
+      I18n.t("playback.presentation", "Presentation")
+    when "statistics"
+      I18n.t("playback.statistics", "Statistics")
+    when "podcast"
+      I18n.t("playback.podcast", "Podcast")
+    when "video"
+      I18n.t("playback.video", "Video")
+    else
+      format_type
+    end
   end
 
   def delete_recording(recording_id)
@@ -308,12 +326,11 @@ class BigBlueButtonConference < WebConference
 
   def self.fetch_and_preload_recordings(conferences, use_fallback_config: false)
     # have a limit so we don't send a ridiculously long URL over
-    limit = Setting.get("big_blue_button_preloaded_recordings_limit", "50").to_i
-    conferences.each_slice(limit) do |sliced_conferences|
+    conferences.each_slice(50) do |sliced_conferences|
       meeting_ids = sliced_conferences.map(&:conference_key).join(",")
       response = send_request(:getRecordings,
                               { meetingID: meeting_ids },
-                              use_fallback_config: use_fallback_config)
+                              use_fallback_config:)
       result = response[:recordings] if response
       result = [] if result.is_a?(String)
       grouped_result = Array(result).group_by { |r| r[:meetingID] }
@@ -349,7 +366,7 @@ class BigBlueButtonConference < WebConference
     generate_request :join,
                      fullName: user.short_name,
                      meetingID: conference_key,
-                     password: settings[(type == :user ? :user_key : :admin_key)],
+                     password: settings[((type == :user) ? :user_key : :admin_key)],
                      userID: user.id,
                      createTime: settings[:create_time]
   end
@@ -357,7 +374,7 @@ class BigBlueButtonConference < WebConference
   def end_meeting
     response = send_request(:end, {
                               meetingID: conference_key,
-                              password: settings[(type == :user ? :user_key : :admin_key)],
+                              password: settings[((type == :user) ? :user_key : :admin_key)],
                             })
     response[:ended] if response
   end

@@ -45,7 +45,7 @@ module Api::V1::Account
     end
 
     methods = %w[default_storage_quota_mb default_user_storage_quota_mb default_group_storage_quota_mb]
-    api_json(account, user, session, only: attributes, methods: methods).tap do |hash|
+    api_json(account, user, session, only: attributes, methods:).tap do |hash|
       hash["root_account_id"] = nil if account.root_account?
       hash["default_time_zone"] = account.default_time_zone.tzinfo.name
       hash["sis_account_id"] = account.sis_source_id if !account.root_account? && account.root_account.grants_any_right?(user, :read_sis, :manage_sis)
@@ -62,12 +62,14 @@ module Api::V1::Account
           hash["terms_required"] = account.terms_required?
           hash["terms_of_use_url"] = terms_of_use_url
           hash["privacy_policy_url"] = privacy_policy_url
-          hash["recaptcha_key"] = account.self_registration_captcha? && DynamicSettings.find(tree: :private)["recaptcha_client_key"]
+          hash["recaptcha_key"] = account.self_registration_captcha? && DynamicSettings.find(tree: :private)["recaptcha_client_key", failsafe: nil]
         end
       end
       if includes.include?("services") && account.grants_right?(user, session, :manage_account_settings)
         hash["services"] = Account.services_exposed_to_ui_hash(nil, user, account).keys.index_with { |k| account.service_enabled?(k) }
       end
+
+      hash["global_id"] = account.global_id if includes.include?("global_id")
 
       Api::V1::Account.extensions.each do |extension|
         hash = extension.extend_account_json(hash, account, user, session, includes)

@@ -23,15 +23,24 @@ class LearningOutcome < ActiveRecord::Base
   include Workflow
   include MasterCourses::Restrictor
   restrict_columns :state, [:workflow_state]
-  self.ignored_columns = %i[migration_id_2 vendor_guid_2 root_account_id]
+  self.ignored_columns += %i[migration_id_2 vendor_guid_2 root_account_id]
 
   belongs_to :context, polymorphic: [:account, :course]
   has_many :learning_outcome_results
   has_many :alignments, -> { where("content_tags.tag_type='learning_outcome' AND content_tags.workflow_state<>'deleted'") }, class_name: "ContentTag"
 
+  belongs_to :copied_from,
+             class_name: "LearningOutcome",
+             optional: true,
+             inverse_of: :cloned_outcomes,
+             foreign_key: "copied_from_outcome_id"
+  has_many :cloned_outcomes,
+           class_name: "LearningOutcome",
+           inverse_of: :copied_from,
+           foreign_key: "copied_from_outcome_id"
   serialize :data
 
-  before_validation :infer_default_calculation_method, :adjust_calculation_int
+  before_validation :adjust_calculation_method, :infer_default_calculation_method, :adjust_calculation_int
   before_save :infer_defaults
   before_save :infer_root_account_ids
   after_save :propagate_changes_to_rubrics
@@ -125,7 +134,7 @@ class LearningOutcome < ActiveRecord::Base
       else
         errors.add(:calculation_int, t(
                                        "'%{calculation_int}' is not a valid value for this calculation method. The value must be between '%{valid_calculation_ints_min}' and '%{valid_calculation_ints_max}'",
-                                       calculation_int: calculation_int,
+                                       calculation_int:,
                                        valid_calculation_ints_min: valid_ints.min,
                                        valid_calculation_ints_max: valid_ints.max
                                      ))
@@ -166,13 +175,49 @@ class LearningOutcome < ActiveRecord::Base
     end
   end
 
+  def new_decaying_average_calculation_ff_enabled?
+    return context.root_account.feature_enabled?(:outcomes_new_decaying_average_calculation) if context
+
+    LoadAccount.default_domain_root_account.feature_enabled?(:outcomes_new_decaying_average_calculation)
+  end
+
+  # We have redefined the calculation methods as follows:
+  # weighted_average - This is the preferred way to describe legacy decaying_average.
+  # decaying_average - This is the deprecated way to describe legacy decaying_average.
+  # standard_decaying_average - This is the preferred way to describe the new decaying_average.
+  # if this FF is ENABLED then on user facing side(Only UI)
+  # end-user will use "weighted_average" for old "decaying_average"
+  # and "decaying_average" for "standard_decaying_average"
+  # eg:
+  # |User Facing Name | DB Value                                                                           |
+  # |------------------------------------------------------------------------------------------------------|
+  # |decaying_average | standard_decaying_average [after data migration will be named as decaying_average] |
+  # |weighted_average | decaying_average [after data migration this old decaying_average                   |
+  # |                 | will be named as weighted_average]                                                 |
+  # |------------------------------------------------------------------------------------------------------|
+  def adjust_calculation_method(method = self.calculation_method)
+    if new_decaying_average_calculation_ff_enabled?
+      self.calculation_method = "decaying_average" if method == "weighted_average"
+    elsif method == "standard_decaying_average"
+      # If FF is disabled “decaying_average” and “standard_decaying_average”
+      # will all be treated the same and calculate using the legacy approach.
+      # Any time a learning outcome is updated / saved it will have the calculation_method
+      # updated back to being “decaying_average”.
+      self.calculation_method = "decaying_average"
+    end
+  end
+
   def default_calculation_method
-    "decaying_average"
+    if new_decaying_average_calculation_ff_enabled?
+      "standard_decaying_average"
+    else
+      "decaying_average"
+    end
   end
 
   def default_calculation_int(method = self.calculation_method)
     case method
-    when "decaying_average" then 65
+    when "decaying_average", "standard_decaying_average", "weighted_average" then 65
     when "n_mastery" then 5
     else nil
     end
@@ -188,7 +233,7 @@ class LearningOutcome < ActiveRecord::Base
       create_missing_outcome_link(context)
       if MasterCourses::MasterTemplate.is_master_course?(context)
         # mark for re-sync
-        context.learning_outcome_links.where(content: self).touch_all if context_type == "Account"
+        context.learning_outcome_links.where(content: self).touch_all
         touch
       end
     end
@@ -236,6 +281,7 @@ class LearningOutcome < ActiveRecord::Base
 
   workflow do
     state :active
+    state :archived
     state :retired
     state :deleted
   end
@@ -330,6 +376,28 @@ class LearningOutcome < ActiveRecord::Base
     save!
   end
 
+  def archive!
+    # Only active outcomes can be archived
+    if workflow_state == "active"
+      self.workflow_state = "archived"
+      self.archived_at = Time.now.utc
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot archive a deleted LearningOutcome"
+    end
+  end
+
+  def unarchive!
+    # Only archived outcomes can be unarchived
+    if workflow_state == "archived"
+      self.workflow_state = "active"
+      self.archived_at = nil
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot unarchive a deleted LearningOutcome"
+    end
+  end
+
   def assessed?(course = nil)
     if course
       learning_outcome_results.active.where(context_id: course, context_type: "Course").exists?
@@ -389,7 +457,7 @@ class LearningOutcome < ActiveRecord::Base
   end
 
   scope(:for_context_codes, ->(codes) { where(context_code: codes) })
-  scope(:active, -> { where("learning_outcomes.workflow_state<>'deleted'") })
+  scope(:active, -> { where("learning_outcomes.workflow_state NOT IN ('deleted', 'archived')") })
   scope(:active_first, -> { order(Arel.sql("CASE WHEN workflow_state = 'active' THEN 0 ELSE 1 END")) })
   scope(:has_result_for_user,
         lambda do |user|
@@ -457,7 +525,7 @@ class LearningOutcome < ActiveRecord::Base
     alignments.find_or_create_by(
       content: asset,
       tag_type: "learning_outcome",
-      context: context
+      context:
     ) do |_a|
       InstStatsd::Statsd.increment("learning_outcome.align", tags: { type: asset.class.name })
     end

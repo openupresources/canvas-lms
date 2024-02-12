@@ -39,13 +39,18 @@ describe "Outcome Reports" do
     @course1.enroll_teacher(@teacher)
 
     @user1 = user_with_managed_pseudonym(
-      active_all: true, account: @root_account, name: "John St. Clair",
-      sortable_name: "St. Clair, John", username: "john@stclair.com",
+      active_all: true,
+      account: @root_account,
+      name: "John St. Clair",
+      sortable_name: "St. Clair, John",
+      username: "john@stclair.com",
       sis_user_id: "user_sis_id_01"
     )
     @user2 = user_with_managed_pseudonym(
-      active_all: true, username: "micheal@michaelbolton.com",
-      name: "Michael Bolton", account: @root_account,
+      active_all: true,
+      username: "micheal@michaelbolton.com",
+      name: "Michael Bolton",
+      account: @root_account,
       sis_user_id: "user_sis_id_02"
     )
 
@@ -54,7 +59,7 @@ describe "Outcome Reports" do
 
     @section = @course1.course_sections.first
     assignment_model(course: @course1, title: "English Assignment")
-    outcome_group = @root_account.root_outcome_group
+    @outcome_group = @root_account.root_outcome_group
     @outcome = outcome_model(context: @root_account, short_description: "Spelling")
     @rubric = Rubric.create!(context: @course1)
     @rubric.data = [
@@ -79,7 +84,7 @@ describe "Outcome Reports" do
         learning_outcome_id: @outcome.id
       }
     ]
-    @rubric.instance_variable_set("@alignments_changed", true)
+    @rubric.instance_variable_set(:@alignments_changed, true)
     @rubric.save!
     @a = @rubric.associate_with(@assignment, @course1, purpose: "grading")
     @assignment.reload
@@ -88,9 +93,9 @@ describe "Outcome Reports" do
     @submission.submitted_at = 1.week.ago
     @submission.save!
     @outcome.reload
-    outcome_group.add_outcome(@outcome)
+    @outcome_group.add_outcome(@outcome)
     @outcome.reload
-    outcome_group.add_outcome(@outcome)
+    @outcome_group.add_outcome(@outcome)
   end
 
   before do
@@ -114,11 +119,22 @@ describe "Outcome Reports" do
   end
 
   def verify(row, values, row_index: nil)
-    user, assignment, outcome, outcome_result, course, section, submission, quiz, question, quiz_outcome_result, quiz_submission, pseudonym =
-      values.values_at(:user, :assignment, :outcome, :outcome_result, :course, :section, :submission, :quiz, :question,
-                       :quiz_outcome_result, :quiz_submission, :pseudonym)
+    user, assignment, outcome, outcome_group, outcome_result, course, section, submission, quiz, question, quiz_outcome_result, quiz_submission, pseudonym =
+      values.values_at(:user,
+                       :assignment,
+                       :outcome,
+                       :outcome_group,
+                       :outcome_result,
+                       :course,
+                       :section,
+                       :submission,
+                       :quiz,
+                       :question,
+                       :quiz_outcome_result,
+                       :quiz_submission,
+                       :pseudonym)
     result = quiz.nil? ? outcome_result : quiz_outcome_result
-    rating = if outcome.present? && result&.score&.present?
+    rating = if outcome.present? && result&.score.present?
                outcome.rubric_criterion&.[](:ratings)&.select do |r|
                  score = if quiz.nil?
                            result.score
@@ -148,6 +164,8 @@ describe "Outcome Reports" do
       "section sis id" => section&.sis_source_id,
       "submission date" => quiz_submission&.finished_at&.iso8601 || submission&.submitted_at&.iso8601,
       "submission score" => quiz_submission&.score || submission&.grade&.to_f,
+      "learning outcome group title" => outcome_group&.title,
+      "learning outcome group id" => outcome_group&.id,
       "learning outcome name" => outcome&.short_description,
       "learning outcome friendly name" => outcome&.display_name,
       "learning outcome id" => outcome&.id,
@@ -167,7 +185,7 @@ describe "Outcome Reports" do
       "assessment type" => quiz.nil? ? "assignment" : "quiz",
       "assessment question" => question&.name,
       "assessment question id" => question&.id,
-      "enrollment state" => user&.enrollments&.find_by(course: course, course_section: section)&.workflow_state
+      "enrollment state" => user&.enrollments&.find_by(course:, course_section: section)&.workflow_state
     }
     expect(row.headers).to eq row.headers & expectations.keys
     row.headers.each do |key|
@@ -182,7 +200,8 @@ describe "Outcome Reports" do
       course: @course1,
       section: @section,
       assignment: @assignment,
-      outcome: @outcome
+      outcome: @outcome,
+      outcome_group: @outcome_group
     }
   end
   let(:user1_values) do
@@ -201,7 +220,7 @@ describe "Outcome Reports" do
   end
 
   let(:report_params) { {} }
-  let(:merged_params) { report_params.reverse_merge(order: order, parse_header: true, account: @root_account) }
+  let(:merged_params) { report_params.reverse_merge(order:, parse_header: true, account: @root_account) }
   let(:report) { read_report(report_type, merged_params) }
 
   shared_examples "common outcomes report behavior" do
@@ -247,6 +266,15 @@ describe "Outcome Reports" do
       end
 
       let(:report_params) { { account: @sub_account } }
+      let(:common_values) do
+        {
+          course: @course1,
+          section: @section,
+          assignment: @assignment,
+          outcome: @outcome,
+          outcome_group: @sub_account.root_outcome_group
+        }
+      end
 
       it "filters courses in a sub account" do
         expect(report.length).to eq 1
@@ -274,7 +302,7 @@ describe "Outcome Reports" do
         report_record = run_report(report_type, account: @root_account, params: { "include_deleted" => true })
         expect(report_record.parameters["extra_text"]).to eq "Term: All Terms; Include Deleted Objects;"
 
-        report = parse_report(report_record, order: order, parse_header: true)
+        report = parse_report(report_record, order:, parse_header: true)
         verify_all(report, all_values)
       end
     end
@@ -325,6 +353,7 @@ describe "Outcome Reports" do
           section: @enrollment1.course_section,
           assignment: @assessment1.submission.assignment,
           outcome: @outcome,
+          outcome_group: @subaccount1.root_outcome_group,
           outcome_result: LearningOutcomeResult.find_by(artifact: @assessment1),
           submission: @assessment1.submission
         }
@@ -336,13 +365,16 @@ describe "Outcome Reports" do
           section: @enrollment2.course_section,
           assignment: @assessment2.submission.assignment,
           outcome: @outcome,
+          outcome_group: @subaccount2.root_outcome_group,
           outcome_result: LearningOutcomeResult.find_by(artifact: @assessment2),
           submission: @assessment2.submission
         }
       end
 
       it "includes results for all subaccounts when run from the root account" do
-        combined_values = all_values + [user2_subaccount_values, user1_subaccount_values]
+        values1 = user2_subaccount_values.merge({ outcome_group: @outcome_group })
+        values2 = user1_subaccount_values.merge({ outcome_group: @outcome_group })
+        combined_values = all_values + [values1, values2]
         combined_values.sort_by! { |v| v[:user].sortable_name }
         verify_all(report, combined_values)
       end
@@ -391,7 +423,7 @@ describe "Outcome Reports" do
 
   describe "Student Competency report" do
     let(:report_type) { "student_assignment_outcome_map_csv" }
-    let(:expected_headers) { AccountReports::OutcomeReports.student_assignment_outcome_headers.keys }
+    let(:expected_headers) { AccountReports::OutcomeReports.student_assignment_outcome_headers }
     let(:all_values) { [user2_values, user1_values] }
     let(:order) { [0, 2, 3, 15] }
 
@@ -400,7 +432,7 @@ describe "Outcome Reports" do
 
   describe "outcome results report" do
     let(:report_type) { "outcome_results_csv" }
-    let(:expected_headers) { AccountReports::OutcomeReports.outcome_result_headers.keys }
+    let(:expected_headers) { AccountReports::OutcomeReports.outcome_result_headers }
     let(:all_values) { [user1_values] }
     let(:order) { [0, 2, 3, 13, 18] }
 
@@ -408,7 +440,7 @@ describe "Outcome Reports" do
 
     context "with quiz question results" do
       before(:once) do
-        outcome_group = @root_account.root_outcome_group
+        @outcome_group = @root_account.root_outcome_group
         @quiz_outcome = @root_account.created_learning_outcomes.create!(short_description: "new outcome")
         @quiz = @course1.quizzes.create!(title: "quiz", shuffle_answers: true, quiz_type: "assignment")
         @q1 = @quiz.quiz_questions.create!(question_data: true_false_question_data)
@@ -425,7 +457,7 @@ describe "Outcome Reports" do
         @quiz_submission.submission_data["question_#{@q2.id}"] = answer_2 + 1
         Quizzes::SubmissionGrader.new(@quiz_submission).grade_submission
         @quiz_outcome.reload
-        outcome_group.add_outcome(@quiz_outcome)
+        @outcome_group.add_outcome(@quiz_outcome)
         @quiz_outcome_result = LearningOutcomeResult.find_by(artifact: @quiz_submission)
         @new_quiz = @course1.assignments.create!(title: "New Quiz", submission_types: "external_tool")
         @new_quiz_submission = @new_quiz.grade_student(@user1, grade: "10", grader: @teacher).first
@@ -440,6 +472,7 @@ describe "Outcome Reports" do
           quiz: @quiz,
           quiz_submission: @quiz_submission,
           outcome: @quiz_outcome,
+          outcome_group: @outcome_group,
           course: @course1,
           assignment: @quiz.assignment,
           section: @section,
@@ -642,7 +675,7 @@ describe "Outcome Reports" do
           [{ user_uuid: user.uuid,
              external_outcome_id: outcome.id,
              associated_asset_id: quiz.id,
-             attempts: attempts,
+             attempts:,
              percent_score: 1.0,
              points: 5.0,
              points_possible: 5.0,
@@ -838,8 +871,10 @@ describe "Outcome Reports" do
             expect(results[i]["learning outcome name"]).to eq @outcome.short_description
             expect(results[i]["learning outcome id"]).to eq @outcome.id
             expect(results[i]["learning outcome friendly name"]).to eq @outcome.display_name
-            expect(results[i]["learning outcome mastered"]).to eq false
+            expect(results[i]["learning outcome mastered"]).to be false
             expect(results[i]["learning outcome data"]).to eq @outcome.data.to_yaml
+            expect(results[i]["learning outcome group title"]).to eq @outcome_group.title
+            expect(results[i]["learning outcome group id"]).to eq @outcome_group.id
 
             # 2 attempts were returned so we are looking at 1st attempt
             expect(results[i]["attempt"]).to eq(2)
@@ -930,8 +965,10 @@ describe "Outcome Reports" do
             expect(results[i]["learning outcome name"]).to eq @outcome.short_description
             expect(results[i]["learning outcome id"]).to eq @outcome.id
             expect(results[i]["learning outcome friendly name"]).to eq @outcome.display_name
-            expect(results[i]["learning outcome mastered"]).to eq false
+            expect(results[i]["learning outcome mastered"]).to be false
             expect(results[i]["learning outcome data"]).to eq @outcome.data.to_yaml
+            expect(results[i]["learning outcome group title"]).to eq @outcome_group.title
+            expect(results[i]["learning outcome group id"]).to eq @outcome_group.id
 
             # 2 attempts were returned so we are looking at 1st attempt
             expect(results[i]["attempt"]).to eq(2)
@@ -1021,8 +1058,10 @@ describe "Outcome Reports" do
             expect(results[i]["learning outcome name"]).to eq @outcome.short_description
             expect(results[i]["learning outcome id"]).to eq @outcome.id
             expect(results[i]["learning outcome friendly name"]).to eq @outcome.display_name
-            expect(results[i]["learning outcome mastered"]).to eq false
+            expect(results[i]["learning outcome mastered"]).to be false
             expect(results[i]["learning outcome data"]).to eq @outcome.data.to_yaml
+            expect(results[i]["learning outcome group title"]).to eq @outcome_group.title
+            expect(results[i]["learning outcome group id"]).to eq @outcome_group.id
 
             # 2 attempts were returned so we are looking at 2nd attempt
             expect(results[i]["attempt"]).to eq(2)
@@ -1241,17 +1280,34 @@ describe "Outcome Reports" do
       context "With Account Level Mastery" do
         before(:once) do
           user1_values[:outcome_result]
-          @outcome_proficiency = OutcomeProficiency.new(id: 1, root_account_id: @root_account.id, context_type: "Account", context: @root_account,
+          @outcome_proficiency = OutcomeProficiency.new(id: 1,
+                                                        root_account_id: @root_account.id,
+                                                        context_type: "Account",
+                                                        context: @root_account,
                                                         outcome_proficiency_ratings: [OutcomeProficiencyRating.new(
-                                                          id: 1, points: 5, color: "3ADF00", description: "High Rating",
-                                                          mastery: false, outcome_proficiency: @outcome_proficiency
-                                                        ), OutcomeProficiencyRating.new(
-                                                          id: 2, points: 3, color: "FFFF00", description: "Mastery Rating",
-                                                          mastery: true, outcome_proficiency: @outcome_proficiency
-                                                        ), OutcomeProficiencyRating.new(
-                                                          id: 3, points: 1, color: "FF0000", description: "Low Rating",
-                                                          mastery: false, outcome_proficiency: @outcome_proficiency
-                                                        )])
+                                                          id: 1,
+                                                          points: 5,
+                                                          color: "3ADF00",
+                                                          description: "High Rating",
+                                                          mastery: false,
+                                                          outcome_proficiency: @outcome_proficiency
+                                                        ),
+                                                                                      OutcomeProficiencyRating.new(
+                                                                                        id: 2,
+                                                                                        points: 3,
+                                                                                        color: "FFFF00",
+                                                                                        description: "Mastery Rating",
+                                                                                        mastery: true,
+                                                                                        outcome_proficiency: @outcome_proficiency
+                                                                                      ),
+                                                                                      OutcomeProficiencyRating.new(
+                                                                                        id: 3,
+                                                                                        points: 1,
+                                                                                        color: "FF0000",
+                                                                                        description: "Low Rating",
+                                                                                        mastery: false,
+                                                                                        outcome_proficiency: @outcome_proficiency
+                                                                                      )])
           @root_account.outcome_proficiency = @outcome_proficiency
           @root_account.set_feature_flag!(:account_level_mastery_scales, "on")
         end
@@ -1301,23 +1357,40 @@ describe "Outcome Reports" do
           @outcome.learning_outcome_results[0].save!
           expect(report[0]["learning outcome rating"]).to eq "Low Rating"
           expect(report[1]["learning outcome rating"]).to eq "Low Rating"
-          expect(report[2]["learning outcome rating"]).to eq nil
+          expect(report[2]["learning outcome rating"]).to be_nil
         end
       end
 
       context "With Course Level Mastery" do
         before(:once) do
-          @outcome_proficiency = OutcomeProficiency.new(id: 1, root_account_id: @root_account.id, context_type: "Course", context: @course1,
+          @outcome_proficiency = OutcomeProficiency.new(id: 1,
+                                                        root_account_id: @root_account.id,
+                                                        context_type: "Course",
+                                                        context: @course1,
                                                         outcome_proficiency_ratings: [OutcomeProficiencyRating.new(
-                                                          id: 1, points: 5, color: "3ADF00", description: "High Rating",
-                                                          mastery: false, outcome_proficiency: @outcome_proficiency
-                                                        ), OutcomeProficiencyRating.new(
-                                                          id: 2, points: 3, color: "FFFF00", description: "Mastery Rating",
-                                                          mastery: true, outcome_proficiency: @outcome_proficiency
-                                                        ), OutcomeProficiencyRating.new(
-                                                          id: 3, points: 1, color: "FF0000", description: "Low Rating",
-                                                          mastery: false, outcome_proficiency: @outcome_proficiency
-                                                        )])
+                                                          id: 1,
+                                                          points: 5,
+                                                          color: "3ADF00",
+                                                          description: "High Rating",
+                                                          mastery: false,
+                                                          outcome_proficiency: @outcome_proficiency
+                                                        ),
+                                                                                      OutcomeProficiencyRating.new(
+                                                                                        id: 2,
+                                                                                        points: 3,
+                                                                                        color: "FFFF00",
+                                                                                        description: "Mastery Rating",
+                                                                                        mastery: true,
+                                                                                        outcome_proficiency: @outcome_proficiency
+                                                                                      ),
+                                                                                      OutcomeProficiencyRating.new(
+                                                                                        id: 3,
+                                                                                        points: 1,
+                                                                                        color: "FF0000",
+                                                                                        description: "Low Rating",
+                                                                                        mastery: false,
+                                                                                        outcome_proficiency: @outcome_proficiency
+                                                                                      )])
           @course1.outcome_proficiency = @outcome_proficiency
           @root_account.set_feature_flag!(:account_level_mastery_scales, "on")
         end
@@ -1331,6 +1404,35 @@ describe "Outcome Reports" do
           expect(report[2]["learning outcome points possible"]).to eq "5.0"
         end
       end
+    end
+  end
+
+  describe "common functionality" do
+    let_once(:account_report) { AccountReport.new(report_type: "outcome_export_csv", account: @root_account, user: @user1) }
+    let_once(:outcome_reports) { AccountReports::OutcomeReports.new(account_report) }
+
+    it "doesn't load courses if account_level_mastery_scales feature is off" do
+      outcome_reports.instance_variable_set(:@account_level_mastery_scales_enabled, false)
+      row = { "course id" => @course1.id }
+      expect(Course).not_to receive(:find)
+      outcome_reports.send :add_outcomes_data, row
+    end
+
+    it "caches courses" do
+      outcome_reports.instance_variable_set(:@account_level_mastery_scales_enabled, true)
+      row = { "course id" => @course1.id }
+      expect(Course).to receive(:find).with(@course1.id).and_call_original
+      outcome_reports.send :add_outcomes_data, row
+      expect(Course).not_to receive(:find)
+      outcome_reports.send :add_outcomes_data, row
+    end
+
+    it "doesn't instantiate the entire scope" do
+      scope = outcome_reports.send(:student_assignment_outcome_map_scope)
+      expect(scope).not_to receive(:[])
+      outcome_reports.send(:write_outcomes_report,
+                           AccountReports::OutcomeReports.student_assignment_outcome_headers,
+                           scope)
     end
   end
 end

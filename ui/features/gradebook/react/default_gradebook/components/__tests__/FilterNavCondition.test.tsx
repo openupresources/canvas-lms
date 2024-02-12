@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -59,17 +60,17 @@ const dateTests = (testType: string) => {
     const {getByTestId} = render(
       <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
     )
-    const dateComponent: Partial<HTMLInputElement> = getByTestId('date-input')
+    const dateComponent: Partial<HTMLInputElement> = getByTestId(`${filter.type}-input`)
     expect(dateComponent).toBeInTheDocument()
   })
 
   it('sets the date field value if the filter value is present', () => {
-    filter.value = 'Fri Dec 03 2021 02:00:00 GMT-0500 (Colombia Standard Time)'
+    filter.value = '2021-12-03T02:00:00-0500'
     props.filter = filter
     const {getByTestId} = render(
       <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
     )
-    const dateComponent: Partial<HTMLInputElement> = getByTestId('date-input')
+    const dateComponent: Partial<HTMLInputElement> = getByTestId(`${filter.type}-input`)
     expect(dateComponent.value).toContain('Dec 3, 2021')
   })
 
@@ -77,9 +78,9 @@ const dateTests = (testType: string) => {
     const {getByTestId} = render(
       <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
     )
-    const dateComponent = getByTestId('date-input')
+    const dateComponent = getByTestId(`${filter.type}-input`)
     fireEvent.change(dateComponent, {
-      target: {value: 'Fri Dec 04 2021 02:00:00 GMT-0500 (Colombia Standard Time)'},
+      target: {value: 'Dec 04, 2021'},
     })
     fireEvent.blur(dateComponent)
     expect(onChange).toHaveBeenCalled()
@@ -115,7 +116,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      const button = getByRole('button', {name: 'Submissions'})
+      const button = getByRole('combobox', {name: 'Submissions'})
       expect(button).toBeInTheDocument()
     })
 
@@ -124,7 +125,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      const button: Partial<HTMLButtonElement> = getByRole('button', {name: 'Submissions'})
+      const button: Partial<HTMLButtonElement> = getByRole('combobox', {name: 'Submissions'})
       expect(button?.value).toContain('Has ungraded submissions')
     })
 
@@ -132,7 +133,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      userEvent.click(getByRole('button', {name: 'Submissions'}))
+      userEvent.click(getByRole('combobox', {name: 'Submissions'}))
       userEvent.click(getByRole('option', {name: 'Has ungraded submissions'}))
       expect(onChange).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -169,7 +170,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      const button: Partial<HTMLButtonElement> = getByRole('button', {name: 'Sections'})
+      const button: Partial<HTMLButtonElement> = getByRole('combobox', {name: 'Sections'})
       expect(button.value).toContain('Section 1')
     })
 
@@ -177,7 +178,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      userEvent.click(getByRole('button', {name: 'Sections'}))
+      userEvent.click(getByRole('combobox', {name: 'Sections'}))
       userEvent.click(getByRole('option', {name: 'Section 1'}))
       expect(onChange).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -216,7 +217,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      const button: Partial<HTMLButtonElement> = getByRole('button', {name: 'Grading Periods'})
+      const button: Partial<HTMLButtonElement> = getByRole('combobox', {name: 'Grading Periods'})
       expect(button.value).toContain('Grading Period 1')
     })
 
@@ -224,7 +225,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      userEvent.click(getByRole('button', {name: 'Grading Periods'}))
+      userEvent.click(getByRole('combobox', {name: 'Grading Periods'}))
       userEvent.click(getByRole('option', {name: 'Grading Period 1'}))
       expect(onChange).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -276,7 +277,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      const button: Partial<HTMLButtonElement> = getByRole('button', {name: 'Student Groups'})
+      const button: Partial<HTMLButtonElement> = getByRole('combobox', {name: 'Student Groups'})
       expect(button.value).toContain('Student Group 1')
     })
 
@@ -284,7 +285,7 @@ describe('FilterNavFilter', () => {
       const {getByRole} = render(
         <FilterNavFilter {...props} onChange={onChange} onDelete={onDelete} />
       )
-      userEvent.click(getByRole('button', {name: 'Student Groups'}))
+      userEvent.click(getByRole('combobox', {name: 'Student Groups'}))
       userEvent.click(getByRole('option', {name: 'Student Group 1'}))
       expect(onChange).toHaveBeenLastCalledWith(
         expect.objectContaining({

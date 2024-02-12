@@ -27,6 +27,9 @@ describe "student groups" do
   let(:group_name) { "Windfury" }
   let(:group_category_name) { "cat1" }
 
+  def wait_for_spinner(&)
+    wait_for_transient_element(".spinner-container", &)
+  end
   describe "as a student" do
     before do
       course_with_student_logged_in(active_all: true)
@@ -71,7 +74,7 @@ describe "student groups" do
       before do
         seed_students(2)
         get "/courses/#{@course.id}/groups"
-        f('button[data-test-id="add-group-button"]').click
+        f('button[data-testid="add-group-button"]').click
         wait_for_ajaximations
       end
 
@@ -119,8 +122,12 @@ describe "student groups" do
         fj(".student-group-title").click
         wait_for_ajaximations
 
-        expected_student_list = ["nobody@example.com", "Test Student 1", "Test Student 2",
-                                 "Test Student 3", "Test Student 4", "Test Student 5"]
+        expected_student_list = ["nobody@example.com",
+                                 "Test Student 1",
+                                 "Test Student 2",
+                                 "Test Student 3",
+                                 "Test Student 4",
+                                 "Test Student 5"]
         student_list = ff("[role=listitem]")
 
         # first item in the student_list array is the group name
@@ -168,14 +175,13 @@ describe "student groups" do
         expect(f('div[data-view="groups"]')).not_to include_text(@students[0].name.to_s)
         expect(f(".unassigned-students")).to include_text(@students[0].name.to_s)
         # Fourth student should remain group leader
-        expect(fj(".group[data-id=\"#{@testgroup[0].id}\"] ." \
-                  ".group-leader:contains(\"#{@students[3].name}\")")).to be_displayed
+        expect(fj(".group[data-id=\"#{@testgroup[0].id}\"] .group-leader:contains(\"#{@students[3].name}\")")).to be_displayed
       end
     end
 
     describe "student group index page" do
       before do
-        create_group(group_name: group_name)
+        create_group(group_name:)
         get "/courses/#{@course.id}/groups"
       end
 
@@ -220,7 +226,7 @@ describe "student groups" do
 
     describe "student who is not in the group", priority: "2" do
       it "allows the student to join a student group they did not create" do
-        create_group(group_name: group_name, enroll_student_count: 0, add_self_to_group: false)
+        create_group(group_name:, enroll_student_count: 0, add_self_to_group: false)
         get "/courses/#{@course.id}/groups"
 
         # join group
@@ -231,7 +237,7 @@ describe "student groups" do
 
     describe "Manage Student Group Page" do
       before do
-        create_group(group_name: group_name, enroll_student_count: 2)
+        create_group(group_name:, enroll_student_count: 2)
         get "/courses/#{@course.id}/groups"
       end
 
@@ -285,6 +291,30 @@ describe "student groups" do
             expect(student).to include_text(expected_student_list[index - 1].to_s)
           end
         end
+      end
+    end
+
+    describe "student group search" do
+      before do
+        seed_students(2)
+        seed_groups(1, 2)
+        add_users_to_group(@students, @testgroup.first)
+        get "/courses/#{@course.id}/groups"
+      end
+
+      it "works for searching by user's name" do
+        wait_for_spinner { f('[data-testid="group-search-input"]').send_keys(@students.first.name) }
+        wait_for_ajaximations
+        expect(ff("div[role='listitem']").length).to eq 1
+        f("[data-testid=\"open-group-dropdown-#{@testgroup.first.name}\"]").click
+        expect(f("div[role='listitem']")).to include_text(@students.first.name)
+      end
+
+      it "works for searching by group's name" do
+        wait_for_spinner { f('[data-testid="group-search-input"]').send_keys(@testgroup.last.name) }
+        wait_for_ajaximations
+        expect(ff("div[role='listitem']").length).to eq 1
+        expect(f("div[role='listitem']")).to include_text(@testgroup.last.name)
       end
     end
   end

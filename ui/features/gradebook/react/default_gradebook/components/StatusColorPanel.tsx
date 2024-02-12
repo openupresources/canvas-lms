@@ -28,7 +28,7 @@ const colorPickerContents = {}
 export default function StatusColorPanel({colors: initialColors, onColorsUpdated}) {
   const [colors, setColors] = useState({...initialColors})
   const [openPopover, setOpenPopover] = useState(null)
-  const lastSelectedStatusRef = useRef()
+  const lastSelectedStatusRef = useRef<string>()
 
   const bindColorPickerButton = status => button => {
     colorPickerButtons[status] = button
@@ -55,7 +55,7 @@ export default function StatusColorPanel({colors: initialColors, onColorsUpdated
 
   useEffect(() => {
     if (openPopover == null) {
-      colorPickerButtons[lastSelectedStatusRef.current]?.focus()
+      colorPickerButtons[lastSelectedStatusRef.current || '']?.focus()
     } else {
       lastSelectedStatusRef.current = openPopover
     }

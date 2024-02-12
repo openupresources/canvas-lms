@@ -19,11 +19,21 @@
 #
 
 describe LearningOutcome do
+  let(:calc_method_no_int) { %w[highest latest average] }
+
+  describe "associations" do
+    it { is_expected.to belong_to(:copied_from).inverse_of(:cloned_outcomes) }
+
+    it do
+      expect(subject).to have_many(:cloned_outcomes).with_foreign_key("copied_from_outcome_id")
+                                                    .inverse_of(:copied_from)
+    end
+  end
+
   def outcome_errors(prop)
     @outcome.errors[prop].map(&:to_s)
   end
 
-  # rubocop:disable Lint/DuplicateBranch
   def generate_rubric_criterion(outcome, num_ratings)
     criterion = {}
     criterion[:description] = "default description"
@@ -67,9 +77,6 @@ describe LearningOutcome do
 
     outcome.rubric_criterion = criterion
   end
-  # rubocop:enable Lint/DuplicateBranch
-
-  let(:calc_method_no_int) { %w[highest latest average] }
 
   context "validations" do
     describe "lengths" do
@@ -366,7 +373,7 @@ describe LearningOutcome do
       @e = @course.enroll_student(@user)
       @a = @rubric.associate_with(@assignment, @course, purpose: "grading")
       @assignment.reload
-      expect(@assignment.learning_outcome_alignments.count).to eql(1)
+      expect(@assignment.learning_outcome_alignments.count).to be(1)
       expect(@assignment.rubric_association).not_to be_nil
       @submission = @assignment.grade_student(@user, grade: "10", grader: @teacher).first
       @assessment = @a.assess({
@@ -384,12 +391,12 @@ describe LearningOutcome do
       expect(@outcome.learning_outcome_results).not_to be_empty
       @result = @outcome.learning_outcome_results.first
       expect(@result.user_id).to eql(@user.id)
-      expect(@result.score).to eql(2.0)
-      expect(@result.possible).to eql(3.0)
-      expect(@result.original_score).to eql(2.0)
-      expect(@result.original_possible).to eql(3.0)
-      expect(@result.mastery).to eql(false)
-      expect(@result.versions.length).to eql(1)
+      expect(@result.score).to be(2.0)
+      expect(@result.possible).to be(3.0)
+      expect(@result.original_score).to be(2.0)
+      expect(@result.original_possible).to be(3.0)
+      expect(@result.mastery).to be(false)
+      expect(@result.versions.length).to be(1)
       n = @result.version_number
       @assessment = @a.assess({
                                 user: @user,
@@ -404,12 +411,12 @@ describe LearningOutcome do
                                 }
                               })
       @result.reload
-      expect(@result.versions.length).to eql(2)
+      expect(@result.versions.length).to be(2)
       expect(@result.version_number).to be > n
-      expect(@result.score).to eql(3.0)
-      expect(@result.possible).to eql(3.0)
-      expect(@result.original_score).to eql(2.0)
-      expect(@result.mastery).to eql(true)
+      expect(@result.score).to be(3.0)
+      expect(@result.possible).to be(3.0)
+      expect(@result.original_score).to be(2.0)
+      expect(@result.mastery).to be(true)
     end
 
     it "overrides non-rubric-based alignments with rubric-based alignments for the same assignment" do
@@ -450,7 +457,7 @@ describe LearningOutcome do
       @e = @course.enroll_student(@user)
       @a = @rubric.associate_with(@assignment, @course, purpose: "grading")
       @assignment.reload
-      expect(@assignment.learning_outcome_alignments.count).to eql(1)
+      expect(@assignment.learning_outcome_alignments.count).to be(1)
       expect(@assignment.learning_outcome_alignments.first).to eql(@alignment)
       expect(@assignment.learning_outcome_alignments.first).to have_rubric_association
       @alignment.reload
@@ -472,15 +479,15 @@ describe LearningOutcome do
                               })
       @outcome.reload
       expect(@outcome.learning_outcome_results).not_to be_empty
-      expect(@outcome.learning_outcome_results.length).to eql(1)
+      expect(@outcome.learning_outcome_results.length).to be(1)
       @result = @outcome.learning_outcome_results.find { |r| r.artifact_type == "RubricAssessment" }
       expect(@result).not_to be_nil
       expect(@result.user_id).to eql(@user.id)
-      expect(@result.score).to eql(2.0)
-      expect(@result.possible).to eql(3.0)
-      expect(@result.original_score).to eql(2.0)
-      expect(@result.original_possible).to eql(3.0)
-      expect(@result.mastery).to eql(false)
+      expect(@result.score).to be(2.0)
+      expect(@result.possible).to be(3.0)
+      expect(@result.original_score).to be(2.0)
+      expect(@result.original_possible).to be(3.0)
+      expect(@result.mastery).to be(false)
     end
 
     it "does not override rubric-based alignments with non-rubric-based alignments for the same assignment" do
@@ -517,7 +524,7 @@ describe LearningOutcome do
       @e = @course.enroll_student(@user)
       @a = @rubric.associate_with(@assignment, @course, purpose: "grading")
       @assignment.reload
-      expect(@assignment.learning_outcome_alignments.count).to eql(1)
+      expect(@assignment.learning_outcome_alignments.count).to be(1)
       @alignment = @assignment.learning_outcome_alignments.first
       expect(@alignment.learning_outcome).not_to be_deleted
       expect(@alignment).to have_rubric_association
@@ -536,15 +543,15 @@ describe LearningOutcome do
                                 }
                               })
       expect(@outcome.learning_outcome_results).not_to be_empty
-      expect(@outcome.learning_outcome_results.length).to eql(1)
+      expect(@outcome.learning_outcome_results.length).to be(1)
       @result = @outcome.learning_outcome_results.find { |r| r.artifact_type == "RubricAssessment" }
       expect(@result).not_to be_nil
       expect(@result.user_id).to eql(@user.id)
-      expect(@result.score).to eql(2.0)
-      expect(@result.possible).to eql(3.0)
-      expect(@result.original_score).to eql(2.0)
-      expect(@result.original_possible).to eql(3.0)
-      expect(@result.mastery).to eql(false)
+      expect(@result.score).to be(2.0)
+      expect(@result.possible).to be(3.0)
+      expect(@result.original_score).to be(2.0)
+      expect(@result.original_possible).to be(3.0)
+      expect(@result.mastery).to be(false)
     end
 
     it "does not let you set the calculation_method to nil if it has been set to something else" do
@@ -597,6 +604,36 @@ describe LearningOutcome do
     context "should set calculation_int to default if the calculation_method is changed and calculation_int isn't set" do
       method_to_int = {
         "decaying_average" => { default: 65, testval: nil, altmeth: "latest" },
+        "n_mastery" => { default: 5, testval: nil, altmeth: "highest" },
+        "highest" => { default: nil, testval: 4, altmeth: "n_mastery" },
+        "latest" => { default: nil, testval: 72, altmeth: "decaying_average" },
+        "average" => { default: nil, testval: 3, altmeth: "n_mastery" },
+      }
+
+      method_to_int.each do |method, set|
+        it "sets calculation_int to #{set[:default].nil? ? "nil" : set[:default]} if the calculation_method is changed to #{method} and calculation_int isn't set" do
+          @outcome.calculation_method = set[:altmeth]
+          @outcome.calculation_int = set[:testval]
+          @outcome.save!
+          expect(@outcome.calculation_method).to eq(set[:altmeth])
+          expect(@outcome.calculation_int).to eq(set[:testval])
+          @outcome.calculation_method = method
+          @outcome.save!
+          @outcome.reload
+          expect(@outcome.calculation_method).to eq(method)
+          expect(@outcome.calculation_int).to eq(set[:default])
+        end
+      end
+    end
+
+    context "should set calculation_int to default if the calculation_method is changed and calculation_int isn't set when outcomes_new_decaying_average_calculation FF ON" do
+      before do
+        @outcome.context.root_account.enable_feature!(:outcomes_new_decaying_average_calculation)
+      end
+
+      method_to_int = {
+        "decaying_average" => { default: 65, testval: nil, altmeth: "latest" },
+        "standard_decaying_average" => { default: 65, testval: nil, altmeth: "latest" },
         "n_mastery" => { default: 5, testval: nil, altmeth: "highest" },
         "highest" => { default: nil, testval: 4, altmeth: "n_mastery" },
         "latest" => { default: nil, testval: 72, altmeth: "decaying_average" },
@@ -698,6 +735,81 @@ describe LearningOutcome do
                                                                                "Meets Expectations",
                                                                                "Does Not Meet Expectations"
                                                                              ])
+    end
+
+    it "archive! updates the workflow_state to archived and sets archived_at" do
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+    end
+
+    it "archive! raises an ActiveRecord::RecordNotSaved error when we try to archive a deleted outcome" do
+      @outcome.destroy!
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect { @outcome.archive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot archive a deleted LearningOutcome"
+      )
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "archive! will not update an already archived outcome" do
+      @outcome.archive!
+      archived_at = @outcome.archived_at
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).to eq(archived_at)
+    end
+
+    it "unarchive! updates the workflow_state to active and sets archived_at to nil" do
+      @outcome.archive!
+      expect(@outcome.workflow_state).to eq("archived")
+      expect(@outcome.archived_at).not_to be_nil
+      @outcome.unarchive!
+      expect(@outcome.workflow_state).to eq("active")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "unarchive! raises an ActiveRecord::RecordNotSaved error when we try to unarchive a deleted outcome" do
+      @outcome.destroy!
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect { @outcome.unarchive! }.to raise_error(
+        ActiveRecord::RecordNotSaved,
+        "Cannot unarchive a deleted LearningOutcome"
+      )
+      expect(@outcome.workflow_state).to eq("deleted")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    it "unarchive! will not update an active outcome" do
+      @outcome.unarchive!
+      expect(@outcome.workflow_state).to eq("active")
+      expect(@outcome.archived_at).to be_nil
+    end
+
+    context "scope" do
+      before do
+        @active = @course.created_learning_outcomes.create(title: "active")
+        @archived = @course.created_learning_outcomes.create(title: "archived")
+        @archived.archive!
+        @deleted = @course.created_learning_outcomes.create(title: "deleted")
+        @deleted.destroy
+      end
+
+      it "active scope does not include deleted or archived outcomes" do
+        expect(LearningOutcome.active.include?(@active)).to be true
+        expect(LearningOutcome.active.include?(@archived)).to be false
+        expect(LearningOutcome.active.include?(@deleted)).to be false
+      end
+
+      it "active scope includes unarchived outcomes" do
+        expect(LearningOutcome.active.include?(@archived)).to be false
+        @archived.unarchive!
+        expect(LearningOutcome.active.include?(@archived)).to be true
+      end
     end
   end
 
@@ -1109,6 +1221,34 @@ describe LearningOutcome do
         end
       end
     end
+
+    context "with the outcomes_new_decaying_average_calculation FF enabled" do
+      before do
+        LoadAccount.default_domain_root_account.enable_feature!(:outcomes_new_decaying_average_calculation)
+      end
+
+      it "defaults calculation_method to standard_decaying_average" do
+        @outcome = LearningOutcome.create!(title: "outcome")
+        expect(@outcome.calculation_method).to eql("standard_decaying_average")
+        expect(@outcome.calculation_int).to be 65
+      end
+
+      it "allows standard_decaying_average as a calculation_method" do
+        @outcome = LearningOutcome.create!(title: "outcome", calculation_method: "standard_decaying_average")
+        expect(@outcome.calculation_method).to eql("standard_decaying_average")
+        expect(@outcome.calculation_int).to be 65
+      end
+
+      it "rejects if calculation_int not with in the valid range for calculation_method standard_decaying_average" do
+        @outcome = LearningOutcome.create!(title: "outcome", calculation_method: "standard_decaying_average")
+        expect(@outcome.calculation_method).to eql("standard_decaying_average")
+        expect(@outcome.calculation_int).to be 65
+        @outcome.calculation_int = 49
+        @outcome.save
+        expect(@outcome).to have(1).error_on(:calculation_int)
+        expect(outcome_errors(:calculation_int).first).to include("The value must be between '50' and '99'")
+      end
+    end
   end
 
   context "root account ids" do
@@ -1193,7 +1333,7 @@ describe LearningOutcome do
       ->(*courses) { courses.each { |c| student_in_course(course: c) } }
     end
 
-    let(:account) { -> { Account.all.find { |a| !a.site_admin? && a.root_account? } } }
+    let(:account) { -> { Account.find { |a| !a.site_admin? && a.root_account? } } }
 
     let(:create_rubric) do
       lambda do |outcome|
@@ -1234,16 +1374,9 @@ describe LearningOutcome do
       end
     end
 
-    def add_or_get_rubric(outcome)
-      @add_or_get_rubric_cache ||= Hash.new do |h, key|
-        h[key] = find_rubric.call(outcome) || create_rubric.call(outcome)
-      end
-      @add_or_get_rubric_cache[outcome.id]
-    end
-
     let(:assess_with) do
       lambda do |outcome, context|
-        assignment = assignment_model(context: context)
+        assignment = assignment_model(context:)
         rubric = add_or_get_rubric(outcome)
         user = user_factory(active_all: true)
         context.enroll_student(user)
@@ -1253,7 +1386,7 @@ describe LearningOutcome do
         assignment.reload
         submission = assignment.grade_student(user, grade: "10", grader: teacher).first
         a.assess({
-                   user: user,
+                   user:,
                    assessor: user,
                    artifact: submission,
                    assessment: {
@@ -1266,7 +1399,7 @@ describe LearningOutcome do
                  })
         result = outcome.learning_outcome_results.first
         assessment = a.assess({
-                                user: user,
+                                user:,
                                 assessor: user,
                                 artifact: submission,
                                 assessment: {
@@ -1279,8 +1412,15 @@ describe LearningOutcome do
                               })
         result.reload
         rubric.reload
-        { assignment: assignment, assessment: assessment, rubric: rubric, result: result }
+        { assignment:, assessment:, rubric:, result: }
       end
+    end
+
+    def add_or_get_rubric(outcome)
+      @add_or_get_rubric_cache ||= Hash.new do |h, key|
+        h[key] = find_rubric.call(outcome) || create_rubric.call(outcome)
+      end
+      @add_or_get_rubric_cache[outcome.id]
     end
 
     context "learning outcome results" do
@@ -1314,7 +1454,7 @@ describe LearningOutcome do
             context: account,
             title: "outcome_#{i}",
             calculation_method: "highest",
-            workflow_state: i == 0 ? "deleted" : "active"
+            workflow_state: (i == 0) ? "deleted" : "active"
           )
         end
         outcome_ids = account.created_learning_outcomes.pluck(:id)
@@ -1325,8 +1465,10 @@ describe LearningOutcome do
 
     it "de-dups outcomes linked multiple times" do
       course_factory
-      lo = LearningOutcome.create!(context: @course, title: "outcome",
-                                   calculation_method: "highest", workflow_state: "active")
+      lo = LearningOutcome.create!(context: @course,
+                                   title: "outcome",
+                                   calculation_method: "highest",
+                                   workflow_state: "active")
       3.times do |i|
         group = @course.learning_outcome_groups.create!(title: "groupage_#{i}")
         group.add_outcome(lo)

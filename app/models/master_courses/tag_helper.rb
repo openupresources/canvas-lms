@@ -40,7 +40,8 @@ module MasterCourses::TagHelper
       tag_scope = tag_scope.where(content: objects_to_load)
     end
     tag_scope.to_a.group_by(&:content_type).each do |content_type, typed_tags|
-      @content_tag_index[content_type] = typed_tags.index_by(&:content_id).merge(@content_tag_index[content_type] || {})
+      index_type = (content_type == "Assignment") ? "AbstractAssignment" : content_type
+      @content_tag_index[index_type] = typed_tags.index_by(&:content_id).merge(@content_tag_index[index_type] || {})
     end
     true
   end
@@ -62,7 +63,7 @@ module MasterCourses::TagHelper
       end
       tag
     else
-      content_tags.where(content: content).first || create_content_tag_for!(content, defaults)
+      content_tags.where(content:).first || create_content_tag_for!(content, defaults)
     end
   end
 
@@ -71,8 +72,8 @@ module MasterCourses::TagHelper
 
     self.class.unique_constraint_retry do |retry_count|
       tag = nil
-      tag = content_tags.where(content: content).first if retry_count > 0
-      tag ||= content_tags.create!(defaults.merge(content: content))
+      tag = content_tags.where(content:).first if retry_count > 0
+      tag ||= content_tags.create!(defaults.merge(content:))
       tag
     end
   end

@@ -114,20 +114,20 @@ describe CommunicationChannel do
 
   it "has a decent state machine" do
     communication_channel_model
-    expect(@cc.state).to eql(:unconfirmed)
+    expect(@cc.state).to be(:unconfirmed)
     @cc.confirm
-    expect(@cc.state).to eql(:active)
+    expect(@cc.state).to be(:active)
     @cc.retire
-    expect(@cc.state).to eql(:retired)
+    expect(@cc.state).to be(:retired)
     @cc.re_activate
-    expect(@cc.state).to eql(:active)
+    expect(@cc.state).to be(:active)
 
     communication_channel_model(path: "another_path@example.com")
-    expect(@cc.state).to eql(:unconfirmed)
+    expect(@cc.state).to be(:unconfirmed)
     @cc.retire
-    expect(@cc.state).to eql(:retired)
+    expect(@cc.state).to be(:retired)
     @cc.re_activate
-    expect(@cc.state).to eql(:active)
+    expect(@cc.state).to be(:active)
   end
 
   it "resets the bounce count when being reactivated" do
@@ -200,14 +200,14 @@ describe CommunicationChannel do
   it "uses a 15-digit confirmation code for default or email path_type settings" do
     communication_channel_model
     expect(@cc.path_type).to eql("email")
-    expect(@cc.confirmation_code.size).to eql(25)
+    expect(@cc.confirmation_code.size).to be(25)
   end
 
   it "uses a 4-digit confirmation_code for settings other than email" do
     communication_channel_model
     @cc.path_type = "sms"
     @cc.set_confirmation_code(true)
-    expect(@cc.confirmation_code.size).to eql(4)
+    expect(@cc.confirmation_code.size).to be(4)
   end
 
   it "defaults the path type to email" do
@@ -240,18 +240,18 @@ describe CommunicationChannel do
 
   it "sorts of validate emails" do
     user = User.create!
-    invalid_stuff = { username: "invalid", user: user, pseudonym_id: "1" }
+    invalid_stuff = { username: "invalid", user:, pseudonym_id: "1" }
     expect { communication_channel(user, invalid_stuff) }.to raise_error(ActiveRecord::RecordInvalid)
   end
 
   it "limits quantity of channels a user can have" do
-    Setting.set("max_ccs_per_user", "3")
+    stub_const("CommunicationChannel::MAX_CCS_PER_USER", 3)
     user = User.create!(name: "jim halpert")
     expect { 5.times { |i| communication_channel(user, username: "user_#{user.id}_#{i}@example.com") } }.to raise_error(ActiveRecord::RecordInvalid)
   end
 
   it "acts as list" do
-    expect(CommunicationChannel).to be_respond_to(:acts_as_list)
+    expect(CommunicationChannel).to respond_to(:acts_as_list)
   end
 
   it "scopes the list to the user" do
@@ -266,15 +266,15 @@ describe CommunicationChannel do
     expect(@cc2.user).to eql(@u1)
     expect(@cc3.user).to eql(@u2)
     expect(@cc1.user_id).not_to eql(@cc3.user_id)
-    expect(@cc2.position).to eql(2)
+    expect(@cc2.position).to be(2)
     @cc2.move_to_top
     @cc2.save
     @cc2.reload
-    expect(@cc2.position).to eql(1)
+    expect(@cc2.position).to be(1)
     @cc1.reload
-    expect(@cc1.position).to eql(2)
+    expect(@cc1.position).to be(2)
     @cc3.reload
-    expect(@cc3.position).to eql(1)
+    expect(@cc3.position).to be(1)
   end
 
   it "counts the number of confirmations sent correctly" do
@@ -448,7 +448,7 @@ describe CommunicationChannel do
 
         %w[bouncy@example.edu Bouncy@example.edu bOuNcY@Example.edu bouncy@example.edu bouncy@example.edu].each do |path|
           CommunicationChannel.bounce_for_path(
-            path: path,
+            path:,
             timestamp: nil,
             details: nil,
             permanent_bounce: true,
@@ -633,9 +633,9 @@ describe CommunicationChannel do
         subject { communication_channel.root_account_ids }
 
         let(:path) { "test@instructure.com" }
-        let(:communication_channel) { CommunicationChannel.create!(user: user, path: path) }
+        let(:communication_channel) { CommunicationChannel.create!(user:, path:) }
 
-        before { user.update_columns(root_account_ids: root_account_ids) }
+        before { user.update_columns(root_account_ids:) }
 
         let(:user) { User.create! }
 
@@ -705,7 +705,7 @@ describe CommunicationChannel do
 
           %w[bouncy@example.edu Bouncy@example.edu bOuNcY@Example.edu bouncy@example.edu bouncy@example.edu].each do |path|
             CommunicationChannel.bounce_for_path(
-              path: path,
+              path:,
               timestamp: nil,
               details: nil,
               permanent_bounce: true,
@@ -740,9 +740,9 @@ describe CommunicationChannel do
         ra
       end
       let(:user) { enrollment.user }
-      let(:cc) { communication_channel_model(user: user) }
+      let(:cc) { communication_channel_model(user:) }
       let(:mapping) do
-        MicrosoftSync::UserMapping.create!(root_account: account, user: user, aad_id: "abc123")
+        MicrosoftSync::UserMapping.create!(root_account: account, user:, aad_id: "abc123")
       end
 
       describe "destroying the communication channel" do
@@ -764,8 +764,8 @@ describe CommunicationChannel do
     context "when destroying a communication channel" do
       it "flags old mappings when destroying a communication channel" do
         cc = communication_channel_model
-        expect(MicrosoftSync::UserMapping).to \
-          receive(:flag_as_needs_updating_if_using_email).with(cc.user)
+        expect(MicrosoftSync::UserMapping).to receive(:flag_as_needs_updating_if_using_email)
+          .with(cc.user)
         cc.destroy_permanently!
       end
     end
@@ -774,8 +774,9 @@ describe CommunicationChannel do
       let!(:cc) { communication_channel_model(path_type: described_class::TYPE_EMAIL) }
 
       it "flags old mappings if path/path_type/position/workflow_state is changed" do
-        expect(MicrosoftSync::UserMapping).to \
-          receive(:flag_as_needs_updating_if_using_email).with(cc.user).exactly(5).times
+        expect(MicrosoftSync::UserMapping).to receive(:flag_as_needs_updating_if_using_email)
+          .with(cc.user)
+          .exactly(5).times
         cc.update!(path: "foo" + cc.path)
         cc.update!(position: cc.position + 1)
         expect(cc.workflow_state).to_not eq("active")
@@ -798,19 +799,53 @@ describe CommunicationChannel do
     end
   end
 
+  describe "#otp_impaired?" do
+    let(:us_cc) do
+      communication_channel(user_model, { username: "8015555555@txt.att.net", path_type: CommunicationChannel::TYPE_SMS })
+    end
+    let(:eu_cc) do
+      communication_channel(user_model, { username: "+353872337277", path_type: CommunicationChannel::TYPE_SMS })
+    end
+
+    context "no impaired channels" do
+      it "returns false for US channels" do
+        expect(us_cc.otp_impaired?).to be false
+      end
+
+      it "returns false for EU channels" do
+        expect(eu_cc.otp_impaired?).to be false
+      end
+    end
+
+    context "only US impaired channels" do
+      before do
+        allow(Setting).to receive(:get).and_call_original
+        allow(Setting).to receive(:get).with("otp_impaired_country_codes", "").and_return("1")
+      end
+
+      it "returns true for US channels" do
+        expect(us_cc.otp_impaired?).to be true
+      end
+
+      it "returns false for EU channels" do
+        expect(eu_cc.otp_impaired?).to be false
+      end
+    end
+  end
+
   describe "#send_otp!" do
+    let(:user) do
+      user_model
+    end
     let(:cc) do
-      cc = CommunicationChannel.new
-      cc.path = "8015555555@txt.att.net"
-      cc
+      communication_channel(user, { username: "8015555555@txt.att.net", path_type: CommunicationChannel::TYPE_SMS })
     end
 
     it "sends directly via SMS if configured" do
       expect(cc.e164_path).to eq "+18015555555"
       allow(InstStatsd::Statsd).to receive(:increment)
       account = double
-      allow(account).to receive(:feature_enabled?).and_return(true)
-      allow(account).to receive(:global_id).and_return("totes_an_ID")
+      allow(account).to receive_messages(feature_enabled?: true, global_id: "totes_an_ID")
       expect(Services::NotificationService).to receive(:process).with(
         "otp:#{cc.global_id}",
         anything,
@@ -841,6 +876,18 @@ describe CommunicationChannel do
       expect(Services::NotificationService).not_to receive(:process)
       expect(cc).to receive(:send_otp_via_sms_gateway!).once
       cc.send_otp!("123456")
+    end
+
+    context "with email channel" do
+      let(:cc) do
+        communication_channel(user, { username: "test@example.com", path_type: CommunicationChannel::TYPE_EMAIL })
+      end
+
+      it "sends actual email if using email channel" do
+        expect(cc).not_to receive(:send_otp_via_sms_gateway!)
+        expect(Mailer).to receive(:deliver).once
+        cc.send_otp!("123456")
+      end
     end
   end
 
@@ -897,7 +944,7 @@ describe CommunicationChannel do
     let!(:sms_channel) { communication_channel(user, { username: "sms", path_type: CommunicationChannel::TYPE_SMS }) }
 
     it "filters sms channels" do
-      expect(CommunicationChannel.supported).to match_array []
+      expect(CommunicationChannel.supported).to be_empty
     end
   end
 end

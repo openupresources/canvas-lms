@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "./pages/discussions_index_page"
+require_relative "pages/discussions_index_page"
 
 describe "discussions index" do
   include_context "in-process server selenium tests"
@@ -223,7 +223,7 @@ describe "discussions index" do
       DiscussionsIndex.submit_discussion_settings
       wait_for_stale_element(".discussion-settings-v2-spinner-container")
       @course.reload
-      expect(@course.allow_student_discussion_topics).to eq false
+      expect(@course.allow_student_discussion_topics).to be false
     end
   end
 end

@@ -49,6 +49,7 @@ class Types::MutationType < Types::ApplicationObjectType
     Sets the overridden final score for the associated enrollment, optionally limited to a specific
     grading period. This will supersede the computed final score/grade if present.
   MD
+  field :set_override_status, mutation: Mutations::SetOverrideStatus
   field :set_assignment_post_policy, <<~MD, mutation: Mutations::SetAssignmentPostPolicy
     Sets the post policy for the assignment.
   MD
@@ -78,6 +79,7 @@ class Types::MutationType < Types::ApplicationObjectType
   field :delete_discussion_topic, mutation: Mutations::DeleteDiscussionTopic
   field :update_conversation_participants, mutation: Mutations::UpdateConversationParticipants
   field :set_module_item_completion, mutation: Mutations::SetModuleItemCompletion
+  field :create_discussion_topic, mutation: Mutations::CreateDiscussionTopic
   field :update_discussion_topic, mutation: Mutations::UpdateDiscussionTopic
   field :subscribe_to_discussion_topic, mutation: Mutations::SubscribeToDiscussionTopic
   field :update_discussion_read_state, mutation: Mutations::UpdateDiscussionReadState
@@ -96,17 +98,26 @@ class Types::MutationType < Types::ApplicationObjectType
   field :delete_outcome_links, mutation: Mutations::DeleteOutcomeLinks
   field :update_learning_outcome_group, mutation: Mutations::UpdateLearningOutcomeGroup
   field :create_learning_outcome_group, mutation: Mutations::CreateLearningOutcomeGroup
-  field :update_isolated_view_deeply_nested_alert, mutation: Mutations::UpdateIsolatedViewDeeplyNestedAlert
+  field :update_split_screen_view_deeply_nested_alert, mutation: Mutations::UpdateSplitScreenViewDeeplyNestedAlert
   field :create_internal_setting, mutation: Mutations::CreateInternalSetting
   field :update_internal_setting, mutation: Mutations::UpdateInternalSetting
   field :delete_internal_setting, mutation: Mutations::DeleteInternalSetting
+  field :update_rubric_assessment_read_state, mutation: Mutations::UpdateRubricAssessmentReadState
+  field :update_submission_student_entered_score, mutation: Mutations::UpdateSubmissionStudentEnteredScore
   field :update_submissions_read_state, mutation: Mutations::UpdateSubmissionsReadState
   field :update_submission_grade, mutation: Mutations::UpdateSubmissionGrade
   field :update_user_discussions_splitscreen_view, mutation: Mutations::UpdateUserDiscussionsSplitscreenView
+  field :upsert_custom_grade_status, mutation: Mutations::UpsertCustomGradeStatus
+  field :upsert_standard_grade_status, mutation: Mutations::UpsertStandardGradeStatus
+  field :delete_custom_grade_status, mutation: Mutations::DeleteCustomGradeStatus
+  field :create_user_inbox_label, mutation: Mutations::CreateUserInboxLabel
+  field :delete_user_inbox_label, mutation: Mutations::DeleteUserInboxLabel
 
   # TODO: Remove the in active development string from here once this is more
   #       finalized.
   field :create_submission, <<~MD, mutation: Mutations::CreateSubmission
     IN ACTIVE DEVELOPMENT, USE AT YOUR OWN RISK: Submit homework on an assignment.
   MD
+
+  field :update_rubric_archived_state, mutation: Mutations::UpdateRubricArchivedState
 end

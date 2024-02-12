@@ -32,7 +32,7 @@ unless Rails.env.production? || ARGV.any? { |a| a.start_with?("gems") }
     end
   end
 
-  Rake.application.instance_variable_get("@tasks").delete("default")
+  Rake.application.instance_variable_get(:@tasks).delete("default")
 
   task default: :spec
   task stats: "spec:statsetup"
@@ -59,7 +59,7 @@ unless Rails.env.production? || ARGV.any? { |a| a.start_with?("gems") }
       N_PROCESSES = [ENV["IN_MEMORY_DB"].to_i, 1].max
       spec_files = spec_files.map { |x| Dir[x + "/[^selenium]**/*_spec.rb"] }.flatten.sort.in_groups_of(N_PROCESSES)
       processes = []
-      Signal.trap "SIGINT", (-> { Process.kill "-KILL", Process.getpgid(0) })
+      Signal.trap "SIGINT", -> { Process.kill "-KILL", Process.getpgid(0) }
       child = false
       N_PROCESSES.times do |j|
         pid = Process.fork
@@ -70,7 +70,7 @@ unless Rails.env.production? || ARGV.any? { |a| a.start_with?("gems") }
         end
         processes << pid
       end
-      exit(Process.waitall.map(&:last).map(&:exitstatus).count { |x| x != 0 }) unless child
+      exit(Process.waitall.count { |ps| ps.last.exitstatus != 0 }) unless child
     else
       t.send(spec_files_attr, spec_files)
     end
@@ -132,20 +132,20 @@ unless Rails.env.production? || ARGV.any? { |a| a.start_with?("gems") }
     # Setup specs for stats
     task :statsetup do
       require "rails/code_statistics"
-      ::STATS_DIRECTORIES << ["Model specs", "spec/models"] if File.exist?("spec/models")
-      ::STATS_DIRECTORIES << ["Service specs", "spec/services"] if File.exist?("spec/services")
-      ::STATS_DIRECTORIES << ["View specs", "spec/views"] if File.exist?("spec/views")
-      ::STATS_DIRECTORIES << ["Controller specs", "spec/controllers"] if File.exist?("spec/controllers")
-      ::STATS_DIRECTORIES << ["Helper specs", "spec/helpers"] if File.exist?("spec/helpers")
-      ::STATS_DIRECTORIES << ["Library specs", "spec/lib"] if File.exist?("spec/lib")
-      ::STATS_DIRECTORIES << ["Routing specs", "spec/lib"] if File.exist?("spec/routing")
-      ::CodeStatistics::TEST_TYPES << "Model specs" if File.exist?("spec/models")
-      ::CodeStatistics::TEST_TYPES << "Service specs" if File.exist?("spec/services")
-      ::CodeStatistics::TEST_TYPES << "View specs" if File.exist?("spec/views")
-      ::CodeStatistics::TEST_TYPES << "Controller specs" if File.exist?("spec/controllers")
-      ::CodeStatistics::TEST_TYPES << "Helper specs" if File.exist?("spec/helpers")
-      ::CodeStatistics::TEST_TYPES << "Library specs" if File.exist?("spec/lib")
-      ::CodeStatistics::TEST_TYPES << "Routing specs" if File.exist?("spec/routing")
+      STATS_DIRECTORIES << ["Model specs", "spec/models"] if File.exist?("spec/models")
+      STATS_DIRECTORIES << ["Service specs", "spec/services"] if File.exist?("spec/services")
+      STATS_DIRECTORIES << ["View specs", "spec/views"] if File.exist?("spec/views")
+      STATS_DIRECTORIES << ["Controller specs", "spec/controllers"] if File.exist?("spec/controllers")
+      STATS_DIRECTORIES << ["Helper specs", "spec/helpers"] if File.exist?("spec/helpers")
+      STATS_DIRECTORIES << ["Library specs", "spec/lib"] if File.exist?("spec/lib")
+      STATS_DIRECTORIES << ["Routing specs", "spec/lib"] if File.exist?("spec/routing")
+      CodeStatistics::TEST_TYPES << "Model specs" if File.exist?("spec/models")
+      CodeStatistics::TEST_TYPES << "Service specs" if File.exist?("spec/services")
+      CodeStatistics::TEST_TYPES << "View specs" if File.exist?("spec/views")
+      CodeStatistics::TEST_TYPES << "Controller specs" if File.exist?("spec/controllers")
+      CodeStatistics::TEST_TYPES << "Helper specs" if File.exist?("spec/helpers")
+      CodeStatistics::TEST_TYPES << "Library specs" if File.exist?("spec/lib")
+      CodeStatistics::TEST_TYPES << "Routing specs" if File.exist?("spec/routing")
     end
 
     namespace :db do

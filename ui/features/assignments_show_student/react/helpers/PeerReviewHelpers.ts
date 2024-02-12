@@ -16,7 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {AssignedAssessments} from '../../../../api.d'
+import type {AssignedAssessments} from '../../../../api.d'
+import {useScope as useI18nScope} from '@canvas/i18n'
+import type {PeerReviewSubheader} from '../components/PeerReviewPromptModal'
+
+const I18n = useI18nScope('assignments_2_peer_review')
 
 export const getRedirectUrlToFirstPeerReview = (
   assignedAssessments: AssignedAssessments[] = []
@@ -27,6 +31,10 @@ export const getRedirectUrlToFirstPeerReview = (
   if (!assessment) {
     return
   }
+  return getPeerReviewUrl(assessment)
+}
+
+export const getPeerReviewUrl = (assessment: AssignedAssessments) => {
   let url = `/courses/${ENV.COURSE_ID}/assignments/${ENV.ASSIGNMENT_ID}`
   if (assessment.anonymizedUser) {
     url += `?reviewee_id=${assessment.anonymizedUser._id}`
@@ -72,4 +80,56 @@ export const availableAndUnavailableCounts = (
 
 export const isAvailableToReview = (assessment: AssignedAssessments): boolean => {
   return assessment.assetSubmissionType !== null && assessment.workflowState === 'assigned'
+}
+
+export const COMPLETED_PEER_REVIEW_TEXT = I18n.t('You have completed your Peer Reviews!')
+
+export const getPeerReviewHeaderText = (
+  availableCount: number,
+  unavailableCount: number
+): string[] => {
+  const headerText =
+    availableCount > 0
+      ? headerTextTemplate(availableCount)
+      : unavailableCount > 0
+      ? headerTextTemplate(unavailableCount)
+      : COMPLETED_PEER_REVIEW_TEXT
+  return [headerText]
+}
+
+const headerTextTemplate = (count: number): string => {
+  return I18n.t(
+    {
+      one: 'You have 1 more Peer Review to complete.',
+      other: 'You have %{count} more Peer Reviews to complete.',
+    },
+    {count}
+  )
+}
+
+export const getPeerReviewSubHeaderText = (
+  availableCount: number,
+  unavailableCount: number
+): PeerReviewSubheader[] => {
+  if (!availableCount && unavailableCount) {
+    return [
+      {
+        props: {size: 'medium'},
+        text: I18n.t('The submission is not available just yet.'),
+      },
+      {
+        props: {size: 'medium'},
+        text: I18n.t('Please check back soon.'),
+      },
+    ]
+  }
+
+  return []
+}
+
+export const getPeerReviewButtonText = (
+  availableCount: number,
+  unavailableCount: number
+): string | null => {
+  return availableCount || unavailableCount ? I18n.t('Next Peer Review') : null
 }

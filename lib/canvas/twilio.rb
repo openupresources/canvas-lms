@@ -44,7 +44,7 @@ module Canvas::Twilio
   # Look up the ISO country code for the specified phone number. Twilio must be enabled in order for this to work.
   def self.lookup_country(phone_number)
     Rails.cache.fetch(["twilio_phone_number_country_2", phone_number].cache_key) do
-      client.lookups.phone_numbers(phone_number).fetch.country_code
+      client.lookups.v2.phone_numbers(phone_number).fetch.country_code
     end
   end
 
@@ -92,10 +92,10 @@ module Canvas::Twilio
     unless country == outbound_country
       InstStatsd::Statsd.increment("notifications.twilio.no_outbound_numbers_for.#{country}",
                                    short_stat: "notifications.twilio.no_outbound_numbers",
-                                   tags: { country: country })
+                                   tags: { country: })
     end
 
     # Then send the message.
-    client.api.account.messages.create(from: outbound_number, to: recipient_number, body: body)
+    client.api.account.messages.create(from: outbound_number, to: recipient_number, body:)
   end
 end

@@ -588,6 +588,36 @@ describe SIS::CSV::CourseImporter do
     end
   end
 
+  it "throws error when restoring a course form deleted account" do
+    # create account and course that are active
+    process_csv_data_cleanly(
+      "account_id,parent_account_id,name,status",
+      "A001,,del acc,active"
+    )
+    process_csv_data_cleanly(
+      "course_id,short_name,long_name,status,account_id",
+      "C001,del course,del course,active,A001"
+    )
+    expect(Course.where(sis_source_id: "C001").first.associated_accounts.map(&:id).sort).to eq [Account.where(sis_source_id: "A001").first.id, @account.id].sort
+
+    # delete account and course
+    process_csv_data_cleanly(
+      "course_id,short_name,long_name,status",
+      "C001,del course,del course,deleted"
+    )
+    process_csv_data_cleanly(
+      "account_id,parent_account_id,name,status",
+      "A001,,del acc,deleted"
+    )
+    # restore deleted course
+    importer = process_csv_data(
+      "course_id,short_name,long_name,status",
+      "C001,del course,del course,active"
+    )
+
+    expect(importer.errors.map(&:last)).to include "Cannot restore course C001 because the associated account A001 is deleted"
+  end
+
   it "makes workflow_state sticky" do
     process_csv_data_cleanly(
       "course_id,short_name,long_name,account_id,term_id,status",
@@ -839,15 +869,14 @@ describe SIS::CSV::CourseImporter do
     end
 
     it "sets and updates grade_passback_setting" do
-      Setting.set("valid_grade_passback_settings", "disabled,nightly_sync,other")
       process_csv_data_cleanly(
         "course_id,short_name,long_name,account_id,term_id,status,grade_passback_setting",
         "test_1,TC 101,Test Course 101,,,active,disabled",
-        "test_2,TC 102,Test Course 102,,,active,other",
+        "test_2,TC 102,Test Course 102,,,active,not_set",
         "test_3,TC 103,Test Course 103,,,active,nightly_sync"
       )
       expect(Course.where(sis_source_id: "test_1").take.grade_passback_setting).to eq "disabled"
-      expect(Course.where(sis_source_id: "test_2").take.grade_passback_setting).to eq "other"
+      expect(Course.where(sis_source_id: "test_2").take.grade_passback_setting).to be_nil
       expect(Course.where(sis_source_id: "test_3").take.grade_passback_setting).to eq "nightly_sync"
 
       process_csv_data_cleanly(
@@ -930,7 +959,7 @@ describe SIS::CSV::CourseImporter do
       template = @account.courses.create!(name: "Template Course", template: true)
       template.assignments.create!(title: "my assignment")
       @account.update!(course_template: template)
-
+      expect_any_instance_of(ContentMigration).to receive(:queue_migration).with(priority: 25).and_call_original
       process_csv_data_cleanly(
         "course_id,short_name,long_name,account_id,term_id,status",
         "test_1,TC 101,Test Course 101,,,active"
@@ -941,6 +970,7 @@ describe SIS::CSV::CourseImporter do
       expect(course.name).to eq "Test Course 101"
       expect(course.assignments.length).to eq 1
       expect(course.assignments.first.title).to eq "my assignment"
+      expect(course.content_migrations.first.strand).to eq "sis_import_course_templates"
     end
   end
 
@@ -979,7 +1009,7 @@ describe SIS::CSV::CourseImporter do
 
     course = @account.all_courses.where(sis_source_id: "test_1").first
     expect(course.name).to eq "Test Course 101"
-    expect(course.friendly_name).to eq nil
+    expect(course.friendly_name).to be_nil
   end
 
   it "does not import friendly name for not elementary account" do
@@ -995,6 +1025,6 @@ describe SIS::CSV::CourseImporter do
 
     course = @account.all_courses.where(sis_source_id: "test_1").first
     expect(course.name).to eq "Test Course 101"
-    expect(course.friendly_name).to eq nil
+    expect(course.friendly_name).to be_nil
   end
 end

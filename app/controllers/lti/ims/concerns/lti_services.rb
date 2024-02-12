@@ -35,7 +35,7 @@ module Lti::IMS::Concerns
       end
 
       def any_of(*items)
-        ->(match_in) { items.present? && (items & match_in).present? }
+        ->(match_in) { items.present? && items.intersect?(match_in) }
       end
 
       def any
@@ -80,7 +80,7 @@ module Lti::IMS::Concerns
       end
 
       def access_token_scopes
-        @_access_token_scopes ||= (access_token&.claim("scopes")&.split(" ").presence || [])
+        @_access_token_scopes ||= access_token&.claim("scopes")&.split.presence || []
       end
 
       def tool_permissions_granted?
@@ -103,10 +103,10 @@ module Lti::IMS::Concerns
         error_response = {
           errors: {
             type: status,
-            message: message
+            message:
           }
         }
-        render json: error_response, status: status
+        render json: error_response, status:
       end
 
       def handled_error(e)

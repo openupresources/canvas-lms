@@ -29,10 +29,33 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import Layout from './Layout'
 import {setAssignmentPostPolicy} from './Api'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
+import type {CamelizedAssignment} from '@canvas/grading/grading.d'
 
 const I18n = useI18nScope('post_grades_tray')
 
-export default class AssignmentPostingPolicyTray extends PureComponent {
+type Props = {}
+
+type State = {
+  assignment?: CamelizedAssignment
+
+  requestInProgress?: boolean
+
+  selectedPostManually?: boolean
+
+  open: boolean
+
+  onExited?: () => void
+
+  onAssignmentPostPolicyUpdated?: ({
+    assignmentId,
+    postManually,
+  }: {
+    assignmentId: string
+    postManually: boolean
+  }) => void
+}
+
+export default class AssignmentPostingPolicyTray extends PureComponent<Props, State> {
   constructor(props) {
     super(props)
 
@@ -65,8 +88,13 @@ export default class AssignmentPostingPolicyTray extends PureComponent {
   }
 
   handleSave() {
-    const {id: assignmentId, name} = this.state.assignment
+    const name = this.state.assignment?.name
+    const assignmentId = this.state.assignment?.id
     const {selectedPostManually} = this.state
+
+    if (!name || !assignmentId) {
+      throw new Error('Assignment name and id are required')
+    }
 
     this.setState({requestInProgress: true})
     setAssignmentPostPolicy({assignmentId, postManually: selectedPostManually})
@@ -74,13 +102,13 @@ export default class AssignmentPostingPolicyTray extends PureComponent {
         const message = I18n.t('Success! The post policy for %{name} has been updated.', {name})
         const {postManually} = response
 
-        showFlashAlert({message, type: 'success'})
-        this.state.onAssignmentPostPolicyUpdated({assignmentId, postManually})
+        showFlashAlert({message, type: 'success', err: null})
+        this.state.onAssignmentPostPolicyUpdated?.({assignmentId, postManually})
         this.handleDismiss()
       })
       .catch(_error => {
         const message = I18n.t('An error occurred while saving the assignment post policy')
-        showFlashAlert({message, type: 'error'})
+        showFlashAlert({message, type: 'error', err: null})
         this.setState({requestInProgress: false})
       })
   }
@@ -131,7 +159,7 @@ export default class AssignmentPostingPolicyTray extends PureComponent {
           onPostPolicyChanged={this.handlePostPolicyChanged}
           onDismiss={this.handleDismiss}
           onSave={this.handleSave}
-          selectedPostManually={selectedPostManually}
+          selectedPostManually={Boolean(selectedPostManually)}
         />
       </Tray>
     )

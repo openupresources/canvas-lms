@@ -24,11 +24,17 @@ module DataFixup::PopulateMissingConversationAndConversationParticipantRootAccou
   end
 
   def self.populate_conversation_root_account_id
-    Conversation.where(root_account_ids: [nil, ""]).each do |convo|
-      list_of_ids = convo.conversation_participants.map do |cp|
-        cp.user.root_account_ids
-      end
-      convo.root_account_ids = list_of_ids.flatten.uniq.sort
+    Conversation.where(root_account_ids: [nil, ""]).find_each(strategy: :id) do |convo|
+      user_ids = convo.conversation_participants.distinct.pluck(:user_id)
+      root_account_ids = User.select(:id, :root_account_ids)
+                             .where(id: user_ids)
+                             .distinct
+                             .pluck(:root_account_ids)
+                             .flatten
+                             .uniq
+                             .sort
+
+      convo.root_account_ids = root_account_ids
       convo.save!
     end
   end

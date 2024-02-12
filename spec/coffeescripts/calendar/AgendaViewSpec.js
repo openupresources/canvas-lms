@@ -1,3 +1,6 @@
+/* eslint-disable qunit/assert-args */
+/* eslint-disable qunit/no-ok-equality */
+
 /*
  * Copyright (C) 2013 - present Instructure, Inc.
  *
@@ -18,13 +21,13 @@
 
 import $ from 'jquery'
 import {isArray, isObject, uniq} from 'lodash'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import denver from 'timezone/America/Denver'
 import juneau from 'timezone/America/Juneau'
 import french from 'timezone/fr_FR'
-import AgendaView from 'ui/features/calendar/backbone/views/AgendaView.coffee'
+import AgendaView from 'ui/features/calendar/backbone/views/AgendaView'
 import EventDataSource from '@canvas/calendar/jquery/EventDataSource'
 import eventResponse from 'helpers/ajax_mocks/api/v1/calendarEvents'
 import plannerItemsResponse from 'helpers/ajax_mocks/api/planner/items'
@@ -151,7 +154,7 @@ test('should only include days on page breaks once', function () {
   view.fetch(this.contextCodes, this.startDate)
   let id = 1
   const addEvents = (events, date) =>
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i =>
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(_i =>
       events.push({
         start_at: date.toISOString(),
         context_code: 'user_1',

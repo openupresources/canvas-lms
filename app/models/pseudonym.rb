@@ -76,26 +76,43 @@ class Pseudonym < ActiveRecord::Base
   include StickySisFields
   are_sis_sticky :unique_id, :workflow_state
 
-  validates :unique_id, format: { with: /\A[[:print:]]+\z/ },
-                        length: { within: 1..MAX_UNIQUE_ID_LENGTH },
-                        uniqueness: {
-                          case_sensitive: false,
-                          scope: %i[account_id workflow_state authentication_provider_id],
-                          if: ->(p) { (p.unique_id_changed? || p.workflow_state_changed?) && p.active? }
-                        }
+  validates :unique_id,
+            format: { with: /\A[[:print:]]+\z/ },
+            length: { within: 1..MAX_UNIQUE_ID_LENGTH },
+            uniqueness: {
+              case_sensitive: false,
+              scope: %i[account_id workflow_state authentication_provider_id],
+              if: ->(p) { (p.unique_id_changed? || p.workflow_state_changed?) && p.active? }
+            }
 
   validates :password,
             confirmation: true,
             if: :require_password?
 
-  validates_each :password, if: :require_password?,
-                 &Canvas::PasswordPolicy.method("validate")
+  validates_each :password,
+                 if: :require_password?,
+                 &Canvas::PasswordPolicy.method(:validate)
   validates :password_confirmation,
             presence: true,
             if: :require_password?
 
+  class << self
+    # we know these fields, and don't want authlogic to connect to the db at boot
+    # to try and infer them
+    def db_setup?
+      true
+    end
+
+    def login_field
+      :unique_id
+    end
+
+    def crypted_password_field
+      :crypted_password
+    end
+  end
+
   acts_as_authentic do |config|
-    config.login_field :unique_id
     config.perishable_token_valid_for = 30.minutes
     # if changing this to a new provider, add the _new_ provider to the transition
     # list for a full deploy first before moving it to primary, so that
@@ -172,9 +189,14 @@ class Pseudonym < ActiveRecord::Base
   def self.custom_find_by_unique_id(unique_id)
     return unless unique_id
 
-    active_only.by_unique_id(unique_id).where("authentication_provider_id IS NULL OR EXISTS (?)",
-                                              AuthenticationProvider.active.where(auth_type: ["canvas", "ldap"])
-                                                .where("authentication_provider_id=authentication_providers.id"))
+    active_only.by_unique_id(unique_id).merge(
+      where(authentication_provider_id: nil)
+        .or(where(AuthenticationProvider
+          .active
+          .where(auth_type: ["canvas", "ldap"])
+          .where("authentication_provider_id=authentication_providers.id")
+          .arel.exists))
+    )
                .order("authentication_provider_id NULLS LAST").first
   end
 
@@ -270,10 +292,11 @@ class Pseudonym < ActiveRecord::Base
     end
     unless deleted?
       shard.activate do
-        existing_pseudo = Pseudonym.active.by_unique_id(unique_id).where(account_id: account_id,
-                                                                         authentication_provider_id: authentication_provider_id).where.not(id: self).exists?
+        existing_pseudo = Pseudonym.active.by_unique_id(unique_id).where(account_id:,
+                                                                         authentication_provider_id:).where.not(id: self).exists?
         if existing_pseudo
-          errors.add(:unique_id, :taken,
+          errors.add(:unique_id,
+                     :taken,
                      message: t("ID already in use for this account and authentication provider"))
           throw :abort
         end
@@ -284,19 +307,21 @@ class Pseudonym < ActiveRecord::Base
 
   def verify_unique_sis_user_id
     return true unless sis_user_id
-    return true unless Pseudonym.where.not(id: id).where(account_id: account_id, sis_user_id: sis_user_id).exists?
+    return true unless Pseudonym.where.not(id:).where(account_id:, sis_user_id:).exists?
 
-    errors.add(:sis_user_id, :taken,
+    errors.add(:sis_user_id,
+               :taken,
                message: t("#errors.sis_id_in_use", "SIS ID \"%{sis_id}\" is already in use", sis_id: sis_user_id))
     throw :abort
   end
 
   def verify_unique_integration_id
     return true unless integration_id
-    return true unless Pseudonym.where.not(id: id).where(account_id: account_id, integration_id: integration_id).exists?
+    return true unless Pseudonym.where.not(id:).where(account_id:, integration_id:).exists?
 
-    errors.add(:integration_id, :taken,
-               message: t("Integration ID \"%{integration_id}\" is already in use", integration_id: integration_id))
+    errors.add(:integration_id,
+               :taken,
+               message: t("Integration ID \"%{integration_id}\" is already in use", integration_id:))
     throw :abort
   end
 
@@ -550,7 +575,7 @@ class Pseudonym < ActiveRecord::Base
                              type: :ldap,
                              message: "LDAP authentication error",
                              object: inspect.to_s,
-                             unique_id: unique_id,
+                             unique_id:,
                            })
     nil
   end
@@ -577,7 +602,7 @@ class Pseudonym < ActiveRecord::Base
       raise ImpossibleCredentialsError, "pseudonym cannot have a unique_id of length #{credentials[:unique_id].length}"
     end
 
-    too_many_attempts = false
+    error = nil
     begin
       associated_shards = associated_shards(credentials[:unique_id])
     rescue => e
@@ -594,11 +619,11 @@ class Pseudonym < ActiveRecord::Base
         .preload(:user)
         .select do |p|
           valid = p.valid_arbitrary_credentials?(credentials[:password])
-          too_many_attempts = true if p.audit_login(remote_ip, valid) == :too_many_attempts
+          error ||= p.audit_login(remote_ip, valid)
           valid
         end
     end
-    return :too_many_attempts if too_many_attempts
+    return error if error
 
     pseudonyms
   end
@@ -611,7 +636,7 @@ class Pseudonym < ActiveRecord::Base
       Rails.logger.info("Impossible pseudonym credentials: #{credentials[:unique_id]}, invalidating session")
       return :impossible_credentials
     end
-    return :too_many_attempts if pseudonyms == :too_many_attempts
+    return pseudonyms if pseudonyms.is_a?(Symbol)
 
     site_admin = pseudonyms.find { |p| p.account_id == Account.site_admin.id }
     # only log them in if these credentials match a single user OR if it matched site admin
@@ -630,11 +655,11 @@ class Pseudonym < ActiveRecord::Base
   end
 
   def cas_ticket_expired?(ticket)
-    return unless Canvas.redis_enabled?
+    return false unless Canvas.redis_enabled?
 
     redis_key = Pseudonym.cas_ticket_key(ticket)
 
-    !!Canvas.redis.get(redis_key)
+    !Canvas.redis.get(redis_key, failsafe: nil).nil?
   end
 
   def self.expire_cas_ticket(ticket)

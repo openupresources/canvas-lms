@@ -328,7 +328,7 @@ describe AssetUserAccess do
         hash_key ||= attribute
         access.log(context, { hash_key => "value" })
         expect(access.send(attribute)).to eq "value"
-        access.send("#{attribute}=", "other")
+        access.send(:"#{attribute}=", "other")
         access.log(context, { hash_key => "value" })
         expect(access.send(attribute)).to eq "other"
       end
@@ -440,6 +440,27 @@ describe AssetUserAccess do
       ps.settings = { max_log_ids: [0, 0, 0, 0, 0, 0, 0], write_path: "log" }
       ps.save!
       expect(AssetUserAccess.view_counting_method).to eq("log")
+    end
+  end
+
+  describe "delete_old_records" do
+    before :once do
+      @old_aua = AssetUserAccess.create! last_access: 25.months.ago
+      @new_aua = AssetUserAccess.create! last_access: 13.seconds.ago
+    end
+
+    it "deletes old records" do
+      AssetUserAccess.delete_old_records
+      expect { @new_aua.reload }.not_to raise_error
+      expect { @old_aua.reload }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "sleeps between batches if set" do
+      stub_const("AssetUserAccess::DELETE_BATCH_SIZE", 1)
+      stub_const("AssetUserAccess::DELETE_BATCH_SLEEP", 0.5)
+      AssetUserAccess.create! last_access: 25.months.ago
+      expect(AssetUserAccess).to receive(:sleep).with(0.5).at_least(:twice)
+      AssetUserAccess.delete_old_records
     end
   end
 end

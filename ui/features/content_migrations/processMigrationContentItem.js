@@ -20,6 +20,11 @@ import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import processSingleContentItem from '@canvas/deep-linking/processors/processSingleContentItem'
 import '@canvas/rails-flash-notifications'
+import {
+  postMessageExternalContentReady,
+  postMessageExternalContentCancel,
+} from '@canvas/external-tools/messages'
+import { captureException } from '@sentry/react'
 
 const I18n = useI18nScope('content_migrations')
 
@@ -31,24 +36,19 @@ export default function processMigrationContentItem(event) {
     return
   }
 
-  processSingleContentItem(event)
-    .then(result => {
-      if (result.type !== 'file') {
-        throw new Error(`Expected type "file" but received "${result.type}"`)
-      }
+  try {
+    const result = processSingleContentItem(event)
+    if (result.type !== 'file') {
+      throw new Error(`Expected type "file" but received "${result.type}"`)
+    }
 
-      $(window).trigger('externalContentReady', {
-        contentItems: [
-          {
-            text: result.text,
-            url: result.url,
-          },
-        ],
-      })
-    })
-    .catch(error => {
-      $.flashError(I18n.t('Error retrieving content'))
-      $(window).trigger('externalContentCancel')
-      console.error(error)
-    })
+    const contentItems = [{text: result.text, url: result.url}]
+    postMessageExternalContentReady(window, {contentItems})
+  } catch (error) {
+    $.flashError(I18n.t('Error retrieving content'))
+    postMessageExternalContentCancel(window)
+    // eslint-disable-next-line no-console
+    console.error(error)
+    captureException(error)
+  }
 }

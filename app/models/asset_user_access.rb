@@ -213,7 +213,8 @@ class AssetUserAccess < ActiveRecord::Base
     return unless correct_context && Context::CONTEXT_TYPES.include?(correct_context.class_name.to_sym)
 
     GuardRail.activate(:secondary) do
-      @access = AssetUserAccess.where(user: user, asset_code: accessed_asset[:code],
+      @access = AssetUserAccess.where(user:,
+                                      asset_code: accessed_asset[:code],
                                       context: correct_context).first_or_initialize
     end
     accessed_asset[:level] ||= "view"
@@ -329,10 +330,28 @@ class AssetUserAccess < ActiveRecord::Base
     ICON_MAP[asset_category.to_sym]&.[](1) || ""
   end
 
+  def self.expiration_date
+    2.years.ago
+  end
+
+  DELETE_BATCH_SIZE = 10_000
+  DELETE_BATCH_SLEEP = 5
+
+  def self.delete_old_records
+    loop do
+      count = AssetUserAccess.connection.with_max_update_limit(DELETE_BATCH_SIZE) do
+        where(last_access: ..expiration_date).limit(DELETE_BATCH_SIZE).delete_all
+      end
+      break if count.zero?
+
+      sleep(DELETE_BATCH_SLEEP) # rubocop:disable Lint/NoSleep
+    end
+  end
+
   private
 
   def increment(attribute)
     incremented_value = (send(attribute) || 0) + 1
-    send("#{attribute}=", incremented_value)
+    send(:"#{attribute}=", incremented_value)
   end
 end

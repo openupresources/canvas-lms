@@ -17,10 +17,10 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import fcUtil from '../fcUtil.coffee'
+import fcUtil from '../fcUtil'
 import CommonEvent from './CommonEvent'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 
 const I18n = useI18nScope('calendar')

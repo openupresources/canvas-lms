@@ -137,7 +137,7 @@ class Quizzes::QuizSubmissionsController < ApplicationController
     if request.get?
       @quiz = require_quiz
       user_id = @current_user&.id
-      redirect_to course_quiz_take_url(@context, @quiz, user_id: user_id)
+      redirect_to course_quiz_take_url(@context, @quiz, user_id:)
     else
       backup
     end
@@ -176,16 +176,17 @@ class Quizzes::QuizSubmissionsController < ApplicationController
 
       @submission.update_scores(params.to_unsafe_h.merge(grader_id: @current_user.id))
       if params[:headless]
-        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: (params[:submission_version_number] || @submission.version_number), headless: 1, score_updated: 1, hide_student_name: params[:hide_student_name])
+        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: params[:submission_version_number] || @submission.version_number, headless: 1, score_updated: 1, hide_student_name: params[:hide_student_name])
       else
-        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: (params[:submission_version_number] || @submission.version_number))
+        redirect_to named_context_url(@context, :context_quiz_history_url, @quiz, user_id: @submission.user_id, version: params[:submission_version_number] || @submission.version_number)
       end
     end
   end
 
   def show
     if authorized_action(@quiz_submission, @current_user, :read)
-      redirect_to named_context_url(@context, :context_quiz_history_url,
+      redirect_to named_context_url(@context,
+                                    :context_quiz_history_url,
                                     @quiz.id,
                                     user_id: @quiz_submission.user_id)
     end

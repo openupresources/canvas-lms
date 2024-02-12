@@ -14,11 +14,13 @@ push() {
   return $?
 }
 
+git status --porcelain src
+
 git checkout -q -B sync-translations-rce && \
   git add -A src && \
   git commit -m "[i18n] Update RCE translations." && \
   push
-  
+
 echo $OUTPUT
 
 git checkout -q $CURRENT_BRANCH
@@ -31,7 +33,7 @@ if [ ! -z "$OUTPUT" ]; then
   if [ ! -z "$SUPPRESS_SLACK" ]; then
     #
     # You can use with SUPPRESS_SLACK=1 when testing locally, to avoid
-    # making noise in the Materials team Slack channel
+    # making noise in Slack
     #
     echo "Would have sent a Slack message:"
     echo $SLACK_MESSAGE
@@ -39,7 +41,7 @@ if [ ! -z "$OUTPUT" ]; then
     (
       aws --region us-east-1 sqs send-message \
         --queue-url https://sqs.us-east-1.amazonaws.com/636161780776/slack-lambda \
-        --message-body "{\"channel\":\"#mat-bots\",\"username\":\"Package Translations\",\"text\":\"$SLACK_MESSAGE\"}"
+        --message-body "{\"channel\":\"#learning-foundations\",\"username\":\"Package Translations\",\"text\":\"$SLACK_MESSAGE\"}"
     ) || echo "Failed to send Slack message."
   fi
 fi

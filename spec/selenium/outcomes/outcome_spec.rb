@@ -69,10 +69,10 @@ describe "outcomes" do
         it "validates default values", priority: "1" do
           expect(f("#calculation_method")).to have_value("decaying_average")
           expect(f("#calculation_int")).to have_value("65")
-          expect(f("#calculation_int_example")).to include_text("Most recent result counts as 65%"\
-                                                                " of mastery weight, average of all other results count"\
-                                                                " as 35% of weight. If there is only one result, the single score"\
-                                                                " will be returned.")
+          expect(f("#calculation_int_example")).to include_text("Most recent result counts as 65% " \
+                                                                "of mastery weight, average of all other results count " \
+                                                                "as 35% of weight. If there is only one result, the single score " \
+                                                                "will be returned.")
         end
 
         it "validates decaying average_range", priority: "2" do
@@ -101,9 +101,9 @@ describe "outcomes" do
           click_option("#calculation_method", "n Number of Times")
           expect(f("#calculation_int")).to have_value("5")
           expect(f("#mastery_points")).to have_value("3")
-          expect(f("#calculation_int_example")).to include_text("Must achieve mastery at least 5 times."\
-                                                                " Scores above mastery will be averaged"\
-                                                                " to calculate final score")
+          expect(f("#calculation_int_example")).to include_text("Must achieve mastery at least 5 times. " \
+                                                                "Scores above mastery will be averaged " \
+                                                                "to calculate final score")
         end
 
         it "validates n mastery_range", priority: "2" do
@@ -173,7 +173,7 @@ describe "outcomes" do
     context "actions" do
       it "does not render an HTML-escaped title in outcome directory while editing", priority: "2" do
         title = "escape & me <<->> if you dare"
-        @context = who_to_login == "teacher" ? @course : account
+        @context = (who_to_login == "teacher") ? @course : account
         outcome_model
         get outcome_url
         wait_for_ajaximations
@@ -215,6 +215,7 @@ describe "outcomes" do
     describe "with improved_outcome_management enabled" do
       before do
         enable_improved_outcomes_management(Account.default)
+        enable_account_level_mastery_scales(Account.default)
       end
 
       it "creates an initial outcome in the course level as a teacher" do
@@ -253,7 +254,7 @@ describe "outcomes" do
         individual_outcome_kabob_menu(0).click
         click_remove_outcome_button
         click_confirm_remove_button
-        expect(no_outcomes_billboard.present?).to eq(true)
+        expect(no_outcomes_billboard.present?).to be(true)
       end
 
       it "moves an outcome into a newly created outcome group as a teacher" do
@@ -288,7 +289,7 @@ describe "outcomes" do
       end
 
       # Can't reproduce the js error locally
-      it "bulk moves outcomes at the course level as a teacher", ignore_js_errors: true do
+      it "bulk moves outcomes at the course level as a teacher", :ignore_js_errors do
         create_bulk_outcomes_groups(@course, 1, 3)
         get outcome_url
         select_outcome_group_with_text(@course.name).click
@@ -327,47 +328,48 @@ describe "outcomes" do
         expect(course_outcomes[0].title).to eq(outcome0_title)
       end
 
-      describe "with friendly_description enabled" do
-        before do
-          enable_friendly_description
-        end
-
-        it "creates an outcome with a friendly description present" do
-          get outcome_url
-          create_outcome_with_friendly_desc("Outcome", "Standard Desc", "Friendly Desc")
-          # Have to verify model creation with AR to save time since the creation => appearance flow is a little slow
-          outcome = LearningOutcome.find_by(context: @course, short_description: "Outcome", description: "<p>Standard Desc</p>")
-          # Small delay between button click and model population in db
-          keep_trying_until do
-            fd = OutcomeFriendlyDescription.find_by(context: @course, learning_outcome: outcome, description: "Friendly Desc")
-            expect(fd).to be_truthy
-          end
-        end
-
-        it "edits an outcome's friendly description" do
-          create_bulk_outcomes_groups(@course, 1, 1)
-          outcome_title = "outcome 0"
-          outcome = LearningOutcome.find_by(context: @course, short_description: outcome_title)
-          outcome.update!(description: "long description")
-          OutcomeFriendlyDescription.find_or_create_by!(learning_outcome_id: outcome, context: @course, description: "FD")
-          get outcome_url
-          select_outcome_group_with_text(@course.name).click
-          expect(nth_individual_outcome_title(0)).to eq(outcome_title)
-          individual_outcome_kabob_menu(0).click
-          edit_outcome_button.click
-          insert_friendly_description("FD - Edited")
-          click_save_edit_modal
-          expect(nth_individual_outcome_title(0)).to eq(outcome_title)
-          expect(nth_individual_outcome_text(0)).not_to match(/Friendly Description.*FD/m)
-          expand_outcome_description_button(0).click
-          expect(nth_individual_outcome_text(0)).to match(/Friendly Description.*FD - Edited/m)
-        end
-      end
-
       describe "with account_level_mastery_scales disabled" do
         before do
           enable_improved_outcomes_management(Account.default)
           disable_account_level_mastery_scales(Account.default)
+        end
+
+        describe "with friendly_description enabled" do
+          before do
+            enable_friendly_description
+          end
+
+          it "creates an outcome with a friendly description present" do
+            get outcome_url
+            create_outcome_with_friendly_desc("Outcome", "Standard Desc", "Friendly Desc")
+            # Have to verify model creation with AR to save time since the creation => appearance flow is a little slow
+            outcome = LearningOutcome.find_by(context: @course, short_description: "Outcome", description: "<p>Standard Desc</p>")
+            # Small delay between button click and model population in db
+            keep_trying_until do
+              fd = OutcomeFriendlyDescription.find_by(context: @course, learning_outcome: outcome, description: "Friendly Desc")
+              expect(fd).to be_truthy
+            end
+          end
+
+          it "edits an outcome's friendly description" do
+            # disable_account_level_mastery_scales(Account.default)
+            create_bulk_outcomes_groups(@course, 1, 1)
+            outcome_title = "outcome 0"
+            outcome = LearningOutcome.find_by(context: @course, short_description: outcome_title)
+            outcome.update!(description: "long description")
+            OutcomeFriendlyDescription.find_or_create_by!(learning_outcome_id: outcome, context: @course, description: "FD")
+            get outcome_url
+            select_outcome_group_with_text(@course.name).click
+            expect(nth_individual_outcome_title(0)).to eq(outcome_title)
+            individual_outcome_kabob_menu(0).click
+            edit_outcome_button.click
+            insert_friendly_description("FD - Edited")
+            click_save_edit_modal
+            expect(nth_individual_outcome_title(0)).to eq(outcome_title)
+            expect(nth_individual_outcome_text(0)).not_to match(/Friendly Description.*FD/m)
+            expand_outcome_description_button(0).click
+            expect(nth_individual_outcome_text(0)).to match(/Friendly Description.*FD - Edited/m)
+          end
         end
 
         it "creates an outcome with default ratings and calculation method" do
@@ -378,7 +380,7 @@ describe "outcomes" do
           ratings = outcome.data[:rubric_criterion][:ratings]
           mastery_points = outcome.data[:rubric_criterion][:mastery_points]
           points_possible = outcome.data[:rubric_criterion][:points_possible]
-          expect(outcome.nil?).to eq(false)
+          expect(outcome.nil?).to be(false)
           expect(ratings.length).to eq(5)
           expect(ratings[0][:description]).to eq("Exceeds Mastery")
           expect(ratings[0][:points]).to eq(4)
@@ -457,9 +459,8 @@ describe "outcomes" do
         end
       end
 
-      describe "with alignment_summary enabled" do
+      context "alignment summary tab" do
         before do
-          enable_alignment_summary(Account.default)
           context_outcome(@course, 3)
           @assignment = assignment_model(course: @course)
           @aligned_outcome = LearningOutcome.find_by(context: @course, short_description: "outcome 0")
@@ -505,7 +506,7 @@ describe "outcomes" do
           expect(alignment_summary_alignment_stat_type(0)).to eq("Coverage")
           expect(alignment_summary_alignment_stat_average(0)).to eq("0.3")
           expect(alignment_summary_alignment_stat_description(0)).to eq("Avg. Alignments per Outcome")
-          expect(alignment_summary_alignment_stat_name(1)).to eq("1 ALIGNABLE ARTIFACT")
+          expect(alignment_summary_alignment_stat_name(1)).to eq("1 ASSESSABLE ARTIFACT")
           expect(alignment_summary_alignment_stat_percent(1)).to eq("100%")
           expect(alignment_summary_alignment_stat_type(1)).to eq("With Alignments")
           expect(alignment_summary_alignment_stat_average(1)).to eq("1.0")

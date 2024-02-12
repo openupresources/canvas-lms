@@ -92,33 +92,50 @@ describe('ltiMessageHander', () => {
   })
 
   describe('LTI Platform Storage subjects', () => {
-    it('processes older org.imsglobal.lti.* subjects', async () => {
-      await expectMessage({subject: 'org.imsglobal.lti.capabilities'}, true)
-      await expectMessage({subject: 'org.imsglobal.lti.put_data'}, true)
-      await expectMessage({subject: 'org.imsglobal.lti.get_data'}, true)
-    })
-
     it('processes newer lti.* subjects', async () => {
       await expectMessage({subject: 'lti.capabilities'}, true)
       await expectMessage({subject: 'lti.put_data'}, true)
       await expectMessage({subject: 'lti.get_data'}, true)
     })
 
-    describe('when flag is enabled', () => {
-      it('rejects older org.imsglobal.lti.* subjects', async () => {
-        expect(
-          await ltiMessageHandler(
-            postMessageEvent({subject: 'org.imsglobal.lti.capabilities'}),
-            true
-          )
-        ).toBe(false)
-      })
+    it('rejects older org.imsglobal.lti.* subjects', async () => {
+      expect(
+        await ltiMessageHandler(postMessageEvent({subject: 'org.imsglobal.lti.capabilities'}))
+      ).toBe(false)
     })
   })
 
   describe('when subject is in allow list', () => {
     it('processes message', async () => {
       await expectMessage({subject: 'lti.fetchWindowSize'}, true)
+    })
+  })
+
+  describe('when message is sent from tool in active RCE', () => {
+    it('processes message', async () => {
+      const event = postMessageEvent({subject: 'lti.showAlert', in_rce: true})
+      expect(await ltiMessageHandler(event)).toBe(true)
+    })
+
+    describe('when subject is not supported in active RCE', () => {
+      it('does not process message', async () => {
+        const event = postMessageEvent({subject: 'lti.scrollToTop', in_rce: true})
+        expect(await ltiMessageHandler(event)).toBe(false)
+      })
+
+      it('sends unsupported subject response with some context', async () => {
+        const event = postMessageEvent({subject: 'lti.scrollToTop', in_rce: true})
+        await ltiMessageHandler(event)
+        expect(event.source.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: {
+              code: 'unsupported_subject',
+              message: 'Not supported inside Rich Content Editor',
+            },
+          }),
+          undefined
+        )
+      })
     })
   })
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative "./linter"
+require_relative "linter"
 
 linter_options = {
-  file_regex: %r{^ui/.*\.(?:ts|tsx)$},
+  file_regex: %r{^(ui|packages)/.*\.(?:ts|tsx|js)$},
   linter_name: "tsc",
   format: "tsc",
   command: "node_modules/.bin/tsc -p tsconfig.json --noEmit",

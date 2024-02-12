@@ -17,12 +17,13 @@
  */
 
 import React from 'react'
+// @ts-expect-error
 import {connect} from 'react-redux'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {debounce, pick} from 'lodash'
 import moment from 'moment-timezone'
 
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {FlaggableNumberInput} from './flaggable_number_input'
 import {Flex} from '@instructure/ui-flex'
 import {
@@ -38,8 +39,8 @@ import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 
 import {coursePaceDateFormatter} from '../../shared/api/backend_serializer'
-import {CoursePaceItem, CoursePace, StoreState} from '../../types'
-import {BlackoutDate} from '../../shared/types'
+import type {CoursePaceItem, CoursePace, StoreState} from '../../types'
+import type {BlackoutDate} from '../../shared/types'
 import {
   getCoursePace,
   getExcludeWeekends,
@@ -56,12 +57,9 @@ import {
   getBlueprintLocked,
 } from '../../reducers/ui'
 import {getBlackoutDates} from '../../shared/reducers/blackout_dates'
-import {Change} from '../../utils/change_tracking'
+import type {Change} from '../../utils/change_tracking'
 
 const I18n = useI18nScope('course_paces_assignment_row')
-
-// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-const {Cell, Row} = Table as any
 
 interface PassedProps {
   readonly datesVisible: boolean
@@ -138,7 +136,6 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
     // latter changes, for example due to onResetPace
     if (prevProps.coursePaceItem.duration !== this.props.coursePaceItem.duration) {
       // we're checking that a redux state change has occurred before calling setState
-      // eslint-disable-next-line react/no-did-update-set-state
       this.setState({duration: String(this.props.coursePaceItem.duration)})
     }
   }
@@ -331,38 +328,46 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
 
   render() {
     const labelMargin = this.props.isStacked ? '0 0 0 small' : undefined
-    const themeOverrides = {background: this.state.hovering ? '#eef7ff' : '#fff'}
+
+    const componentOverrides = {
+      'Table.Cell': {
+        background: this.state.hovering ? '#eef7ff' : '#fff',
+      },
+    }
 
     return (
-      <ApplyTheme theme={{[(Cell as any).theme]: themeOverrides}}>
-        <Row
+      <InstUISettingsProvider theme={{componentOverrides}}>
+        <Table.Row
           data-testid="pp-module-item-row"
           onMouseEnter={() => this.setState({hovering: true})}
           onMouseLeave={() => this.setState({hovering: false})}
           {...pick(this.props, ['hover', 'isStacked', 'headers'])}
         >
-          <Cell data-testid="pp-title-cell">
+          <Table.Cell data-testid="pp-title-cell">
             <View margin={labelMargin}>{this.renderTitle()}</View>
-          </Cell>
-          <Cell data-testid="pp-duration-cell" textAlign="center">
+          </Table.Cell>
+          <Table.Cell data-testid="pp-duration-cell" textAlign="center">
             <View data-testid="duration-input" margin={labelMargin}>
               {this.renderDurationInput()}
             </View>
-          </Cell>
+          </Table.Cell>
           {(this.props.showProjections || this.props.datesVisible) && (
-            <Cell data-testid="pp-due-date-cell" textAlign="center">
+            <Table.Cell data-testid="pp-due-date-cell" textAlign="center">
               <View data-testid="assignment-due-date" margin={labelMargin}>
                 <span style={{whiteSpace: this.props.isStacked ? 'normal' : 'nowrap'}}>
                   {this.renderDate()}
                 </span>
               </View>
-            </Cell>
+            </Table.Cell>
           )}
-          <Cell data-testid="pp-status-cell" textAlign={this.props.isStacked ? 'start' : 'center'}>
+          <Table.Cell
+            data-testid="pp-status-cell"
+            textAlign={this.props.isStacked ? 'start' : 'center'}
+          >
             <View margin={labelMargin}>{this.renderPublishStatusBadge()}</View>
-          </Cell>
-        </Row>
-      </ApplyTheme>
+          </Table.Cell>
+        </Table.Row>
+      </InstUISettingsProvider>
     )
   }
 }

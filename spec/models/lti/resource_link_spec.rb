@@ -18,13 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-RSpec.describe Lti::ResourceLink, type: :model do
+RSpec.describe Lti::ResourceLink do
   let(:tool) { external_tool_1_3_model }
   let(:course) { Course.create!(name: "Course") }
-  let(:assignment) { Assignment.create!(course: course, name: "Assignment") }
+  let(:assignment) { Assignment.create!(course:, name: "Assignment") }
   let(:resource_link) do
-    Lti::ResourceLink.create!(context_external_tool: tool, context: assignment,
-                              url: "http://www.example.com/launch")
+    Lti::ResourceLink.create!(context_external_tool: tool,
+                              context: assignment,
+                              url: "http://www.example.com/launch",
+                              title: "Resource Title")
   end
 
   context "relationships" do
@@ -32,6 +34,35 @@ RSpec.describe Lti::ResourceLink, type: :model do
     it { is_expected.to belong_to(:root_account) }
 
     it { is_expected.to have_many(:line_items) }
+
+    describe "when destroying" do
+      subject { resource_link.destroy }
+
+      let(:line_item) { line_item_model(resource_link:) }
+
+      it "destroys associated line items" do
+        expect(line_item).to be_active
+        subject
+        expect(line_item.reload).to be_deleted
+      end
+    end
+
+    describe "when undestroying" do
+      subject { resource_link.undestroy }
+
+      let(:line_item) { line_item_model(resource_link:) }
+
+      before do
+        line_item
+        resource_link.destroy
+      end
+
+      it "undestroys associated line items" do
+        expect(line_item.reload).to be_deleted
+        subject
+        expect(line_item.reload).to be_active
+      end
+    end
   end
 
   context "when validating" do
@@ -84,7 +115,7 @@ RSpec.describe Lti::ResourceLink, type: :model do
       end
 
       context "when a matching tool exists in the specified context" do
-        let(:second_tool) { external_tool_1_3_model(context: context) }
+        let(:second_tool) { external_tool_1_3_model(context:) }
 
         it { is_expected.to eq second_tool }
       end
@@ -127,21 +158,60 @@ RSpec.describe Lti::ResourceLink, type: :model do
         expect(course.lti_resource_links.last).to eq resource_link_2
       end
     end
+
+    context "with `title`" do
+      let(:title) { "Resource Title" }
+
+      it "create resource link" do
+        resource_link = described_class.create_with(course, tool, nil, nil, title)
+        expect(course.lti_resource_links.first).to eq resource_link
+        expect(course.lti_resource_links.first.title).to eq title
+      end
+    end
+
+    context "without `title`" do
+      it "create resource link with nil title" do
+        resource_link = described_class.create_with(course, tool)
+        expect(course.lti_resource_links.first).to eq resource_link
+        expect(course.lti_resource_links.first.title).to be_nil
+      end
+    end
+
+    context "with `lti_1_1_id`" do
+      let(:lti_1_1_id) { "1234" }
+
+      it "creates a resource link with the lti_1_1_id" do
+        resource_link = described_class.create_with(course, tool, lti_1_1_id:)
+        expect(course.lti_resource_links.first).to eq resource_link
+        expect(course.lti_resource_links.first.lti_1_1_id).to eq lti_1_1_id
+      end
+    end
+
+    context "without `lti_1_1_id`" do
+      it "creates a resource link with a nil lti_1_1_id" do
+        resource_link = described_class.create_with(course, tool)
+        expect(course.lti_resource_links.first).to eq resource_link
+        expect(course.lti_resource_links.first.lti_1_1_id).to be_nil
+      end
+    end
   end
 
   describe ".find_or_initialize_for_context_and_lookup_uuid" do
     subject do
       described_class.find_or_initialize_for_context_and_lookup_uuid(
-        context: context, context_external_tool: tool,
-        lookup_uuid: lookup_uuid, custom: { "a" => "b" },
+        context:,
+        context_external_tool: tool,
+        lookup_uuid:,
+        custom: { "a" => "b" },
         url: "http://www.example.com/launch"
       )
     end
 
     let(:context) { course }
-    let(:tool) { external_tool_1_3_model(context: context) }
+    let(:tool) { external_tool_1_3_model(context:) }
     let(:resource_link) do
-      Lti::ResourceLink.create!(context_external_tool: tool, context: course,
+      Lti::ResourceLink.create!(context_external_tool: tool,
+                                context: course,
                                 url: "http://www.example.com/launch")
     end
 
@@ -149,7 +219,7 @@ RSpec.describe Lti::ResourceLink, type: :model do
 
     shared_examples_for "creating a new resource link" do
       it "returns a new resource link" do
-        expect(subject.id).to eq(nil)
+        expect(subject.id).to be_nil
         expect(subject.original_context_external_tool).to eq(tool)
         expect(subject.custom).to eq("a" => "b")
         expect(subject.context).to eq(context)
@@ -166,9 +236,11 @@ RSpec.describe Lti::ResourceLink, type: :model do
       context "when passing in context_external_tool_launch_url" do
         subject do
           described_class.find_or_initialize_for_context_and_lookup_uuid(
-            context: context, context_external_tool_launch_url: tool.url,
+            context:,
+            context_external_tool_launch_url: tool.url,
             url: tool.url,
-            lookup_uuid: lookup_uuid, custom: { "a" => "b" }
+            lookup_uuid:,
+            custom: { "a" => "b" }
           )
         end
 

@@ -20,8 +20,10 @@
 
 class CourseSection < ActiveRecord::Base
   include Workflow
+  include MaterialChanges
+  include SearchTermHelper
 
-  belongs_to :course
+  belongs_to :course, inverse_of: :course_sections
   belongs_to :nonxlist_course, class_name: "Course"
   belongs_to :root_account, class_name: "Account"
   belongs_to :enrollment_term
@@ -37,9 +39,11 @@ class CourseSection < ActiveRecord::Base
   has_many :course_account_associations
   has_many :calendar_events, as: :context, inverse_of: :context
   has_many :assignment_overrides, as: :set, dependent: :destroy
-  has_many :discussion_topic_section_visibilities, lambda {
-    where("discussion_topic_section_visibilities.workflow_state<>'deleted'")
-  }, dependent: :destroy
+  has_many :discussion_topic_section_visibilities,
+           lambda {
+             where("discussion_topic_section_visibilities.workflow_state<>'deleted'")
+           },
+           dependent: :destroy
   has_many :discussion_topics, through: :discussion_topic_section_visibilities
   has_many :course_paces, dependent: :destroy
 
@@ -142,7 +146,7 @@ class CourseSection < ActiveRecord::Base
   end
 
   def broadcast_data
-    { course_id: course_id, root_account_id: root_account_id }
+    { course_id:, root_account_id: }
   end
 
   set_policy do
@@ -176,7 +180,7 @@ class CourseSection < ActiveRecord::Base
 
     given do |user, _session|
       if user
-        enrollments = user.enrollments.shard(self).active_by_date.where(course: course)
+        enrollments = user.enrollments.shard(self).active_by_date.where(course:)
         enrollments.where(limit_privileges_to_course_section: false).or(enrollments.where(course_section: self)).any? { |e| e.has_permission_to?(:manage_calendar) }
       end
     end
@@ -199,7 +203,7 @@ class CourseSection < ActiveRecord::Base
 
   def update_account_associations_if_changed
     if (saved_change_to_course_id? || saved_change_to_nonxlist_course_id?) && !Course.skip_updating_account_associations?
-      Course.delay_if_production(n_strand: ["update_account_associations", root_account_id])
+      Course.delay_if_production(n_strand: ["update_account_associations", global_root_account_id])
             .update_account_associations([course_id, course_id_before_last_save, nonxlist_course_id, nonxlist_course_id_before_last_save].compact.uniq)
     end
   end
@@ -212,7 +216,7 @@ class CourseSection < ActiveRecord::Base
     return true unless sis_source_id
     return true if !root_account_id_changed? && !sis_source_id_changed?
 
-    scope = root_account.course_sections.where(sis_source_id: sis_source_id)
+    scope = root_account.course_sections.where(sis_source_id:)
     scope = scope.where("id<>?", self) unless new_record?
 
     return true unless scope.exists?
@@ -225,12 +229,12 @@ class CourseSection < ActiveRecord::Base
     return true unless integration_id
     return true if !root_account_id_changed? && !integration_id_changed?
 
-    scope = root_account.course_sections.where(integration_id: integration_id)
+    scope = root_account.course_sections.where(integration_id:)
     scope = scope.where("id<>?", self) unless new_record?
 
     return true unless scope.exists?
 
-    errors.add(:integration_id, t("integration_id_taken", "INTEGRATRION ID \"%{integration_id}\" is already in use", integration_id: integration_id))
+    errors.add(:integration_id, t("integration_id_taken", "INTEGRATRION ID \"%{integration_id}\" is already in use", integration_id:))
     throw :abort
   end
 
@@ -312,7 +316,7 @@ class CourseSection < ActiveRecord::Base
       old_course.delay_if_production.update_account_associations
     end
 
-    DueDateCacher.recompute_users_for_course(
+    SubmissionLifecycleManager.recompute_users_for_course(
       user_ids,
       course,
       nil,
@@ -326,7 +330,7 @@ class CourseSection < ActiveRecord::Base
   end
 
   def ensure_enrollments_in_correct_section
-    enrollments.where.not(course_id: course_id).each { |e| e.update_attribute(:course_id, course_id) }
+    enrollments.where.not(course_id:).each { |e| e.update_attribute(:course_id, course_id) }
   end
 
   def crosslist_to_course(course, **opts)
@@ -377,18 +381,23 @@ class CourseSection < ActiveRecord::Base
     enrollments.not_fake.each(&:destroy)
     assignment_overrides.each(&:destroy)
     discussion_topic_section_visibilities&.each(&:destroy)
-    save!
+    result = save!
+    delay_if_production(
+      priority: Delayed::LOW_PRIORITY,
+      strand: "RemoveSectionFromGradebookFilters:#{global_course_id}"
+    ).remove_from_gradebook_filters
+    result
   end
 
   def self.destroy_batch(batch, sis_batch: nil, batch_mode: false)
     raise ArgumentError, "Cannot call with more than 1000 sections" if batch.count > 1000
 
     cs = CourseSection.where(id: batch).select(:id, :workflow_state).to_a
-    data = SisBatchRollBackData.build_dependent_data(sis_batch: sis_batch, contexts: cs, updated_state: "deleted", batch_mode_delete: batch_mode)
+    data = SisBatchRollBackData.build_dependent_data(sis_batch:, contexts: cs, updated_state: "deleted", batch_mode_delete: batch_mode)
     CourseSection.where(id: cs.map(&:id)).update_all(workflow_state: "deleted", updated_at: Time.zone.now)
     Enrollment.where(course_section_id: cs.map(&:id)).active.find_in_batches do |e_batch|
       GuardRail.activate(:primary) do
-        new_data = Enrollment::BatchStateUpdater.destroy_batch(e_batch, sis_batch: sis_batch, batch_mode: batch_mode)
+        new_data = Enrollment::BatchStateUpdater.destroy_batch(e_batch, sis_batch:, batch_mode:)
         data.push(*new_data)
         SisBatchRollBackData.bulk_insert_roll_back_data(data)
         data = []
@@ -410,16 +419,29 @@ class CourseSection < ActiveRecord::Base
   end
 
   def update_enrollment_states_if_necessary
-    if saved_change_to_restrict_enrollments_to_section_dates? || (restrict_enrollments_to_section_dates? && (saved_changes.keys & %w[start_at end_at]).any?)
+    if saved_change_to_restrict_enrollments_to_section_dates? ||
+       (restrict_enrollments_to_section_dates? && saved_material_changes_to?(:start_at, :end_at))
       EnrollmentState.delay_if_production(n_strand: ["invalidate_enrollment_states", global_root_account_id])
                      .invalidate_states_for_course_or_section(self)
     end
   end
 
   def republish_course_pace_if_needed
-    return unless (saved_changes.keys & %w[start_at conclude_at restrict_enrollments_to_section_dates]).present?
+    return unless saved_changes.keys.intersect?(%w[start_at conclude_at restrict_enrollments_to_section_dates])
     return unless course.enable_course_paces?
 
     course_paces.published.find_each(&:create_publish_progress)
+  end
+
+  private
+
+  def remove_from_gradebook_filters
+    gradebook_settings = UserPreferenceValue.where(key: "gradebook_settings", sub_key: global_course_id)
+    gradebook_settings.find_each do |setting|
+      if setting.value.dig("filter_rows_by", "section_id") == id.to_s
+        setting.value["filter_rows_by"]["section_id"] = nil
+        setting.save
+      end
+    end
   end
 end

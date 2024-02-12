@@ -51,8 +51,8 @@ describe "Gradebook" do
 
   it "splits student first and last name when view option is toggled on" do
     Account.site_admin.enable_feature!(:gradebook_show_first_last_names)
-    @course.root_account.settings[:allow_gradebook_show_first_last_names] = true
-    @course.root_account.save!
+    @course.account.settings[:allow_gradebook_show_first_last_names] = true
+    @course.account.save!
 
     Gradebook.visit(@course)
     Gradebook.open_gradebook_menu("View")
@@ -215,7 +215,7 @@ describe "Gradebook" do
     expect(f('[aria-label="Gradebook Settings"]')).to be_displayed
 
     f("#gradebook-settings-cancel-button").click
-    expect { driver.switch_to.active_element }.to become(f('[data-test-id="gradebook-settings-button"]'))
+    expect { driver.switch_to.active_element }.to become(f('[data-testid="gradebook-settings-button"]'))
   end
 
   it "includes student view student for grading" do
@@ -239,7 +239,7 @@ describe "Gradebook" do
     gc = group_category
     graded_assignment = @course.assignments.create!({
                                                       title: "group assignment 1",
-                                                      due_at: (Time.zone.now + 1.week),
+                                                      due_at: 1.week.from_now,
                                                       points_possible: 10,
                                                       submission_types: "online_text_entry",
                                                       assignment_group: @group,
@@ -248,7 +248,7 @@ describe "Gradebook" do
                                                     })
     group_assignment = @course.assignments.create!({
                                                      title: "group assignment 2",
-                                                     due_at: (Time.zone.now + 1.week),
+                                                     due_at: 1.week.from_now,
                                                      points_possible: 0,
                                                      submission_types: "not_graded",
                                                      assignment_group: @group,
@@ -270,7 +270,7 @@ describe "Gradebook" do
   it "hides assignment mute warning in total column for 'not_graded', muted assignments" do
     assignment = @course.assignments.create!({
                                                title: "Non Graded Assignment",
-                                               due_at: (Time.zone.now + 1.week),
+                                               due_at: 1.week.from_now,
                                                points_possible: 10,
                                                submission_types: "not_graded"
                                              })
@@ -399,7 +399,8 @@ describe "Gradebook" do
     it 'displays the "needs grading" icon for file_upload questions', priority: "1" do
       file_submission.attachments.create!({
                                             filename: "doc.doc",
-                                            display_name: "doc.doc", user: @user,
+                                            display_name: "doc.doc",
+                                            user: @user,
                                             uploaded_data: dummy_io
                                           })
       file_submission.complete!

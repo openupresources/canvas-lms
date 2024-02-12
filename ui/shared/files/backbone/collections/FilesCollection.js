@@ -17,10 +17,10 @@
 //
 
 import $ from 'jquery'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import _ from 'underscore'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import {extend as lodashExtend, each} from 'lodash'
 import deparam from 'deparam'
-import File from '../models/File.coffee'
+import File from '../models/File'
 
 export default class FilesCollection extends PaginatedCollection {
   initialize() {
@@ -29,7 +29,7 @@ export default class FilesCollection extends PaginatedCollection {
   }
 
   fetch(options = {}) {
-    options.data = _.extend(
+    options.data = lodashExtend(
       {content_types: this.parentFolder != null ? this.parentFolder.contentTypes : undefined},
       options.data || {}
     )
@@ -42,7 +42,7 @@ export default class FilesCollection extends PaginatedCollection {
   parse(response) {
     if (response && this.parentFolder) {
       const previewUrl = this.parentFolder.previewUrl()
-      _.each(
+      each(
         response,
         file =>
           (file.rce_preview_url = previewUrl
@@ -53,7 +53,7 @@ export default class FilesCollection extends PaginatedCollection {
     return super.parse(...arguments)
   }
 
-  // TODO: This is duplicate code from Folder.coffee, can we DRY?
+  // TODO: This is duplicate code from Folder.js, can we DRY?
   setQueryStringParams() {
     const newParams = {
       include: ['user'],
@@ -65,7 +65,7 @@ export default class FilesCollection extends PaginatedCollection {
     if (this.loadedAll) return
     const url = new URL(this.url)
     const params = deparam(url.search)
-    url.search = $.param(_.extend(params, newParams))
+    url.search = $.param(lodashExtend(params, newParams))
     this.url = url.toString()
     return this.reset()
   }

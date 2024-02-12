@@ -114,20 +114,20 @@ describe OutcomesServiceAuthoritativeResultsHelper do
 
     LearningOutcomeResult.create!(
       learning_outcome: @outcome,
-      user: user,
+      user:,
       context: @course,
       alignment: @alignment,
       artifact: submission,
       associated_asset: @assignment,
       association_type: "RubricAssociation",
       association_id: @rubric_association.id,
-      title: title,
-      score: score,
-      possible: possible,
-      mastery: mastery,
+      title:,
+      score:,
+      possible:,
+      mastery:,
       created_at: submitted_at,
       updated_at: submitted_at,
-      submitted_at: submitted_at,
+      submitted_at:,
       assessed_at: submitted_at
     )
   end
@@ -158,7 +158,7 @@ describe OutcomesServiceAuthoritativeResultsHelper do
       outcome = create_outcome
 
       assignments = []
-      (0...20).each do |points|
+      20.times do |points|
         assignments.push(create_alignment)
         create_learning_outcome_result @students[0], points, { points_possible: 19.0 }
       end
@@ -227,7 +227,7 @@ describe OutcomesServiceAuthoritativeResultsHelper do
 
       assignments = []
       (1..3).each do |i|
-        (0..3).each do |j|
+        4.times do |j|
           @outcome = outcomes[j]
           assignments.push(create_alignment)
           create_learning_outcome_result @students[0], nil, { submitted_at: time - i.days }
@@ -282,7 +282,7 @@ describe OutcomesServiceAuthoritativeResultsHelper do
 
     it "properly calculates results when method is n# of scores for mastery" do
       def create_from_scores(scores, calculation_int)
-        outcome = create_outcome({ calculation_method: "n_mastery", calculation_int: calculation_int })
+        outcome = create_outcome({ calculation_method: "n_mastery", calculation_int: })
 
         assignments = []
         scores.each do |r|
@@ -300,7 +300,10 @@ describe OutcomesServiceAuthoritativeResultsHelper do
       outcome6, assignments6 = create_from_scores [1.0, 2.0, 3.0, 4.0], 1
 
       from_lor = rollup_user_results LearningOutcomeResult.all.to_a
-      from_ar = rollup_scores(authoritative_results_from_db, @course, [outcome1, outcome2, outcome3, outcome4, outcome5, outcome6], @students,
+      from_ar = rollup_scores(authoritative_results_from_db,
+                              @course,
+                              [outcome1, outcome2, outcome3, outcome4, outcome5, outcome6],
+                              @students,
                               assignments1.concat(assignments2, assignments3, assignments4, assignments5, assignments6))
 
       expect(from_lor.size).to eq 6
@@ -367,7 +370,7 @@ describe OutcomesServiceAuthoritativeResultsHelper do
       create_learning_outcome_result @students[2], 2.0
       results = convert_to_learning_outcome_results(authoritative_results_from_db, @course, outcomes, @students, assignments)
 
-      rollups = outcome_results_rollups(results: results, users: @students)
+      rollups = outcome_results_rollups(results:, users: @students)
       os_rollups = outcome_service_results_rollups(results)
 
       os_rollups.each_with_index do |r, i|

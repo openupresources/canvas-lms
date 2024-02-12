@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -29,7 +30,7 @@ const I18n = useI18nScope('hide_assignment_grades_tray')
 type Props = {
   checked: boolean
   disabled: boolean
-  onCheck: (checked: boolean) => void
+  onCheck: (checked: React.ChangeEvent<HTMLInputElement>) => void
   sections: Array<{id: string; name: string}>
   sectionSelectionChanged: (boolean, string) => void
   selectedSectionIds: string[]

@@ -22,7 +22,13 @@ class AppointmentGroup < ActiveRecord::Base
   include Workflow
   include TextHelper
 
-  has_many :appointments, -> { order(:start_at).preload(:child_events).where("calendar_events.workflow_state <> 'deleted'") }, **(opts = { class_name: "CalendarEvent", as: :context, inverse_of: :context })
+  # rubocop:disable Style/RedundantDoubleSplatHashBraces
+  # see https://github.com/rubocop/rubocop/issues/12263
+  has_many :appointments,
+           -> { order(:start_at).preload(:child_events).where("calendar_events.workflow_state <> 'deleted'") },
+           **(opts = { class_name: "CalendarEvent", as: :context, inverse_of: :context })
+  # rubocop:enable Style/RedundantDoubleSplatHashBraces
+
   # has_many :through on the same table does not alias columns in condition
   # strings, just hashes. we create this helper association to ensure
   # appointments_participants conditions have the correct table alias
@@ -90,7 +96,7 @@ class AppointmentGroup < ActiveRecord::Base
     @new_appointments = appointments.map do |start_at, end_at|
       next unless start_at && end_at
 
-      a = self.appointments.build(start_at: start_at, end_at: end_at)
+      a = self.appointments.build(start_at:, end_at:)
       a.context = self
       a
     end
@@ -190,18 +196,21 @@ class AppointmentGroup < ActiveRecord::Base
     user = options.shift
     restrict_to_codes = options.shift
 
-    codes = user.appointment_context_codes.dup
+    student_codes = user.appointment_context_codes.dup
+    all_codes = user.appointment_context_codes(include_observers: true).dup
     if restrict_to_codes
-      codes[:primary] &= restrict_to_codes
+      student_codes[:primary] &= restrict_to_codes
+      all_codes[:primary] &= restrict_to_codes
     end
-    distinct
-      .joins(<<~SQL.squish)
-        JOIN #{AppointmentGroupContext.quoted_table_name} agc
-          ON appointment_groups.id = agc.appointment_group_id
-        LEFT JOIN #{AppointmentGroupSubContext.quoted_table_name} sc
-          ON appointment_groups.id = sc.appointment_group_id
-      SQL
-      .where(<<~SQL.squish, codes[:primary], codes[:secondary])
+    scope = distinct
+            .joins(<<~SQL.squish)
+              JOIN #{AppointmentGroupContext.quoted_table_name} agc
+                ON appointment_groups.id = agc.appointment_group_id
+              LEFT JOIN #{AppointmentGroupSubContext.quoted_table_name} sc
+                ON appointment_groups.id = sc.appointment_group_id
+            SQL
+    scope
+      .where(<<~SQL.squish, student_codes[:primary], student_codes[:secondary])
         workflow_state = 'active'
         AND agc.context_code IN (?)
         AND (
@@ -209,6 +218,16 @@ class AppointmentGroup < ActiveRecord::Base
           OR sc.sub_context_code IN (?)
         )
       SQL
+      .union(scope.where(<<~SQL.squish, all_codes[:primary], all_codes[:secondary])
+        workflow_state = 'active'
+        AND allow_observer_signup = true
+        AND agc.context_code IN (?)
+        AND (
+          sc.sub_context_code IS NULL
+          OR sc.sub_context_code IN (?)
+        )
+      SQL
+            )
   }
   # complements :manage permission
   scope :manageable_by, lambda { |*options|
@@ -363,9 +382,9 @@ class AppointmentGroup < ActiveRecord::Base
   def eligible_participant?(participant)
     return false unless participant && participant.class.base_class.name == participant_type
 
-    codes = participant.appointment_context_codes
-    return false unless (codes[:primary] & appointment_group_contexts.map(&:context_code)).present?
-    return false unless sub_context_codes.empty? || (codes[:secondary] & sub_context_codes).present?
+    codes = (participant_type == "User") ? participant.appointment_context_codes(include_observers: allow_observer_signup) : participant.appointment_context_codes
+    return false unless codes[:primary].intersect?(appointment_group_contexts.map(&:context_code))
+    return false unless sub_context_codes.empty? || codes[:secondary].intersect?(sub_context_codes)
 
     true
   end

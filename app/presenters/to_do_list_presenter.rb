@@ -35,7 +35,7 @@ class ToDoListPresenter
       @needs_submitting += ungraded_quizzes_needing_submitting
       @needs_submitting.sort_by! { |a| a.due_at || a.updated_at }
 
-      assessment_requests = user.submissions_needing_peer_review(contexts: contexts, limit: ASSIGNMENT_LIMIT)
+      assessment_requests = user.submissions_needing_peer_review(contexts:, limit: ASSIGNMENT_LIMIT)
       @needs_reviewing = assessment_requests.filter_map do |ar|
         AssessmentRequestPresenter.new(view, ar, user) if ar.asset.assignment.published?
       end
@@ -63,7 +63,7 @@ class ToDoListPresenter
 
   def assignments_needing(type, opts = {})
     if @user
-      @user.send("assignments_needing_#{type}", **{ contexts: @contexts, limit: ASSIGNMENT_LIMIT }.merge(opts)).map do |assignment|
+      @user.send(:"assignments_needing_#{type}", contexts: @contexts, limit: ASSIGNMENT_LIMIT, **opts).map do |assignment|
         AssignmentPresenter.new(@view, assignment, @user, type)
       end
     else

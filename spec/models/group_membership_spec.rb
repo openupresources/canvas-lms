@@ -74,15 +74,16 @@ describe GroupMembership do
       student
     end
     let_once(:group_category) { GroupCategory.student_organized_for(course1) }
-    let_once(:group) { course1.groups.create(group_category: group_category) }
+    let_once(:group) { course1.groups.create(group_category:) }
     let_once(:group_membership) { group.group_memberships.create(user: student) }
 
     it "has a validation error on new record" do
       membership = GroupMembership.new
-      allow(membership).to receive(:user).and_return(double(name: "test user"))
-      allow(membership).to receive(:group).and_return(double(name: "test group"))
-      allow(membership).to receive(:restricted_self_signup?).and_return(true)
-      allow(membership).to receive(:has_common_section_with_me?).and_return(false)
+
+      allow(membership).to receive_messages(user: double(name: "test user"),
+                                            group: double(name: "test group"),
+                                            restricted_self_signup?: true,
+                                            has_common_section_with_me?: false)
       expect(membership.save).not_to be_truthy
       expect(membership.errors.size).to eq 1
       expect(membership.errors[:user_id].to_s).to match(/test user does not share a section/)
@@ -142,7 +143,7 @@ describe GroupMembership do
         course.start_at = 1.day.from_now
         course.restrict_enrollments_to_course_dates = true
         course.save!
-        student_in_course(active_all: true, course: course)
+        student_in_course(active_all: true, course:)
         group1 = course.groups.create(group_category: GroupCategory.student_organized_for(course))
         membership = group1.group_memberships.build(user: @student)
         Notification.create!(name: "New Context Group Membership", category: "TestImmediately")
@@ -347,8 +348,8 @@ describe GroupMembership do
     it "triggers a batch when membership is created" do
       new_user = user_factory
 
-      expect(DueDateCacher).not_to receive(:recompute)
-      expect(DueDateCacher).to receive(:recompute_users_for_course).with(
+      expect(SubmissionLifecycleManager).not_to receive(:recompute)
+      expect(SubmissionLifecycleManager).to receive(:recompute_users_for_course).with(
         new_user.id,
         @course.id,
         match_array(@assignments[0..1].map(&:id))
@@ -358,8 +359,8 @@ describe GroupMembership do
     end
 
     it "triggers a batch when membership is deleted" do
-      expect(DueDateCacher).not_to receive(:recompute)
-      expect(DueDateCacher).to receive(:recompute_users_for_course).with(
+      expect(SubmissionLifecycleManager).not_to receive(:recompute)
+      expect(SubmissionLifecycleManager).to receive(:recompute_users_for_course).with(
         @membership.user.id,
         @course.id,
         match_array(@assignments[0..1].map(&:id))
@@ -368,14 +369,14 @@ describe GroupMembership do
     end
 
     it "does not trigger when nothing changed" do
-      expect(DueDateCacher).not_to receive(:recompute)
-      expect(DueDateCacher).not_to receive(:recompute_course)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course)
       @membership.save
     end
 
     it "does not trigger when it's an account group" do
-      expect(DueDateCacher).not_to receive(:recompute)
-      expect(DueDateCacher).not_to receive(:recompute_course)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course)
       @group = Account.default.groups.create!(name: "Group!")
       @group.group_memberships.create!(user: user_factory)
     end
@@ -403,7 +404,7 @@ describe GroupMembership do
     let(:user) { user_model }
 
     it "assigns it on save if it is not set" do
-      membership = group.group_memberships.create!(user: user)
+      membership = group.group_memberships.create!(user:)
       membership.root_account_id = nil
 
       expect do
@@ -414,7 +415,7 @@ describe GroupMembership do
     end
 
     it "preserves it on save if it was already set" do
-      membership = group.group_memberships.create!(user: user)
+      membership = group.group_memberships.create!(user:)
 
       expect(membership.group).not_to receive(:root_account_id)
 

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -19,6 +20,7 @@
 import $ from 'jquery'
 import actions from '../actions'
 import router from '../router'
+import {fireEvent} from '@testing-library/react'
 
 const sleep = async ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -73,18 +75,21 @@ describe('router', () => {
       })
 
       it('sends externalContentReady action for valid message', async () => {
-        const item = {service_id: 1, hello: 'world'}
+        const item = {hello: 'world'}
         window.postMessage(
           {
             subject: 'LtiDeepLinkingResponse',
             content_items: [item],
+            service_id: 123,
+            tool_id: 1234,
           },
           ENV.DEEP_LINKING_POST_MESSAGE_ORIGIN
         )
         await sleep(100)
 
         expect(actions.externalContentReady).toHaveBeenCalledWith({
-          service_id: item.service_id,
+          service_id: 123,
+          tool_id: 1234,
           contentItems: [item],
         })
         expect(actions.externalContentRetrievalFailed).not.toHaveBeenCalled()
@@ -92,15 +97,24 @@ describe('router', () => {
     })
 
     describe('when LTI 1.1 message is received', () => {
+      const origEnv = {...window.ENV}
+      const origin = 'http://example.com'
+      beforeAll(() => (window.ENV.DEEP_LINKING_POST_MESSAGE_ORIGIN = origin))
+      afterAll(() => (window.ENV = origEnv))
+
+      const sendPostMessage = data => fireEvent(window, new MessageEvent('message', {data, origin}))
+
       it('sends externalContentReady action', async () => {
         const item = {service_id: 1, hello: 'world'}
-        $(window).trigger('externalContentReady', {
+        sendPostMessage({
+          subject: 'externalContentReady',
           contentItems: [item],
           service_id: item.service_id,
         })
-        await sleep(100)
 
         expect(actions.externalContentReady).toHaveBeenCalledWith({
+          // subject not required to be passed in, but comes from the event and doesn't hurt
+          subject: 'externalContentReady',
           service_id: item.service_id,
           contentItems: [item],
         })

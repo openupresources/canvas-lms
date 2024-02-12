@@ -49,6 +49,10 @@ class Speedgrader
       f("#average_score")
     end
 
+    def proceed_draft_comment_modal
+      f("#unposted_comment_proceed").click
+    end
+
     def grade_input
       f("#grading-box-extended")
     end
@@ -171,6 +175,10 @@ class Speedgrader
 
     def submission_to_view_dropdown
       f("#submission_to_view")
+    end
+
+    def submitter_info
+      f("#multiple_submissions")
     end
 
     def submission_file_download
@@ -340,10 +348,10 @@ class Speedgrader
     end
 
     # action
-    def visit(course_id, assignment_id, timeout = 10)
-      get "/courses/#{course_id}/gradebook/speed_grader?assignment_id=#{assignment_id}"
+    def visit(course_id, assignment_id, timeout = 10, student_id = nil)
+      get "/courses/#{course_id}/gradebook/speed_grader?assignment_id=#{assignment_id}#{student_id ? "&student_id=#{student_id}" : ""}"
       visibility_check = grade_input
-      wait_for(method: :visit, timeout: timeout) { visibility_check.displayed? }
+      wait_for(method: :visit, timeout:) { visibility_check.displayed? }
     end
 
     def select_provisional_grade_by_label(label)
@@ -622,14 +630,14 @@ class Speedgrader
       click_post_or_hide_grades_button
       click_post_link
       PostGradesTray.post_type_radio_button(type).click
-      PostGradesTray.select_sections(sections: sections)
+      PostGradesTray.select_sections(sections:)
       PostGradesTray.post_grades
     end
 
     def manually_hide_grades(sections: [])
       click_post_or_hide_grades_button
       click_hide_link
-      HideGradesTray.select_sections(sections: sections)
+      HideGradesTray.select_sections(sections:)
       HideGradesTray.hide_grades
     end
 

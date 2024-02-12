@@ -19,8 +19,8 @@
 
 module SubmittableHelper
   def check_differentiated_assignments(submittable)
-    return render_unauthorized_action if submittable.for_assignment? &&
-                                         !submittable.assignment.visible_to_user?(@current_user)
+    render_unauthorized_action if submittable.for_assignment? &&
+                                  !submittable.assignment.visible_to_user?(@current_user)
   end
 
   def enforce_assignment_visible(submittable)
@@ -28,7 +28,7 @@ module SubmittableHelper
       respond_to do |format|
         flash[:error] = t "You do not have access to the requested resource."
         name = submittable.class.name.underscore.pluralize
-        format.html { redirect_to named_context_url(@context, "context_#{name}_url".to_sym) }
+        format.html { redirect_to named_context_url(@context, :"context_#{name}_url") }
       end
       return false
     end
@@ -44,7 +44,7 @@ module SubmittableHelper
           assignment = submittable.assignment
           submittable.assignment = nil
           submittable.save!
-          assignment.send("#{submittable.class.name.underscore}=", nil)
+          assignment.send(:"#{submittable.class.name.underscore}=", nil)
           assignment.destroy
         end
 

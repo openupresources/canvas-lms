@@ -43,7 +43,7 @@ describe Submission::ShowPresenter do
     Submission::ShowPresenter.new(
       submission: reviewee_submission,
       current_user: reviewer,
-      assessment_request: assessment_request
+      assessment_request:
     )
   end
 
@@ -129,7 +129,7 @@ describe Submission::ShowPresenter do
         assignment_id: assignment.id,
         display: "borderless",
         url: reviewee_submission.external_tool_url,
-        resource_link_lookup_uuid: resource_link_lookup_uuid
+        resource_link_lookup_uuid:
       }
     end
     let(:launch_params) do
@@ -152,8 +152,8 @@ describe Submission::ShowPresenter do
         Submission::ShowPresenter.new(
           submission: reviewee_submission,
           current_user: reviewer,
-          assessment_request: assessment_request,
-          current_host: current_host
+          assessment_request:,
+          current_host:
         )
       end
 
@@ -179,7 +179,7 @@ describe Submission::ShowPresenter do
 
       expect(presenter_for_reviewer).to receive(:submission_data_url)
         .with(hash_including(comment_id: submission_comment.id, download: attachment.id))
-      presenter_for_reviewer.comment_attachment_download_url(submission_comment: submission_comment, attachment: attachment)
+      presenter_for_reviewer.comment_attachment_download_url(submission_comment:, attachment:)
     end
   end
 
@@ -215,7 +215,7 @@ describe Submission::ShowPresenter do
       Submission::ShowPresenter.new(
         submission: reviewee_submission,
         current_user: teacher,
-        current_host: current_host
+        current_host:
       )
     end
 
@@ -237,6 +237,46 @@ describe Submission::ShowPresenter do
         expect(subject[:host]).to eq current_host
         expect(subject[:protocol]).to eq "http"
       end
+    end
+  end
+
+  describe "#entered_grade" do
+    before do
+      @teacher = course.enroll_teacher(User.create!, active_all: true).user
+      @student = course.enroll_student(User.create!, active_all: true).user
+      @assignment = course.assignments.create!(points_possible: 10, grading_type: "points")
+    end
+
+    let(:en_dash) { "-" }
+    let(:minus) { "−" }
+    let(:presenter) do
+      Submission::ShowPresenter.new(submission: @assignment.submissions.find_by(user: @student), current_user: @student)
+    end
+
+    it "returns the entered grade" do
+      @assignment.grade_student(@student, grader: @teacher, grade: "8")
+      expect(presenter.entered_grade).to eq "8"
+    end
+
+    it "returns a letter grade with trailing en-dash replaced with minus if 'Restrict Quantitative Data' is enabled" do
+      course.root_account.enable_feature!(:restrict_quantitative_data)
+      course.update!(restrict_quantitative_data: true)
+      @assignment.grade_student(@student, grader: @teacher, grade: "8")
+      expect(presenter.entered_grade).to eq "B#{minus}"
+    end
+
+    it "returns complete/incomplete if the assignment type is pass/fail with 'Restrict Quantitative Data' enabled" do
+      course.root_account.enable_feature!(:restrict_quantitative_data)
+      course.update!(restrict_quantitative_data: true)
+      @assignment.update!(grading_type: "pass_fail")
+      @assignment.grade_student(@student, grader: @teacher, grade: "complete")
+      expect(presenter.entered_grade).to eq "complete"
+    end
+
+    it "returns a letter grade with trailing en-dash replaced with minus if the assignment type is letter grade" do
+      @assignment.update!(grading_type: "letter_grade")
+      @assignment.grade_student(@student, grader: @teacher, grade: "B#{en_dash}")
+      expect(presenter.entered_grade).to eq "B#{minus}"
     end
   end
 end

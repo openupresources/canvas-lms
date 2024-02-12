@@ -18,9 +18,9 @@
 
 import $ from 'jquery'
 import Quiz from '@canvas/quizzes/backbone/models/Quiz'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
 import DateGroup from '@canvas/date-group/backbone/models/DateGroup'
-import AssignmentOverrideCollection from '@canvas/assignments/backbone/collections/AssignmentOverrideCollection.coffee'
+import AssignmentOverrideCollection from '@canvas/assignments/backbone/collections/AssignmentOverrideCollection'
 import fakeENV from 'helpers/fakeENV'
 import '@canvas/jquery/jquery.ajaxJSON'
 
@@ -231,11 +231,10 @@ test('#initialize should set deletion_url from html url', function () {
   equal(this.quiz.get('deletion_url'), 'http://localhost:3000/courses/1/assignments/7')
 })
 
-QUnit.module('Quiz.Next with manage and new_quizzes_modules_support enabled', {
+QUnit.module('Quiz.Next with manage enabled', {
   setup() {
     fakeENV.setup({
       PERMISSIONS: {manage: true},
-      FLAGS: {new_quizzes_modules_support: true},
     })
     this.quiz = new Quiz({
       id: 7,
@@ -485,6 +484,34 @@ test('polls for updates (migration)', function () {
 })
 
 test('stops polling when the quiz has finished migrating', function () {
+  this.quiz.pollUntilFinishedLoading(3000)
+  this.quiz.set({workflow_state: 'unpublished'})
+  this.clock.tick(3000)
+  ok(this.quiz.fetch.calledOnce)
+  this.clock.tick(3000)
+  ok(this.quiz.fetch.calledOnce)
+})
+
+QUnit.module('Assignment#pollUntilFinishedLoading (importing)', {
+  setup() {
+    this.clock = sinon.useFakeTimers()
+    this.quiz = new Quiz({workflow_state: 'importing'})
+    sandbox.stub(this.quiz, 'fetch').returns($.Deferred().resolve())
+  },
+  teardown() {
+    this.clock.restore()
+  },
+})
+
+test('polls for updates (importing)', function () {
+  this.quiz.pollUntilFinishedLoading(4000)
+  this.clock.tick(2000)
+  notOk(this.quiz.fetch.called)
+  this.clock.tick(3000)
+  ok(this.quiz.fetch.called)
+})
+
+test('stops polling when the quiz has finished importing', function () {
   this.quiz.pollUntilFinishedLoading(3000)
   this.quiz.set({workflow_state: 'unpublished'})
   this.clock.tick(3000)

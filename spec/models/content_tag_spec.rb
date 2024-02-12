@@ -95,7 +95,7 @@ describe ContentTag do
 
       it "returns nil for other workflow_state" do
         a = mock_asset.new("terrified")
-        expect(ContentTag.asset_workflow_state(a)).to eq nil
+        expect(ContentTag.asset_workflow_state(a)).to be_nil
       end
     end
   end
@@ -167,22 +167,22 @@ describe ContentTag do
     tag = ContentTag.new
     tag.content_asset_string = "discussion_topic_5"
     expect(tag.content_type).to eql("DiscussionTopic")
-    expect(tag.content_id).to eql(5)
+    expect(tag.content_id).to be(5)
   end
 
   it "does not allow setting an invalid content_asset_string" do
     tag = ContentTag.new
     tag.content_asset_string = "bad_class_41"
-    expect(tag.content_type).to eql(nil)
-    expect(tag.content_id).to eql(nil)
+    expect(tag.content_type).to be_nil
+    expect(tag.content_id).to be_nil
 
     tag.content_asset_string = "bad_class"
-    expect(tag.content_type).to eql(nil)
-    expect(tag.content_id).to eql(nil)
+    expect(tag.content_type).to be_nil
+    expect(tag.content_id).to be_nil
 
     tag.content_asset_string = "course_55"
-    expect(tag.content_type).to eql(nil)
-    expect(tag.content_id).to eql(nil)
+    expect(tag.content_type).to be_nil
+    expect(tag.content_id).to be_nil
   end
 
   it "returns content for a assignment" do
@@ -303,21 +303,96 @@ describe ContentTag do
     expect(@assignment.title).to eq "some assignment (renamed)"
   end
 
-  it "associates the tag with an external tool matching the url" do
-    course_factory
-    url = "http://quiz-lti.docker/lti/launch"
-    tool = @course.context_external_tools.create!({
-                                                    name: "tool",
-                                                    consumer_key: "key",
-                                                    shared_secret: "secret",
-                                                    url: url
-                                                  })
-    assignment = @course.assignments.create!(
-      title: "some assignment",
-      submission_types: "external_tool",
-      external_tool_tag_attributes: { url: url }
-    )
-    expect(assignment.external_tool_tag.content).to eq(tool)
+  describe "#associate_external_tool" do
+    subject do
+      tag.url = new_url
+      tag.save!
+    end
+
+    let(:course) { course_factory }
+    let(:url) { "http://quiz-lti.docker/lti/launch" }
+    let(:new_url) { "http://quizzes.new/lti/launch" }
+    let(:tool) do
+      course.context_external_tools.create!({
+                                              name: "tool",
+                                              consumer_key: "key",
+                                              shared_secret: "secret",
+                                              url:
+                                            })
+    end
+    let(:new_tool) do
+      course.context_external_tools.create!({
+                                              name: "tool",
+                                              consumer_key: "key",
+                                              shared_secret: "secret",
+                                              url: new_url
+                                            })
+    end
+    let(:course_module) { course.context_modules.create!(name: "module") }
+    let(:tag) do
+      course_module.add_item({
+                               type: "context_external_tool",
+                               title: "Example",
+                               url:
+                             })
+    end
+
+    before do
+      tool
+      new_tool
+      tag
+    end
+
+    it "associates the tag with an external tool matching the url" do
+      assignment = course.assignments.create!(
+        title: "some assignment",
+        submission_types: "external_tool",
+        external_tool_tag_attributes: { url: }
+      )
+      expect(assignment.external_tool_tag.content).to eq(tool)
+    end
+
+    context "when url host matches" do
+      let(:new_url) { "http://quiz-lti.docker/new/launch" }
+
+      context "with reassociate_external_tool" do
+        before do
+          tag.reassociate_external_tool = true
+        end
+
+        it "leaves content alone" do
+          subject
+          expect(tag.reload.content).to eq tool
+        end
+      end
+
+      context "without reassociate_external_tool" do
+        it "leaves content alone" do
+          subject
+          expect(tag.reload.content).to eq tool
+        end
+      end
+    end
+
+    context "when url host doesn't match" do
+      context "with reassociate_external_tool" do
+        before do
+          tag.reassociate_external_tool = true
+        end
+
+        it "relinks content" do
+          subject
+          expect(tag.reload.content).to eq new_tool
+        end
+      end
+
+      context "without reassociate_external_tool" do
+        it "leaves content alone" do
+          subject
+          expect(tag.reload.content).to eq tool
+        end
+      end
+    end
   end
 
   describe ".update_for" do
@@ -709,7 +784,7 @@ describe ContentTag do
 
       tag = assignment.external_tool_tag
 
-      expect(DueDateCacher).to receive(:recompute).with(assignment)
+      expect(SubmissionLifecycleManager).to receive(:recompute).with(assignment)
 
       tag.destroy!
     end
@@ -730,7 +805,7 @@ describe ContentTag do
       )
       tag = assignment.external_tool_tag
 
-      expect(DueDateCacher).to_not receive(:recompute).with(assignment)
+      expect(SubmissionLifecycleManager).to_not receive(:recompute).with(assignment)
 
       tag.destroy!
     end
@@ -770,13 +845,13 @@ describe ContentTag do
     it "runs the due date cacher when saved if the content is Quizzes 2" do
       assignment = @course.assignments.create!(title: "some assignment", submission_types: "external_tool")
 
-      expect(DueDateCacher).to receive(:recompute).with(assignment)
+      expect(SubmissionLifecycleManager).to receive(:recompute).with(assignment)
 
       ContentTag.create!(content: tool, url: tool.url, context: assignment)
     end
 
     it "does not run the due date cacher when saved if the content is Quizzes 2 but the context is a course" do
-      expect(DueDateCacher).to_not receive(:recompute)
+      expect(SubmissionLifecycleManager).to_not receive(:recompute)
 
       ContentTag.create!(content: tool, url: tool.url, context: @course)
     end
@@ -792,7 +867,7 @@ describe ContentTag do
 
       assignment = @course.assignments.create!(title: "some assignment", submission_types: "external_tool")
 
-      expect(DueDateCacher).to_not receive(:recompute).with(assignment)
+      expect(SubmissionLifecycleManager).to_not receive(:recompute).with(assignment)
 
       ContentTag.create!(content: not_quizzes_tool, url: not_quizzes_tool.url, context: assignment)
     end
@@ -800,8 +875,10 @@ describe ContentTag do
 
   it "syncs tag published state with attachment locked state" do
     course_factory
-    att = Attachment.create!(filename: "blah.txt", uploaded_data: StringIO.new("blah"),
-                             folder: Folder.unfiled_folder(@course), context: @course)
+    att = Attachment.create!(filename: "blah.txt",
+                             uploaded_data: StringIO.new("blah"),
+                             folder: Folder.unfiled_folder(@course),
+                             context: @course)
     att.locked = true
     att.save!
 
@@ -893,7 +970,7 @@ describe ContentTag do
       tag = ContentTag.create!(context: @course)
       expect(ContentTag.can_have_assignment).not_to include(tag)
       ["Assignment", "DiscussionTopic", "Quizzes::Quiz", "WikiPage"].each do |content_type|
-        tag.update(content_type: content_type)
+        tag.update(content_type:)
         expect(ContentTag.can_have_assignment).to include(tag)
       end
     end
@@ -903,10 +980,10 @@ describe ContentTag do
     it "true if content_type can have assignments" do
       course_factory
       tag = ContentTag.create!(context: @course)
-      expect(tag.can_have_assignment?).to eq(false)
+      expect(tag.can_have_assignment?).to be(false)
       ["Assignment", "DiscussionTopic", "Quizzes::Quiz", "WikiPage"].each do |content_type|
-        tag.update(content_type: content_type)
-        expect(tag.can_have_assignment?).to eq(true)
+        tag.update(content_type:)
+        expect(tag.can_have_assignment?).to be(true)
       end
     end
   end
@@ -930,15 +1007,15 @@ describe ContentTag do
       @context_module.add_item(id: assignment.id, type: "assignment")
       tag = @context_module.content_tags.find_by(content_id: assignment.id)
       tag.update_course_pace_module_items
-      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to eq(true)
+      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to be(true)
     end
 
     it "deletes a CoursePaceModuleItem if a content tag is deleted" do
       @tag.update_course_pace_module_items
-      expect(@course_pace.course_pace_module_items.where(module_item_id: @tag.id).exists?).to eq(true)
+      expect(@course_pace.course_pace_module_items.where(module_item_id: @tag.id).exists?).to be(true)
       @tag.destroy
       @tag.update_course_pace_module_items
-      expect(@course_pace.course_pace_module_items.where(module_item_id: @tag.id).exists?).to eq(false)
+      expect(@course_pace.course_pace_module_items.where(module_item_id: @tag.id).exists?).to be(false)
     end
 
     it "updates all published pace plans with content tags" do
@@ -948,14 +1025,82 @@ describe ContentTag do
       @context_module.add_item(id: assignment.id, type: "assignment")
       tag = @context_module.content_tags.find_by(content_id: assignment.id)
       tag.update_course_pace_module_items
-      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to eq(true)
-      expect(section_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to eq(true)
+      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to be(true)
+      expect(section_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to be(true)
     end
 
     it "does not make changes if the tag_type is not 'context_module'" do
       assignment = @course.assignments.create!
       tag = ContentTag.create!(context: @course, content: assignment, tag_type: "learning_outcome")
-      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to eq(false)
+      expect(@course_pace.course_pace_module_items.where(module_item_id: tag.id).exists?).to be(false)
+    end
+  end
+
+  describe "#update_module_item_submissions" do
+    before do
+      Account.site_admin.enable_feature!(:differentiated_modules)
+      course_factory
+      @student1 = student_in_course(active_all: true, name: "Student 1").user
+      @student2 = student_in_course(active_all: true, name: "Student 2").user
+      @context_module = @course.context_modules.create!
+
+      @assignment = @course.assignments.create!
+      @context_module.add_item(id: @assignment.id, type: "assignment")
+      @tag = @context_module.content_tags.first
+    end
+
+    it "assignment is added to a module" do
+      adhoc_override = @context_module.assignment_overrides.create!(set_type: "ADHOC")
+      adhoc_override.assignment_override_students.create!(user: @student1)
+
+      @assignment2 = @course.assignments.create!
+      expect(@assignment2.submissions.length).to eq 2
+
+      @context_module.add_item(id: @assignment2.id, type: "assignment")
+      @assignment2.submissions.reload
+      expect(@assignment2.submissions.length).to eq 1
+    end
+
+    it "assignment is removed from a module" do
+      adhoc_override = @context_module.assignment_overrides.create!(set_type: "ADHOC")
+      adhoc_override.assignment_override_students.create!(user: @student1)
+
+      @context_module.update_assignment_submissions(@context_module.current_assignments_and_quizzes)
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 1
+
+      @tag.destroy
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 2
+    end
+
+    it "assignment is moved from one module to another" do
+      adhoc_override = @context_module.assignment_overrides.create!(set_type: "ADHOC")
+      adhoc_override.assignment_override_students.create!(user: @student1)
+      @context_module2 = @course.context_modules.create!
+
+      @context_module.update_assignment_submissions(@context_module.current_assignments_and_quizzes)
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 1
+
+      @tag.context_module_id = @context_module2.id
+      @tag.save!
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 2
+    end
+
+    it "assignment is moved from module with no overrides to module with overrides" do
+      @context_module2 = @course.context_modules.create!
+      adhoc_override2 = @context_module2.assignment_overrides.create!(set_type: "ADHOC")
+      adhoc_override2.assignment_override_students.create!(user: @student1)
+
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 2
+
+      @tag.context_module_id = @context_module2.id
+      @tag.save!
+      @assignment.submissions.reload
+      expect(@assignment.submissions.length).to eq 1
     end
   end
 
@@ -963,19 +1108,28 @@ describe ContentTag do
     it "publishes the tag if it is unpublished" do
       course_factory
       tag = ContentTag.create!(context: @course, workflow_state: "unpublished")
-      expect(tag.published?).to eq(false)
+      expect(tag.published?).to be(false)
       tag.trigger_publish!
-      expect(tag.reload.published?).to eq(true)
+      expect(tag.reload.published?).to be(true)
     end
 
     it "publishes the tag and the attachment content if possible" do
       course_factory
       tag = ContentTag.create!(context: @course, content: attachment_model(locked: true), workflow_state: "unpublished")
-      expect(tag.published?).to eq(false)
-      expect(@attachment.published?).to eq(false)
+      expect(tag.published?).to be(false)
+      expect(@attachment.published?).to be(false)
       tag.trigger_publish!
-      expect(tag.reload.published?).to eq(true)
-      expect(@attachment.reload.published?).to eq(true)
+      expect(tag.reload.published?).to be(true)
+      expect(@attachment.reload.published?).to be(true)
+    end
+
+    it "respects the content's can_publish? method" do
+      course_factory
+      tag = ContentTag.create!(context: @course, content: assignment_model, workflow_state: "unpublished")
+      allow(tag.content).to receive(:can_publish?).and_return(false)
+      expect(tag.published?).to be(false)
+      tag.trigger_publish!
+      expect(tag.reload.published?).to be(false)
     end
   end
 
@@ -983,19 +1137,171 @@ describe ContentTag do
     it "unpublishes the tag if it is published" do
       course_factory
       tag = ContentTag.create!(context: @course, workflow_state: "published")
-      expect(tag.published?).to eq(true)
+      expect(tag.published?).to be(true)
       tag.trigger_unpublish!
-      expect(tag.reload.published?).to eq(false)
+      expect(tag.reload.published?).to be(false)
     end
 
-    it "unpublishes the tag and locks the attachment content" do
+    it "respects the content's can_unpublish? method" do
       course_factory
-      tag = ContentTag.create!(context: @course, content: attachment_model, workflow_state: "published")
-      expect(tag.published?).to eq(true)
-      expect(@attachment.published?).to eq(true)
+      tag = ContentTag.create!(context: @course, content: assignment_model, workflow_state: "published")
+      allow(tag.content).to receive(:can_unpublish?).and_return(false)
+      expect(tag.published?).to be(true)
       tag.trigger_unpublish!
-      expect(tag.reload.published?).to eq(false)
-      expect(@attachment.reload.published?).to eq(false)
+      expect(tag.reload.published?).to be(true)
+    end
+  end
+
+  describe "Lti::Migratable" do
+    let(:tag_type) { "context_module" }
+    let(:url) { "http://www.example.com" }
+    let(:account) { account_model }
+    let(:course) { course_model(account:) }
+    let(:tool) { external_tool_model(context: course, opts: { url: }) }
+    let(:tool_1_3) { external_tool_1_3_model(context: course, opts: { url: }) }
+    let(:direct_tag) { ContentTag.create!(context: course, content: tool, url:, context_module:, tag_type:) }
+    let(:unpublished_direct) do
+      ct = direct_tag.dup
+      ct.update!(workflow_state: "unpublished")
+      ct
+    end
+    let(:indirect_tag) do
+      ct = ContentTag.create!(context: course, url:, context_module:, tag_type:)
+      # To work around a before_save that associates tools. Yay for old data in Canvas.
+      ct.update_column(:content_id, nil)
+      ct
+    end
+    let(:unpublished_indirect) do
+      ct = indirect_tag.dup
+      ct.update!(workflow_state: "unpublished")
+      ct.update_column(:content_id, nil)
+      ct
+    end
+    let(:context_module) { ContextModule.create!(context: course, name: "first") }
+
+    describe "#migrate_to_1_3_if_needed!" do
+      it "doesn't migrate tags when given a 1.1 tool" do
+        tag = ContentTag.create!(content: tool, context: course, context_module:, url:, tag_type:)
+        expect { tag.migrate_to_1_3_if_needed!(tool) }
+          .not_to change { tag.reload.associated_asset_lti_resource_link.present? }
+      end
+
+      it "doesn't migrate tags that have already been migrated" do
+        tag = ContentTag.create!(content: tool_1_3, context: course, url:, context_module:, tag_type:)
+        tag.associated_asset_lti_resource_link = Lti::ResourceLink.create_with(course, tool_1_3, lti_1_1_id: tool.opaque_identifier_for(tag))
+        tag.save!
+        expect { tag.migrate_to_1_3_if_needed!(tool_1_3) }
+          .not_to change { tag.reload.associated_asset_lti_resource_link.lti_1_1_id }
+      end
+
+      it "doesn't migrate content tags that aren't part of context modules" do
+        tag = ContentTag.create!(content: tool_1_3, context: course, url:, tag_type:)
+        expect { tag.migrate_to_1_3_if_needed!(tool_1_3) }
+          .not_to change { tag.reload.associated_asset_lti_resource_link.present? }
+      end
+
+      it "doesn't migrate content tags who's content is not an external tool" do
+        tag = ContentTag.create!(content: assignment_model, context: course, tag_type: "assignment")
+        expect { tag.migrate_to_1_3_if_needed!(tool_1_3) }
+          .not_to change { tag.reload.associated_asset_lti_resource_link.present? }
+      end
+
+      it "migrates tags associated with 1.3 tools" do
+        tag = ContentTag.create!(content: tool_1_3, context: course, url:, context_module:, tag_type:)
+        tag.associated_asset_lti_resource_link = Lti::ResourceLink.create_with(course, tool_1_3)
+        tag.save!
+        expect { tag.migrate_to_1_3_if_needed!(tool_1_3) }
+          .to change { tag.reload.associated_asset_lti_resource_link.lti_1_1_id }
+          .from(nil).to(tool.opaque_identifier_for(tag))
+      end
+
+      it "migrates tags associated with 1.1 tools" do
+        tag = ContentTag.create!(content: tool, context: course, url:, context_module:, tag_type:)
+        expect { tag.migrate_to_1_3_if_needed!(tool_1_3) }
+          .to change { tag.reload.associated_asset_lti_resource_link&.lti_1_1_id }
+          .from(nil).to(tool.opaque_identifier_for(tag))
+          .and change { tag.reload.content }.from(tool).to(tool_1_3)
+      end
+    end
+
+    context "finding items" do
+      def create_misc_content_tags
+        # Same course, just deleted
+        ct = direct_tag.dup
+        ct.update!(workflow_state: "deleted")
+        ct = indirect_tag.dup
+        ct.update!(workflow_state: "deleted")
+
+        new_course = course_model(account: account_model)
+
+        # Different account
+        cm = ContextModule.create!(context: new_course, name: "third")
+        cm.content_tags.create!(content: tool, context: new_course, tag_type:)
+      end
+
+      describe "#directly_associated_items" do
+        it "finds all active directly associated items within a course" do
+          create_misc_content_tags
+          indirect_tag
+          direct_tag
+
+          expect(ContentTag.directly_associated_items(tool.id, course))
+            .to contain_exactly(direct_tag, unpublished_direct)
+        end
+
+        it "finds all active directly associated items within an account" do
+          create_misc_content_tags
+          direct_tag
+          indirect_tag
+          course = course_model(account:)
+          context_module = course.context_modules.create!(name: "other module")
+          other_direct_tag = ContentTag.create!(context: course, content: tool, context_module:, tag_type:)
+
+          tags = ContentTag.directly_associated_items(tool.id, account)
+          expect(tags).to contain_exactly(direct_tag, other_direct_tag, unpublished_direct)
+        end
+      end
+
+      describe "#indirectly_associated_items" do
+        it "finds all active indirectly associated items only within a course" do
+          create_misc_content_tags
+          indirect_tag
+          direct_tag
+
+          tags = ContentTag.indirectly_associated_items(tool.id, course)
+          expect(tags).to contain_exactly(indirect_tag, unpublished_indirect)
+        end
+
+        it "finds all active indirectly associated items only within an account" do
+          create_misc_content_tags
+          indirect_tag
+          direct_tag
+          course = course_model(account:)
+          context_module = course.context_modules.create!(name: "other module")
+          other_indirect_tag = ContentTag.create!(context: course, context_module:, url:, tag_type:)
+
+          tags = ContentTag.indirectly_associated_items(tool.id, account)
+          expect(tags).to contain_exactly(indirect_tag, other_indirect_tag, unpublished_indirect)
+        end
+      end
+    end
+
+    describe "#fetch_direct_batch" do
+      it "fetches only the ids it's given" do
+        direct_tag
+        indirect_tag
+        expect(ContentTag.fetch_direct_batch([direct_tag.id]).to_a)
+          .to contain_exactly(direct_tag)
+      end
+    end
+
+    describe "#fetch_indirect_batch" do
+      it "ignores tags that can't be associated with the tool being migrated" do
+        diff_url = ContentTag.create!(context: course, url: "http://notreallythere.com")
+        tags = ContentTag.fetch_indirect_batch(tool.id, tool_1_3.id, [indirect_tag, diff_url].pluck(:id)).to_a
+        expect(tags)
+          .to contain_exactly(indirect_tag)
+      end
     end
   end
 end

@@ -19,8 +19,9 @@
 import React from 'react'
 import {fireEvent, render, waitFor} from '@testing-library/react'
 import ModalBody from '../ModalBody'
+import injectGlobalAlertContainers from '@canvas/util/react/testing/injectGlobalAlertContainers'
 
-global.URL.createObjectURL = jest.fn().mockReturnValue('')
+injectGlobalAlertContainers()
 
 describe('ModelBody', () => {
   const defaultProps = {

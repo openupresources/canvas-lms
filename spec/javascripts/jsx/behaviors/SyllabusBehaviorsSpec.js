@@ -51,6 +51,7 @@ test('sets focus to the edit button when hide_edit occurs', () => {
   SyllabusBehaviors.bindToEditSyllabus()
   $('#edit_course_syllabus_form').trigger('hide_edit')
   equal(document.activeElement, $('.edit_syllabus_link')[0])
+  equal($('.edit_syllabus_link').attr('aria-expanded'), 'false')
 })
 
 test('skips initializing sidebar when edit link absent', () => {
@@ -71,6 +72,7 @@ test('sets syllabus_body data value on fresh node when showing edit form', () =>
   $('#course_syllabus').data('syllabus_body', text)
   const $form = SyllabusBehaviors.bindToEditSyllabus()
   $form.triggerHandler('edit')
+  equal($('.edit_syllabus_link').attr('aria-expanded'), 'true')
   ok(RichContentEditor.freshNode.called)
   const body = document.getElementById('course_syllabus_body')
   equal(RichContentEditor.freshNode.firstCall.args[0][0], body)
@@ -92,7 +94,7 @@ test('sets course_syllabus_body after mce destruction', () => {
   $form.triggerHandler('hide_edit')
   ok(RichContentEditor.destroyRCE.called)
   const body = document.getElementById('course_syllabus_body')
-  ok(body !== null)
+  notStrictEqual(body, null)
 })
 
 test('hides student view button when editing syllabus', () => {
@@ -186,4 +188,42 @@ test('jumps to most recent past event when there are only past events and user c
   $('#testLink').trigger('click')
   ok(!$('#test1').hasClass('selected'))
   ok($('#test2').hasClass('selected'))
+})
+
+test('escapes selector when jumping to event', () => {
+  const restoreFn = $.fn.ifExists
+  const spy = sinon.spy()
+  $.fn.ifExists = spy
+  fixtures.create(
+    // eslint-disable-next-line no-template-curly-in-string
+    '<div class="mini_month"><div class="day_wrapper" id="mini_day_2023_10_31_1"><div class="mini_calendar_day" id="mini_day_2023_10_31_1, id=[<img src=x onerror=\'alert(`${document.domain}:${document.cookie}`)\' />]">Click me to trigger XSS</div></div></div>'
+  )
+  SyllabusBehaviors.bindToMiniCalendar()
+  let errorThrown = false
+  let error = null
+  try {
+    $('.mini_calendar_day').trigger('click')
+  } catch (e) {
+    errorThrown = true
+    error = e
+  }
+  if (errorThrown) {
+    equal(
+      error?.message,
+      // eslint-disable-next-line no-template-curly-in-string
+      "Syntax error, unrecognized expression: #mini_day_2023_10_31_1, id=[<img src=x onerror='alert(`${document.domain}:${document.cookie}`)' ></div>]",
+      'Expected syntax error for malformed selector in jQuery >= 1.8'
+    )
+  } else {
+    const selectorValue = spy.firstCall ? spy.firstCall.thisValue.selector : ''
+    const yourEscapedIdValue =
+      // eslint-disable-next-line no-template-curly-in-string
+      '.events_2023_10_31_1, id=[&lt;img src=x onerror=&#39;alert(`${document.domain}:${document.cookie}`)&#39; &gt;&lt;/div&gt;]'
+    equal(
+      selectorValue,
+      yourEscapedIdValue,
+      'Expected escaped/sanitized selector value in jQuery < 1.8'
+    )
+  }
+  $.fn.ifExists = restoreFn
 })

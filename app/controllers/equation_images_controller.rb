@@ -21,7 +21,7 @@ class EquationImagesController < ApplicationController
   # Facade to codecogs API for gif generation or microservice MathMan for svg
   def show
     @latex = params[:id]
-    @scale = params[:scale] if Account.site_admin.feature_enabled?(:scale_equation_images)
+    @scale = params[:scale]
 
     # Usually, the latex string is stored in the db double escaped.  By the
     # time the value gets here as `params[:id]` it has been unescaped once.
@@ -42,10 +42,9 @@ class EquationImagesController < ApplicationController
     if MathMan.use_for_svg?
       MathMan.url_for(latex: @latex, target: :svg, scale: @scale)
     else
-      scale_param = "&scale=#{@scale}" if @scale.present?
-      scale_param ||= ""
-      Setting.get("equation_image_url", "http://latex.codecogs.com/gif.latex?") + @latex +
-        scale_param
+      # The service we are using here for development does not support scaling,
+      # so we don't include the scale param (otherwise we get back invalid equation images)
+      Setting.get("equation_image_url", "http://latex.codecogs.com/svg.latex?") + @latex
     end
   end
 end

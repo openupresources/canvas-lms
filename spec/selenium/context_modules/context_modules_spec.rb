@@ -19,10 +19,14 @@
 
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/public_courses_context"
+require_relative "page_objects/modules_index_page"
+require_relative "page_objects/modules_settings_tray"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
+  include ModulesIndexPage
+  include ModulesSettingsTray
 
   context "adds existing items to modules" do
     before(:once) do
@@ -33,6 +37,43 @@ describe "context modules" do
 
     before do
       course_with_teacher_logged_in(course: @course, active_enrollment: true)
+    end
+
+    context "when Restrict Quantitative Data is enabled" do
+      before do
+        # truthy feature flag
+        Account.default.enable_feature! :restrict_quantitative_data
+
+        # truthy setting
+        Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
+        Account.default.save!
+        @course.restrict_quantitative_data = true
+        @course.save!
+      end
+
+      it "hides points possible for student", priority: "1" do
+        Account.default.reload
+        course_with_student_logged_in(course: @course, active_enrollment: true)
+        a = @course.assignments.create!(title: "some assignment", points_possible: 10)
+        @pub_graded_discussion = @course.discussion_topics.build(assignment: a, title: "Graded Published Discussion")
+        @pub_graded_discussion.save!
+        @mod.add_item(type: "discussion_topic", id: @pub_graded_discussion.id)
+        go_to_modules
+        verify_module_title("Graded Published Discussion")
+        expect(f("body")).not_to contain_jqcss(".points_possible_display")
+      end
+
+      it "does not hide points possible for teacher", priority: "1" do
+        Account.default.reload
+        a = @course.assignments.create!(title: "some assignment", points_possible: 10)
+        @pub_graded_discussion = @course.discussion_topics.build(assignment: a, title: "Graded Published Discussion")
+        @pub_graded_discussion.save!
+        @mod.add_item(type: "discussion_topic", id: @pub_graded_discussion.id)
+        go_to_modules
+        verify_module_title("Graded Published Discussion")
+        expect(f("span.publish-icon.published.publish-icon-published")).to be_displayed
+        expect(f(".points_possible_display")).to include_text "10 pts"
+      end
     end
 
     it "adds an unpublished page to a module", priority: "1" do
@@ -61,14 +102,16 @@ describe "context modules" do
       go_to_modules
       verify_module_title("Unpublished Quiz")
       expect(f("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish")).to be_displayed
+      expect(f(".speed-grader-link-container").attribute("class")).to include("hidden")
     end
 
     it "adds a published quiz to a module", priority: "1" do
-      @pub_quiz = Quizzes::Quiz.create!(context: @course, title: "Published Quiz")
+      @pub_quiz = Quizzes::Quiz.create!(context: @course, title: "Published Quiz", workflow_state: "available")
       @mod.add_item(type: "quiz", id: @pub_quiz.id)
       go_to_modules
       verify_module_title("Published Quiz")
       expect(f("span.publish-icon.published.publish-icon-published")).to be_displayed
+      expect(f(".speed-grader-link-container")).to be_present
     end
 
     it "shows due date on a quiz in a module", priority: "2" do
@@ -86,6 +129,7 @@ describe "context modules" do
       go_to_modules
       verify_module_title("Unpublished Assignment")
       expect(f("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish")).to be_displayed
+      expect(f(".speed-grader-link-container").attribute("class")).to include("hidden")
     end
 
     it "adds a published assignment to a module", priority: "1" do
@@ -94,6 +138,7 @@ describe "context modules" do
       go_to_modules
       verify_module_title("Published Assignment")
       expect(f("span.publish-icon.published.publish-icon-published")).to be_displayed
+      expect(f(".speed-grader-link-container")).to be_present
     end
 
     it "adds an non-graded unpublished discussion to a module", priority: "1" do
@@ -153,7 +198,7 @@ describe "context modules" do
 
     it "shows the due date on an graded discussion in a module", priority: "2" do
       due_at = 3.days.from_now
-      @assignment = @course.assignments.create!(name: "assignemnt", due_at: due_at)
+      @assignment = @course.assignments.create!(name: "assignemnt", due_at:)
       @discussion = @course.discussion_topics.create!(title: "Graded Discussion", assignment: @assignment)
       @mod.add_item(type: "discussion_topic", id: @discussion.id)
       go_to_modules
@@ -162,7 +207,7 @@ describe "context modules" do
 
     it "shows the todo date on an ungraded discussion in a module", priority: "1" do
       todo_date = 1.day.from_now
-      @pub_ungraded_discussion = @course.discussion_topics.create!(title: "Non-graded Published Discussion", todo_date: todo_date)
+      @pub_ungraded_discussion = @course.discussion_topics.create!(title: "Non-graded Published Discussion", todo_date:)
       @mod.add_item(type: "discussion_topic", id: @pub_ungraded_discussion.id)
       go_to_modules
       verify_module_title("Non-graded Published Discussion")
@@ -193,10 +238,11 @@ describe "context modules" do
       @mod.save!
       go_to_modules
       verify_module_title("some assignment in a module")
-      expect(ff("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish").length).to eq(2)
-      ff(".icon-unpublish")[0].click
-      wait_for_ajax_requests
-      expect(ff("span.publish-icon.unpublished.publish-icon-published > i.icon-publish").length).to eq(2)
+      expect(unpublished_module_icon(@mod.id)).to be_present
+      expect(f("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish")).to be_present
+      publish_module_and_items(@mod.id)
+      expect(published_module_icon(@mod.id)).to be_present
+      expect(f("span.publish-icon.unpublished.publish-icon-published > i.icon-publish")).to be_present
     end
   end
 
@@ -336,7 +382,7 @@ describe "context modules" do
         wait_for_ajaximations
 
         # non-empty module should not have a DnD area
-        expect(find_with_jquery('.module_dnd input[type="file"]')).to be nil
+        expect(find_with_jquery('.module_dnd input[type="file"]')).to be_nil
       end
 
       it "adds multiple file items to a module" do
@@ -346,7 +392,7 @@ describe "context modules" do
         file_names.each { |item_name| expect(fj(".context_module_item:contains(#{item_name.inspect})")).to be_displayed }
       end
 
-      it "uploads mutiple files to add items to a module" do
+      it "uploads multiple files to add items to a module" do
         get "/courses/#{@course.id}/modules"
 
         filename, fullpath, _data = get_file("testfile1.txt")
@@ -519,10 +565,12 @@ describe "context modules" do
         wait_for_ajaximations
 
         # non-empty module should not have a DnD area
-        expect(find_with_jquery('.module_dnd input[type="file"]')).to be nil
+        expect(find_with_jquery('.module_dnd input[type="file"]')).to be_nil
       end
 
-      it "creating a new module should display a drag and drop area" do
+      it "creating a new module should display a drag and drop area without differentiated modules" do
+        Account.site_admin.disable_feature! :differentiated_modules
+
         get "/courses/#{@course.id}/modules"
         wait_for_ajaximations
 
@@ -535,11 +583,32 @@ describe "context modules" do
 
         expect(ff('.module_dnd input[type="file"]')).to have_size(2)
       end
+
+      it "creating a new module should display a drag and drop area with differentiated modules" do
+        differentiated_modules_on
+        get "/courses/#{@course.id}/modules"
+
+        click_new_module_link
+        update_module_name("New Module")
+        click_add_tray_add_module_button
+
+        expect(ff('.module_dnd input[type="file"]')).to have_size(2)
+      end
     end
 
-    it "adds a file item to a module", priority: "1" do
+    it "adds a file item to a module when differentiated modules is disabled", priority: "1" do
+      Account.site_admin.disable_feature! :differentiated_modules
       get "/courses/#{@course.id}/modules"
       manually_add_module_item("#attachments_select", "File", file_name)
+      expect(f(".context_module_item")).to include_text(file_name)
+    end
+
+    it "adds a file item to a module when differentiated modules is enabled", priority: "1" do
+      differentiated_modules_on
+
+      get "/courses/#{@course.id}/modules"
+      manually_add_module_item("#attachments_select", "File", file_name)
+      expect(f(".context_module_item")).to include_text(file_name)
     end
 
     it "does not remove the file link in a module when file is overwritten" do
@@ -561,7 +630,7 @@ describe "context modules" do
       @module.add_item({ id: @file.id, type: "attachment" })
       get "/courses/#{@course.id}/modules"
 
-      ff(".icon-publish")[1].click
+      f(".icon-publish").click
       wait_for_ajaximations
       set_value f(".UsageRightsSelectBox__select"), "own_copyright"
       set_value f("#copyrightHolder"), "Test User"

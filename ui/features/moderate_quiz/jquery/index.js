@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-shadow */
+/* eslint-disable eqeqeq */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -21,8 +23,8 @@ import $ from 'jquery'
 import timing from './quiz_timing'
 import openModerateStudentDialog from './openModerateStudentDialog'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* datetimeString */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
+import '@canvas/datetime/jquery' /* datetimeString */
+import '@canvas/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
@@ -30,6 +32,7 @@ import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData' /* fillTemplateData */
 import 'date-js'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('quizzes.moderate')
 /* Date.parse */
@@ -49,7 +52,7 @@ const updateExtraTime = function ($studentBlock, extraTime) {
   const $extraTime = $studentBlock.find('.extra_time_allowed')
 
   if (extraTime > 0) {
-    $extraTime.text($extraTime.text().replace(/\s\d+\s/, ' ' + extraTime + ' '))
+    $extraTime.text($extraTime.text().replace(/\d(.*\d)?/, I18n.n(extraTime)))
   }
 
   $extraTime.toggle(extraTime > 0)
@@ -178,7 +181,7 @@ $(document).ready(function (_event) {
     const last_updated_at = moderation.lastUpdatedAt && moderation.lastUpdatedAt.toISOString()
 
     $.ajaxJSON(
-      $.replaceTags(moderate_url, 'update', last_updated_at),
+      replaceTags(moderate_url, 'update', last_updated_at),
       'GET',
       {},
       data => {
@@ -244,7 +247,7 @@ $(document).ready(function (_event) {
     checkChange()
   })
 
-  $('.moderate_multiple_link').live('click', function (event) {
+  $(document).on('click', '.moderate_multiple_link', function (event) {
     event.preventDefault()
     const student_ids = []
     const data = {}
@@ -281,7 +284,7 @@ $(document).ready(function (_event) {
       .fixDialogButtons()
   })
 
-  $('.moderate_student_link').live('click', function (event) {
+  $(document).on('click', '.moderate_student_link', function (event) {
     event.preventDefault()
     const $student = $(this).parents('.student')
     const data = {
@@ -441,7 +444,7 @@ $(document).ready(function (_event) {
     }
     for (const idx in ids) {
       const id = ids[idx]
-      const url = $.replaceTags($('.extension_url').attr('href'), 'user_id', id)
+      const url = replaceTags($('.extension_url').attr('href'), 'user_id', id)
       $.ajaxJSON(
         url,
         'POST',
@@ -466,7 +469,7 @@ $(document).ready(function (_event) {
     .click(() => {
       $('#moderate_student_dialog').dialog('close')
     })
-  $('.extend_time_link').live('click', event => {
+  $(document).on('click', '.extend_time_link', event => {
     event.preventDefault()
     const $row = $(event.target).parents('.student')
     const end_at = $.datetimeString($row.attr('data-end-at'))
@@ -506,6 +509,7 @@ $(document).ready(function (_event) {
         data.time_type === 'extend_from_now' &&
         data.time < $dialog.data('row').data('minutes_left')
       ) {
+        // eslint-disable-next-line no-alert
         const result = window.confirm(
           I18n.t(
             'confirms.taking_time_away',
@@ -522,7 +526,7 @@ $(document).ready(function (_event) {
         .attr('disabled', true)
         .filter('.save_button')
         .text(I18n.t('buttons.extending_time', 'Extending Time...'))
-      const url = $.replaceTags(
+      const url = replaceTags(
         $('.extension_url').attr('href'),
         'user_id',
         $dialog.data('row').attr('data-user-id')

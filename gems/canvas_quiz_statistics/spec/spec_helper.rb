@@ -24,7 +24,7 @@ rescue LoadError => e
   puts "Error: #{e} "
 end
 
-require "byebug"
+require "debug"
 require "canvas_quiz_statistics"
 
 Constants = CanvasQuizStatistics::Analyzers::Base::Constants
@@ -40,10 +40,10 @@ File.join(File.dirname(__FILE__), "canvas_quiz_statistics").tap do |cwd|
   # spec support in support/
   Dir.glob(File.join([
                        cwd, "support", "**", "*.rb"
-                     ])).sort.each { |file| require file }
+                     ])).each { |file| require file }
 
   # specs for shared metrics in analyzers/shared_metrics
   Dir.glob(File.join([
                        cwd, "analyzers", "shared_metrics", "**", "*.rb"
-                     ])).sort.each { |file| require file }
+                     ])).each { |file| require file }
 end

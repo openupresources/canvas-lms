@@ -94,6 +94,7 @@ module IncomingMailProcessor
     def expect_no_errors
       expect(error_reporter).not_to receive(:log_exception)
       expect(error_reporter).not_to receive(:log_error)
+      expect(CanvasErrors).not_to receive(:capture_exception)
     end
 
     describe ".configure" do
@@ -174,7 +175,8 @@ module IncomingMailProcessor
         IncomingMessageProcessor.new(message_handler, error_reporter).process_single(Mail.new do
                                                                                        content_type "text/plain; charset=UTF-8"
                                                                                        body (+"he\xffllo").force_encoding(Encoding::BINARY)
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
 
         expect(message_handler.body).to eq("hello")
         expect(message_handler.html_body).to eq("hello")
@@ -184,7 +186,8 @@ module IncomingMailProcessor
         IncomingMessageProcessor.new(message_handler, error_reporter).process_single(Mail.new do
                                                                                        content_type "text/plain; charset=Shift_JIS"
                                                                                        body (+"\x83\x40").force_encoding(Encoding::BINARY)
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
 
         comparison_string = +"\xe3\x82\xa1"
         comparison_string.force_encoding("UTF-8")
@@ -201,7 +204,8 @@ module IncomingMailProcessor
                                                                                          content_type "text/html; charset=UTF-8"
                                                                                          body "<h1>This is HTML</h1>"
                                                                                        end
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
         expect(message_handler.body).to eq("This is plain text")
         expect(message_handler.html_body).to eq("<h1>This is HTML</h1>")
       end
@@ -219,7 +223,8 @@ module IncomingMailProcessor
         IncomingMessageProcessor.new(message_handler, error_reporter).process_single(Mail.new do
                                                                                        content_type "text/html; charset=UTF-8"
                                                                                        body "<h1>This is HTML</h1>"
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
         expect(message_handler.body).to eq("************\nThis is HTML\n************")
         expect(message_handler.html_body).to eq("<h1>This is HTML</h1>")
       end
@@ -230,7 +235,8 @@ module IncomingMailProcessor
                                                                                          content_type "text/html; charset=UTF-8"
                                                                                          body "<h1>This is HTML</h1>"
                                                                                        end
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
         expect(message_handler.body).to eq("************\nThis is HTML\n************")
         expect(message_handler.html_body).to eq("<h1>This is HTML</h1>")
       end
@@ -255,7 +261,8 @@ module IncomingMailProcessor
         IncomingMessageProcessor.new(message_handler, error_reporter).process_single(Mail.new do
                                                                                        content_type nil
                                                                                        body "hello"
-                                                                                     end, "")
+                                                                                     end,
+                                                                                     "")
 
         expect(message_handler.body).to eq("hello")
         expect(message_handler.html_body).to eq("hello")
@@ -273,7 +280,8 @@ module IncomingMailProcessor
         it "reports the age based on the date header" do
           Timecop.freeze do
             message.date = 10.minutes.ago
-            expect(InstStatsd::Statsd).to receive(:timing).once.with("incoming_mail_processor.message_age.", 10 * 60 * 1000,
+            expect(InstStatsd::Statsd).to receive(:timing).once.with("incoming_mail_processor.message_age.",
+                                                                     10 * 60 * 1000,
                                                                      { short_stat: "incoming_mail_processor.message_age",
                                                                        tags: { mailbox: nil } })
             IncomingMessageProcessor.new(message_handler, error_reporter).process_single(message, "")
@@ -493,7 +501,7 @@ module IncomingMailProcessor
           expect(@mock_mailbox).to receive(:move_message).with(:foo, "errors_go_here")
           expect(@mock_mailbox).to receive(:each_message).and_yield(:foo, foo)
           expect(@mock_mailbox).to receive(:disconnect)
-          expect(error_reporter).to receive(:log_exception)
+          expect(CanvasErrors).to receive(:capture_exception)
             .with(IncomingMessageProcessor.error_report_category, kind_of(StandardError), anything)
 
           IncomingMessageProcessor.new(message_handler, error_reporter).process
@@ -514,7 +522,8 @@ module IncomingMailProcessor
           expect(@mock_mailbox).to receive(:connect).ordered
           expect(@mock_mailbox).to receive(:disconnect).ordered
           expect(@mock_mailbox).to receive(:each_message).once
-          expect(error_reporter).to receive(:log_exception)
+
+          expect(CanvasErrors).to receive(:capture_exception)
             .with(IncomingMessageProcessor.error_report_category, kind_of(StandardError), anything)
 
           IncomingMessageProcessor.new(message_handler, error_reporter).process
@@ -535,15 +544,15 @@ module IncomingMailProcessor
         }
         IncomingMessageProcessor.configure(config)
         accounts = IncomingMessageProcessor.mailbox_accounts
-        expect(accounts.size).to eql 3
+        expect(accounts.size).to be 3
         protocols = accounts.map(&:protocol)
-        expect(protocols.count).to eql 3
-        expect(protocols.count(:imap)).to eql 2
-        expect(protocols.count(:directory)).to eql 1
+        expect(protocols.count).to be 3
+        expect(protocols.count(:imap)).to be 2
+        expect(protocols.count(:directory)).to be 1
         usernames = accounts.map(&:config).map { |c| c[:username] } # rubocop:disable Rails/Pluck
-        expect(usernames.count("foo")).to eql 1
-        expect(usernames.count("bar")).to eql 1
-        expect(usernames.count(nil)).to eql 1
+        expect(usernames.count("foo")).to be 1
+        expect(usernames.count("bar")).to be 1
+        expect(usernames.count(nil)).to be 1
       end
 
       it "does not try to load messages with invalid address tag" do
@@ -553,7 +562,7 @@ module IncomingMailProcessor
         expect(account).to receive(:address).and_return("user@example.com")
         expect(message).to receive(:to).and_return(["user@example.com"])
         result = IncomingMessageProcessor.extract_address_tag(message, account)
-        expect(result).to eq(false)
+        expect(result).to be(false)
       end
     end
 
@@ -595,7 +604,7 @@ module IncomingMailProcessor
           end
         end
 
-        expect(error_reporter).to receive(:log_exception).once
+        expect(CanvasErrors).to receive(:capture_exception).once
         IncomingMessageProcessor.new(message_handler, error_reporter).process
         expect(processed_second).to be_truthy
       end

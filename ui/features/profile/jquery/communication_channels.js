@@ -19,7 +19,7 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, showIf */
@@ -27,6 +27,7 @@ import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData' /* fillTemplateData, getTemplateData */
 import 'jqueryui/tabs'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('profile')
 
@@ -273,7 +274,7 @@ $(document).ready(function () {
       $channel.remove()
     },
   })
-  $('a.email_address_taken_learn_more').live('click', event => {
+  $(document).on('click', 'a.email_address_taken_learn_more', event => {
     event.preventDefault()
   })
 
@@ -364,9 +365,9 @@ $(document).ready(function () {
       })
       $box.find('.status_message').css('visibility', 'hidden')
       let url = $('.re_send_confirmation_url').attr('href')
-      url = $.replaceTags(url, 'id', data.channel_id)
-      url = $.replaceTags(url, 'pseudonym_id', data.pseudonym_id)
-      url = $.replaceTags(url, 'user_id', data.user_id)
+      url = replaceTags(url, 'id', data.channel_id)
+      url = replaceTags(url, 'pseudonym_id', data.pseudonym_id)
+      url = replaceTags(url, 'user_id', data.user_id)
 
       $box
         .find('.re_send_confirmation_link')
@@ -386,8 +387,8 @@ $(document).ready(function () {
     formErrors: false,
     processData(data) {
       let url = $(this).find('.register_channel_link').attr('href')
-      url = $.replaceTags(url, 'id', data.channel_id)
-      url = $.replaceTags(url, 'code', data.code)
+      url = replaceTags(url, 'id', data.channel_id)
+      url = replaceTags(url, 'code', data.code)
       $(this).attr('action', url)
     },
     beforeSubmit(_data) {

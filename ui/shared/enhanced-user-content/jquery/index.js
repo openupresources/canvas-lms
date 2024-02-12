@@ -15,25 +15,24 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {isolate} from '@canvas/sentry'
 import KeyboardNavDialog from '@canvas/keyboard-nav-dialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import htmlEscape from 'html-escape'
+import {uniqueId} from 'lodash'
+import htmlEscape from '@instructure/html-escape'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import {enhanceUserContent, makeAllExternalLinksExternalLinks} from '@instructure/canvas-rce'
+import {enhanceUserContent} from '@instructure/canvas-rce'
+import {makeAllExternalLinksExternalLinks} from '@instructure/canvas-rce/es/enhance-user-content/external_links'
 import './instructure_helper'
 import 'jqueryui/draggable'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/doc-previews' /* loadDocPreview */
-import '@canvas/datetime' /* datetimeString, dateString, fudgeDateForProfileTimezone */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, formErrors */
+import '@canvas/datetime/jquery' /* datetimeString, dateString, fudgeDateForProfileTimezone */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, formErrors */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags, youTubeID */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* ifExists, .dim, confirmDelete, showIf, fillWindowWithMe */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData'
@@ -41,9 +40,10 @@ import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/media-comments/jquery/mediaCommentThumbnail'
 import 'date-js'
 import 'jquery-tinypubsub' /* /\.publish\(/ */
-import 'jqueryui/resizable'
+import 'jqueryui-unpatched/resizable'
 import 'jqueryui/sortable'
 import 'jqueryui/tabs'
+import {captureException} from '@sentry/browser'
 
 const I18n = useI18nScope('instructure_js')
 
@@ -101,6 +101,7 @@ function enhanceUserJQueryWidgetContent() {
         "will go away. Rather than relying on the internals of Canvas's JavaScript, " +
         'you should use your own custom JS file to do any such customizations.'
       console.error(msg, $elements) // eslint-disable-line no-console
+      captureException(new Error(msg))
     })
     .end()
     .filter('.dialog')
@@ -130,26 +131,6 @@ function enhanceUserJQueryWidgetContent() {
       $(this).tabs()
     })
     .end()
-}
-
-function retriggerEarlyClicks() {
-  // handle all of the click events that were triggered before the dom was ready (and thus weren't handled by jquery listeners)
-  if (window._earlyClick) {
-    // unset the onclick handler we were using to capture the events
-    document.removeEventListener('click', window._earlyClick)
-    if (window._earlyClick.clicks) {
-      // wait to fire the "click" events till after all of the event hanlders loaded at dom ready are initialized
-      setTimeout(function () {
-        $.each(_.uniq(window._earlyClick.clicks), function () {
-          // cant use .triggerHandler because it will not bubble,
-          // but we do want to preventDefault, so this is what we have to do
-          const event = $.Event('click')
-          event.preventDefault()
-          $(this).trigger(event)
-        })
-      }, 1)
-    }
-  }
 }
 
 function ellipsifyBreadcrumbs() {
@@ -243,7 +224,7 @@ function warnAboutRolesBeingSwitched() {
 }
 
 function expandQuotedTextWhenClicked() {
-  $('a.show_quoted_text_link').live('click', function (event) {
+  $(document).on('click', 'a.show_quoted_text_link', function (event) {
     const $text = $(this).parents('.quoted_text_holder').children('.quoted_text')
     if ($text.length > 0) {
       event.preventDefault()
@@ -254,7 +235,7 @@ function expandQuotedTextWhenClicked() {
 }
 
 function previewEquellaContentWhenClicked() {
-  $('a.equella_content_link').live('click', function (event) {
+  $(document).on('click', 'a.equella_content_link', function (event) {
     event.preventDefault()
     let $dialog = $('#equella_preview_dialog')
     if (!$dialog.length) {
@@ -309,7 +290,7 @@ function openDialogsWhenClicked() {
   // <a class="dialog_opener" aria-controls="my_dialog" data-dialog-opts="{resizable:false, width: 300}" role="button" href="#">
   // opens the .my_dialog dialog and passes the options {resizable:false, width: 300}
   // the :not clause is to not allow users access to this functionality in their content.
-  $('.dialog_opener[aria-controls]:not(.user_content *)').live('click', function (event) {
+  $(document).on('click', '.dialog_opener[aria-controls]:not(.user_content *)', function (event) {
     const link = this
     $('#' + $(this).attr('aria-controls')).ifExists($dialog => {
       event.preventDefault()
@@ -345,6 +326,9 @@ function enhanceUserContentWhenAsked() {
         canvasOrigin: ENV?.DEEP_LINKING_POST_MESSAGE_ORIGIN || window.location?.origin,
         kalturaSettings: INST.kalturaSettings,
         disableGooglePreviews: !!INST.disableGooglePreviews,
+        new_math_equation_handling: !!ENV?.FEATURES?.new_math_equation_handling,
+        explicit_latex_typesetting: !!ENV?.FEATURES?.explicit_latex_typesetting,
+        locale: ENV?.LOCALE ?? 'en',
       }),
     50
   )
@@ -388,7 +372,7 @@ function addDiscussionTopicEntryWhenClicked() {
       .clone(true)
       .removeClass('blank')
     $reply.before($response.show())
-    const id = _.uniqueId('textarea_')
+    const id = uniqueId('textarea_')
     $response.find('textarea.rich_text').attr('id', id)
     $(document).triggerHandler('richTextStart', $('#' + id))
     $response.find('textarea:first').focus().select()
@@ -549,6 +533,7 @@ function doThingsToModuleSequenceFooter() {
       .catch(ex => {
         // eslint-disable-next-line no-console
         console.error(ex)
+        captureException(ex)
       })
   }
 }
@@ -604,7 +589,7 @@ function confirmAndDeleteRightSideTodoItemsWhenClicked() {
 
 // this really belongs in enhanced-user-content2/instructure_helper
 // but it uses FilePreview to render the file preview overlay, and
-// that has so many dependencies on things like @canvas/files/backbone/models/File.coffee
+// that has so many dependencies on things like @canvas/files/backbone/models/File.js
 // this it'll be too time consuming to decouple it from canvas in our
 // timeframe. Solve it for now by using postMessage from enhanced-user-content2
 // (which we hope to decouple from canvas) to ask canvas to render the preview
@@ -639,9 +624,8 @@ const setDialogCloseText = () => {
   $.ui.dialog.prototype.options.closeText = I18n.t('Close')
 }
 
-export default function enhanceTheEntireUniverse() {
+export function enhanceTheEntireUniverse() {
   ;[
-    retriggerEarlyClicks,
     ellipsifyBreadcrumbs,
     bindKeyboardShortcutsHelpPanel,
     warnAboutRolesBeingSwitched,
@@ -663,7 +647,5 @@ export default function enhanceTheEntireUniverse() {
     makeAllExternalLinksExternalLinks,
     wireUpFilePreview,
     setDialogCloseText,
-  ]
-    .map(isolate)
-    .map(x => x())
+  ].map(x => x())
 }

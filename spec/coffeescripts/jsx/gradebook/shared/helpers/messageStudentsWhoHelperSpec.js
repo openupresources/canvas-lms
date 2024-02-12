@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import _ from 'lodash'
 import MessageStudentsWhoHelper from '@canvas/grading/messageStudentsWhoHelper'
 
 QUnit.module('messageStudentsWhoHelper#options', function (hooks) {
@@ -34,6 +34,27 @@ QUnit.module('messageStudentsWhoHelper#options', function (hooks) {
     const options = MessageStudentsWhoHelper.options(this.assignment)
     deepEqual(options[1].text, 'Scored less than')
     MessageStudentsWhoHelper.hasSubmission.restore()
+  })
+
+  QUnit.module("'Haven't been graded' criteria function", function (hooks) {
+    hooks.beforeEach(function () {
+      const assignment = {id: '1', name: 'Homework', submissionTypes: ['online_text_entry']}
+      const options = MessageStudentsWhoHelper.options(assignment)
+      const option = options.find(option => option.text === "Haven't been graded")
+      this.hasNotBeenGraded = option.criteriaFn
+    })
+    test('returns false if the submission is excused', function () {
+      const submission = {excused: true, score: null}
+      strictEqual(this.hasNotBeenGraded(submission), false)
+    })
+    test('returns true if score is null and submission is not excused', function () {
+      const submission = {excused: false, score: null}
+      strictEqual(this.hasNotBeenGraded(submission), true)
+    })
+    test('returns false if score is not null and submission is not excused', function () {
+      const submission = {excused: false, score: 90}
+      strictEqual(this.hasNotBeenGraded(submission), false)
+    })
   })
 
   QUnit.module("'Haven't Submitted Yet' criteria function", function (hooks) {

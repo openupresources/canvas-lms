@@ -17,12 +17,27 @@
  */
 
 import {createGradebook} from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
-import round from 'round'
+import round from '@canvas/round'
 
 QUnit.module('sortByStudentColumn', {
   setup() {
     this.gradebook = createGradebook()
   },
+})
+
+test('does not cause gradebook to forget about students that are loaded but not currently in view', function () {
+  this.gradebook.courseContent.students.setStudentIds(['1', '3', '4'])
+
+  this.gradebook.gridData.rows = [
+    {id: '3', sortable_name: 'Z'},
+    {id: '4', sortable_name: 'A'},
+  ]
+
+  this.gradebook.sortByStudentColumn('sortable_name', 'ascending')
+  const loadedStudentIds = this.gradebook.courseContent.students
+    .listStudents()
+    .map(student => student.id)
+  deepEqual(loadedStudentIds, ['1', '3', '4'])
 })
 
 test('sorts the gradebook rows', function () {
@@ -851,44 +866,6 @@ QUnit.module('Gradebook#compareAssignmentModulePositions - when neither record h
       this.secondRecord
     )
   },
-})
-
-QUnit.module('Gradebook#isInvalidSort', {
-  setup() {
-    this.gradebook = createGradebook()
-  },
-})
-
-test('returns false if sorting by any valid criterion', function () {
-  this.gradebook.setColumnOrder({sortType: 'name', direction: 'ascending'})
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
-})
-
-test('returns true if sorting by module position but there are no modules in the course any more', function () {
-  this.gradebook.setColumnOrder({sortType: 'module_position', direction: 'ascending'})
-  this.gradebook.courseContent.contextModules = []
-
-  strictEqual(this.gradebook.isInvalidSort(), true)
-})
-
-test('returns false if sorting by module position and there are modules in the course', function () {
-  this.gradebook.setColumnOrder({sortType: 'module_position', direction: 'ascending'})
-  this.gradebook.courseContent.contextModules = [{id: '1', name: 'Module 1', position: 1}]
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
-})
-
-test('returns true if sorting by custom but there is no custom column order stored', function () {
-  this.gradebook.gradebookColumnOrderSettings = {sortType: 'custom'}
-
-  strictEqual(this.gradebook.isInvalidSort(), true)
-})
-
-test('returns false if sorting by custom and there is a custom column order stored', function () {
-  this.gradebook.gradebookColumnOrderSettings = {sortType: 'custom', customOrder: [1, 2, 3]}
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
 })
 
 QUnit.module('Gradebook#compareAssignmentModulePositions - when both records have module info', {

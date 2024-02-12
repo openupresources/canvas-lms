@@ -16,8 +16,8 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-import _ from 'underscore'
-import preventDefault from 'prevent-default'
+import {sortBy} from 'lodash'
+import preventDefault from '../preventDefault'
 import 'jqueryui/dialog'
 
 $.fn.fixDialogButtons = function () {
@@ -54,7 +54,7 @@ $.fn.fixDialogButtons = function () {
         }
       })
       // put the primary button(s) on the far right
-      buttons = _.sortBy(buttons, button => (button.class.match(/btn-primary/) ? 1 : 0))
+      buttons = sortBy(buttons, button => (button.class.match(/btn-primary/) ? 1 : 0))
       $dialog.dialog('option', 'buttons', buttons)
     }
   })

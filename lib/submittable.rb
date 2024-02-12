@@ -19,7 +19,7 @@
 
 module Submittable
   def self.included(klass)
-    klass.belongs_to :assignment
+    klass.belongs_to :assignment, inverse_of: klass.table_name.singularize, class_name: "Assignment"
     klass.belongs_to :old_assignment, class_name: "Assignment"
     klass.has_many :assignment_student_visibilities, through: :assignment
 
@@ -151,7 +151,7 @@ module Submittable
       if @old_assignment_id
         Assignment.where(
           id: @old_assignment_id,
-          context: context,
+          context:,
           submission_types: "wiki_page"
         ).update_all(workflow_state: "deleted", updated_at: Time.now.utc)
       elsif assignment && @saved_by != :assignment

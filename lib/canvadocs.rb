@@ -97,8 +97,9 @@ module Canvadocs
     #
     # Returns a hash containing the session id
     def session(document_id, opts = {})
-      raw_body = api_call(:post, "sessions",
-                          opts.merge(document_id: document_id))
+      raw_body = api_call(:post,
+                          "sessions",
+                          opts.merge(document_id:))
       JSON.parse(raw_body)
     end
 
@@ -135,7 +136,7 @@ module Canvadocs
     # Returns the json parsed response body of the call
     def api_call(method, endpoint, params = {})
       # dispatch to the right method, with the full path (/api/v2 + endpoint)
-      request = send("format_#{method}", "#{@url.path}/#{endpoint}", params)
+      request = send(:"format_#{method}", "#{@url.path}/#{endpoint}", params)
       request["Authorization"] = "Token #{token}"
       response = @http.request(request)
 
@@ -225,7 +226,7 @@ module Canvadocs
       return {} if attachment.nil?
 
       submission = Submission.find_by(
-        id: AttachmentAssociation.where(context_type: "Submission", attachment: attachment).select(:context_id)
+        id: AttachmentAssociation.where(context_type: "Submission", attachment:).select(:context_id)
       )
       return {} if submission.nil?
     end
@@ -372,7 +373,7 @@ module Canvadocs
         name = canvadocs_user_name(filter_user)
       end
 
-      { id: id, type: type, role: role, name: name }
+      { id:, type:, role:, name: }
     end
   end
 end

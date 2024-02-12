@@ -161,13 +161,13 @@ class CutyCapt
     if success
       logger.info("Capture took #{Time.now.to_i - start.to_i} seconds")
     else
-      File.unlink(img_file) if File.exist?(img_file)
+      FileUtils.rm_f(img_file)
       return nil
     end
 
     if block_given?
       yield img_file
-      File.unlink(img_file) if File.exist?(img_file)
+      FileUtils.rm_f(img_file)
       return nil
     end
 
@@ -179,7 +179,7 @@ class CutyCapt
     snapshot_url(url) do |file_path|
       # this is a really odd way to get Attachment the data it needs, which
       # should probably be remedied at some point
-      attachment = Attachment.new(uploaded_data: Rack::Test::UploadedFile.new(file_path, "image/png"))
+      attachment = Attachment.new(uploaded_data: Canvas::UploadedFile.new(file_path, "image/png"))
     end
     attachment
   end

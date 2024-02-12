@@ -19,10 +19,12 @@
 
 require_relative "../common"
 require_relative "../helpers/calendar2_common"
+require_relative "pages/calendar_page"
 
 describe "calendar2" do
   include_context "in-process server selenium tests"
   include Calendar2Common
+  include CalendarPage
 
   before(:once) do
     Account.find_or_create_by!(id: 0).update(name: "Dummy Root Account", workflow_state: "deleted", root_account_id: nil)
@@ -257,7 +259,7 @@ describe "calendar2" do
         create_middle_day_event("doomed event")
         f(".fc-event").click
         hover_and_click ".delete_event_link"
-        hover_and_click ".ui-dialog:visible .btn-primary"
+        click_delete_confirm_button
         expect(f("#content")).not_to contain_jqcss(".fc-event:visible")
         # make sure it was actually deleted and not just removed from the interface
         get("/calendar2")
@@ -268,9 +270,7 @@ describe "calendar2" do
         create_middle_day_assignment
         f(".fc-event").click
         hover_and_click ".delete_event_link"
-        expect(f(".ui-dialog .ui-dialog-buttonset")).to be_displayed
-        wait_for_ajaximations
-        hover_and_click ".ui-dialog:visible .btn-danger"
+        click_delete_confirm_button
         wait_for_ajaximations
         expect(f("#content")).not_to contain_css(".fc-event")
         # make sure it was actually deleted and not just removed from the interface
@@ -399,7 +399,7 @@ describe "calendar2" do
       it "shows the location when clicking on a calendar event" do
         location_name = "brighton"
         location_address = "cottonwood"
-        make_event(location_name: location_name, location_address: location_address)
+        make_event(location_name:, location_address:)
         load_month_view
 
         # Click calendar item to bring up event summary
@@ -549,10 +549,10 @@ describe "calendar2" do
         @course.calendar_events.create! title: "aprilfools", start_at: time, end_at: time + 5.minutes
         get "/calendar2?include_contexts=#{@course.asset_string}#view_name=month&view_start=2016-04-01"
         wait_for_ajaximations
-        expect(ff(".fc-title").count).to eql(1)
+        expect(ff(".fc-title").count).to be(1)
         f(".context-list-toggle-box.group_#{@student.asset_string}").click
         wait_for_ajaximations
-        expect(ff(".fc-title").count).to eql(1)
+        expect(ff(".fc-title").count).to be(1)
         expect(f(".fc-title")).to include_text("aprilfools") # should still load cached event
       end
     end

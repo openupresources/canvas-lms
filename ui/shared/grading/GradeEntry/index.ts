@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -17,7 +18,7 @@
  */
 
 import type GradeOverrideInfo from './GradeOverrideInfo'
-import type {GradeEntryMode, GradingScheme} from '../grading.d'
+import type {GradeEntryMode, GradeEntryOptions} from '../grading.d'
 
 export const EnterGradesAs = {
   GRADING_SCHEME: 'gradingScheme',
@@ -25,10 +26,6 @@ export const EnterGradesAs = {
   PERCENTAGE: 'percent',
   POINTS: 'points',
 } as const
-
-type GradeEntryOptions = {
-  gradingScheme: string | {data: GradingScheme[]}
-}
 
 export default class GradeEntry {
   options: GradeEntryOptions

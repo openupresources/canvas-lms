@@ -244,11 +244,28 @@ class OutcomeResultsController < ApplicationController
       json = outcome_results_json(@results)
     else
       @outcome_service_results.push(@results).flatten!
+      @outcome_service_results.select! { |outcome| params[:outcome_ids].include? outcome.learning_outcome_id.to_s } if params[:outcome_ids].present?
       @outcome_service_results = Api.paginate(@outcome_service_results, self, api_v1_course_outcome_results_url)
       json = outcome_results_json(@outcome_service_results)
     end
     json[:linked] = linked_include_collections if params[:include].present?
-    render json: json
+    render json:
+  end
+
+  # @API Set outcome ordering for LMGB
+  #
+  # Saves the ordering of outcomes in LMGB for a user
+  def outcome_order
+    outcome_position_map = JSON.parse(request.body.read)
+
+    # Validate outcomes belong to this course
+    course_outcome_ids = @outcomes.pluck(:id).to_set
+    outcome_position_map.each do |outcome|
+      reject! "Outcomes do not belong to Course" unless course_outcome_ids.include?(outcome["outcome_id"])
+    end
+
+    # Save Lmgb Outcome Ordering
+    UserLmgbOutcomeOrderings.set_lmgb_outcome_ordering(@context.root_account_id, @current_user.id, @context.id, outcome_position_map)
   end
 
   # @API Get outcome result rollups
@@ -361,13 +378,13 @@ class OutcomeResultsController < ApplicationController
     # if not, apply exclude_muted_associations to the assignment query
     @new_quiz_assignments =
       if context.grants_any_right?(@current_user, :manage_grades, :view_all_grades)
-        Assignment.active.where(context: context).quiz_lti
+        Assignment.active.where(context:).quiz_lti
       else
         # return if there is more than one user in users as this would indicate
         # user with insufficient permissions accessing the LMGB
         return if @users.length > 1
 
-        Assignment.active.where(context: context).quiz_lti.exclude_muted_associations_for_user(@users[0])
+        Assignment.active.where(context:).quiz_lti.exclude_muted_associations_for_user(@users[0])
       end
   end
 
@@ -457,10 +474,10 @@ class OutcomeResultsController < ApplicationController
     @results = @results.preload(:user)
     ActiveRecord::Associations.preload(@results, :learning_outcome)
     if @outcome_service_results.nil?
-      outcome_results_rollups(results: @results, users: @users, excludes: excludes, context: @context)
+      outcome_results_rollups(results: @results, users: @users, excludes:, context: @context)
     else
       @outcome_service_results.push(@results).flatten!
-      outcome_results_rollups(results: @outcome_service_results, users: @users, excludes: excludes, context: @context)
+      outcome_results_rollups(results: @outcome_service_results, users: @users, excludes:, context: @context)
     end
   end
 
@@ -558,7 +575,7 @@ class OutcomeResultsController < ApplicationController
     # (sorting by name for duplicate scores), then reorder users
     # from those rollups, then paginate those users, and finally
     # only include rollups for those users
-    missing_score_sort = params[:sort_order] == "desc" ? CanvasSort::First : CanvasSort::Last
+    missing_score_sort = (params[:sort_order] == "desc") ? CanvasSort::First : CanvasSort::Last
     rollups = user_rollups.sort_by do |r|
       score = r.scores.find { |s| s.outcome.id.to_s == params[:sort_outcome_id] }&.score
       [score || missing_score_sort, Canvas::ICU.collation_key(r.context.sortable_name)]
@@ -729,8 +746,19 @@ class OutcomeResultsController < ApplicationController
       reject! "can only include id's of outcomes in the outcome context" if @outcomes.count != outcome_ids.count
     else
       outcome_group_ids.each_slice(100) do |outcome_group_ids_slice|
-        @outcome_links += ContentTag.learning_outcome_links.active.where(associated_asset_id: outcome_group_ids_slice)
+        @outcome_links += ContentTag.learning_outcome_links.active
+                                    .where(associated_asset_id: outcome_group_ids_slice)
+                                    .joins("LEFT OUTER JOIN #{UserLmgbOutcomeOrderings.quoted_table_name} as u
+                                              ON u.learning_outcome_id = content_tags.content_id
+                                              AND u.user_id = #{@current_user.id}
+                                              AND u.course_id = #{@context.id}")
+                                    .select("#{ContentTag.quoted_table_name}.*, u.position")
       end
+
+      # Sort outcomes by lmgb_position
+      # If there is no lmgb_position for an outcome, then place it at the end
+      @outcome_links.sort_by! { |link| link[:position] || link[:id] }
+
       associations = [:learning_outcome_content]
       if Api.value_to_array(params[:include]).include? "outcome_paths"
         associations << { associated_asset: :learning_outcome_group }
@@ -745,7 +773,7 @@ class OutcomeResultsController < ApplicationController
   def build_outcome_paths
     @outcome_paths = @outcome_links.map do |link|
       parts = outcome_group_prefix(link.associated_asset).push({ name: link.learning_outcome_content.title })
-      { id: link.learning_outcome_content.id, parts: parts }
+      { id: link.learning_outcome_content.id, parts: }
     end
   end
 
@@ -769,7 +797,7 @@ class OutcomeResultsController < ApplicationController
       @users = apply_sort_order(@section.all_students).to_a
     end
     @users ||= users_for_outcome_context.to_a
-    @users.sort! { |a, b| a.id <=> b.id } unless params[:sort_by]
+    @users.sort_by!(&:id) unless params[:sort_by]
     # cache all users, since pagination in #user_rollups_json may remove some
     # when we need all users when calculating rating percents
     @all_users = @users

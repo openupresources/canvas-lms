@@ -91,8 +91,11 @@ describe OAuth2ProviderController do
     end
 
     it "passes pseudonym_session[unique_id] to login to populate username textbox" do
-      get :auth, params: { :client_id => key.id, :redirect_uri => Canvas::OAuth::Provider::OAUTH2_OOB_URI,
-                           "unique_id" => "test", :force_login => true, :response_type => "code" }
+      get :auth, params: { :client_id => key.id,
+                           :redirect_uri => Canvas::OAuth::Provider::OAUTH2_OOB_URI,
+                           "unique_id" => "test",
+                           :force_login => true,
+                           :response_type => "code" }
       expect(response).to redirect_to(login_url + "?force_login=true&pseudonym_session%5Bunique_id%5D=test")
     end
 
@@ -134,7 +137,7 @@ describe OAuth2ProviderController do
 
         redis = double("Redis")
         allow(redis).to receive(:setex)
-        allow(Canvas).to receive_messages(redis: redis)
+        allow(Canvas).to receive_messages(redis:)
       end
 
       it "redirects to the confirm url if the user has no token" do
@@ -204,7 +207,7 @@ describe OAuth2ProviderController do
 
         it "redirects to the redirect uri if the user already has remember-me token" do
           @user.access_tokens.create!({ developer_key: key, remember_access: true, scopes: ["/auth/userinfo"], purpose: nil })
-          get :auth, params: params
+          get(:auth, params:)
           expect(response).to be_redirect
           expect(response.location).to match(%r{https://example.com})
         end
@@ -212,13 +215,13 @@ describe OAuth2ProviderController do
         it "redirects to the redirect uri if the developer key is trusted" do
           key.trusted = true
           key.save!
-          get :auth, params: params
+          get(:auth, params:)
           expect(response).to be_redirect
           expect(response.location).to match(%r{https://example.com})
         end
 
         it 'redirects with "interaction_required" if the current session cannot be used without a prompt' do
-          get :auth, params: params
+          get(:auth, params:)
           expect(response).to be_redirect
           expect(response.location).to match(%r{https://example.com})
           redirect_query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
@@ -239,7 +242,7 @@ describe OAuth2ProviderController do
         end
 
         it 'redirects with "unauthorized_client" if binding for the account is set to "allow"' do
-          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account: account)
+          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account:)
           binding.update!(workflow_state: "allow")
           get :auth, params: { client_id: account_developer_key.id, redirect_uri: "https://example.com", response_type: "code", state: "value" }
           redirect_query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
@@ -248,7 +251,7 @@ describe OAuth2ProviderController do
         end
 
         it 'redirects with "unauthorized_client" if binding for the account is set to "off"' do
-          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account: account)
+          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account:)
           binding.update!(workflow_state: "off")
           get :auth, params: { client_id: account_developer_key.id, redirect_uri: "https://example.com", response_type: "code", state: "value" }
           redirect_query_params = Rack::Utils.parse_query(URI.parse(response.location).query)
@@ -257,7 +260,7 @@ describe OAuth2ProviderController do
         end
 
         it 'redirects to confirmation page when the binding for the account is set to "on"' do
-          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account: account)
+          binding = account_developer_key.developer_key_account_bindings.find_or_create_by(account:)
           binding.update!(workflow_state: "on")
           get :auth, params: { client_id: account_developer_key.id, redirect_uri: "https://example.com", response_type: "code" }
           expect(response.location).to eq "http://test.host/login/oauth2/confirm"
@@ -360,9 +363,9 @@ describe OAuth2ProviderController do
     let(:client_secret) { key.api_key }
     let(:base_params) do
       {
-        client_id: client_id,
-        client_secret: client_secret,
-        grant_type: grant_type,
+        client_id:,
+        client_secret:,
+        grant_type:,
         redirect_uri: "https://example.com"
       }
     end
@@ -414,7 +417,10 @@ describe OAuth2ProviderController do
           let(:client_secret) { other_key.api_key }
 
           it do
-            skip "not valid for this grant_type" if grant_type == "client_credentials"
+            if grant_type == "client_credentials" && !key.site_admin_service_auth?
+              skip "not valid for this grant_type"
+            end
+
             expect(subject).to have_http_status(:unauthorized)
           end
         end
@@ -423,7 +429,10 @@ describe OAuth2ProviderController do
           let(:client_secret) { nil }
 
           it do
-            skip "not valid for this grant_type" if grant_type == "client_credentials"
+            if grant_type == "client_credentials" && !key.site_admin_service_auth?
+              skip "not valid for this grant_type"
+            end
+
             expect(subject).to have_http_status(:unauthorized)
           end
         end
@@ -436,7 +445,7 @@ describe OAuth2ProviderController do
         it { is_expected.to have_http_status(:ok) }
 
         it "outputs the token json if everything checks out" do
-          json = JSON.parse(response.body)
+          json = response.parsed_body
           expect(json.keys.sort).to match_array(success_token_keys)
           expect(json["token_type"]).to eq "Bearer"
         end
@@ -478,7 +487,7 @@ describe OAuth2ProviderController do
         redis
       end
 
-      before { allow(Canvas).to receive_messages(redis: redis) }
+      before { allow(Canvas).to receive_messages(redis:) }
 
       it_behaves_like "common oauth2 token checks" do
         let(:success_params) { { code: valid_code } }
@@ -488,7 +497,7 @@ describe OAuth2ProviderController do
         let(:success_token_keys) { %w[access_token refresh_token user expires_in token_type canvas_region] }
       end
 
-      it "renders a 302 if a code is not provided for an authorization_code grant" do
+      it "renders a 400 if a code is not provided for an authorization_code grant" do
         post :token, params: base_params
 
         assert_status(400)
@@ -510,7 +519,7 @@ describe OAuth2ProviderController do
         expect(redis).to receive(:del).with(valid_code_redis_key).at_least(:once)
         post :token, params: base_params.merge(code: valid_code)
         expect(response).to be_successful
-        json = JSON.parse(response.body)
+        json = response.parsed_body
         expect(json.keys.sort).to match_array %w[access_token refresh_token user expires_in token_type canvas_region]
         expect(json.dig("user", "effective_locale")).to eq "zh-Hant"
       end
@@ -535,7 +544,7 @@ describe OAuth2ProviderController do
       let(:refresh_token) { old_token.plaintext_refresh_token }
 
       it_behaves_like "common oauth2 token checks" do
-        let(:success_params) { { refresh_token: refresh_token } }
+        let(:success_params) { { refresh_token: } }
         let(:success_token_keys) { %w[access_token user expires_in token_type canvas_region] }
       end
 
@@ -545,28 +554,107 @@ describe OAuth2ProviderController do
       end
 
       it "generates a new access_token" do
-        post :token, params: base_params.merge(refresh_token: refresh_token)
-        json = JSON.parse(response.body)
+        post :token, params: base_params.merge(refresh_token:)
+        json = response.parsed_body
         expect(json["access_token"]).to_not eq old_token.full_token
       end
 
       it "errors with a mismatched client id and refresh_token" do
-        post :token, params: base_params.merge(client_id: other_key.id, client_secret: other_key.api_key, refresh_token: refresh_token)
+        post :token, params: base_params.merge(client_id: other_key.id, client_secret: other_key.api_key, refresh_token:)
         assert_status(400)
         expect(response.body).to include "invalid_grant"
       end
 
       it "is able to regenerate access_token multiple times" do
-        post :token, params: base_params.merge(refresh_token: refresh_token)
+        post :token, params: base_params.merge(refresh_token:)
         expect(response).to be_successful
-        json = JSON.parse(response.body)
+        json = response.parsed_body
         expect(json["access_token"]).to_not eq old_token.full_token
 
         access_token = json["access_token"]
-        post :token, params: base_params.merge(refresh_token: refresh_token)
+        post :token, params: base_params.merge(refresh_token:)
         expect(response).to be_successful
-        json = JSON.parse(response.body)
+        json = response.parsed_body
         expect(json["access_token"]).to_not eq access_token
+      end
+    end
+
+    context "with client_credentials grant type and service key" do
+      include_context "InstAccess setup"
+
+      let(:grant_type) { "client_credentials" }
+      let(:service_user) { user_model }
+
+      before do
+        Account.site_admin.enable_feature!(:site_admin_service_auth)
+        key.update!(service_user:, internal_service: true)
+      end
+
+      context "with valid parameters" do
+        before { post :token, params: base_params }
+
+        it { is_expected.to be_successful }
+
+        it "returns a token for the service user" do
+          token = AuthenticationMethods::InstAccessToken.parse(
+            subject.parsed_body["access_token"]
+          )
+
+          expect(token.user_uuid).to eq service_user.uuid
+        end
+      end
+
+      it_behaves_like "common oauth2 token checks" do
+        let(:success_params) { { grant_type: } }
+        let(:success_token_keys) { %w[access_token token_type expires_in] }
+
+        let(:success_setup) { key.update!(service_user:) }
+        let(:before_post) { key.update!(service_user:) }
+      end
+
+      context "when the service user is not present" do
+        before do
+          key.update!(service_user: nil)
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_bad_request }
+      end
+
+      context "whent the service user is not active" do
+        before do
+          service_user.destroy!
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_bad_request }
+
+        it "includes the error and description in the response" do
+          expect(subject.parsed_body).to eq(
+            {
+              "error" => "invalid_request",
+              "error_description" => "No active service"
+            }
+          )
+        end
+      end
+
+      context "when the developer key is not active" do
+        before do
+          key.destroy!
+          post :token, params: base_params
+        end
+
+        it { is_expected.to be_unauthorized }
+
+        it "includes the error and description in the response" do
+          expect(subject.parsed_body).to eq(
+            {
+              "error" => "invalid_client",
+              "error_description" => "unknown client"
+            }
+          )
+        end
       end
     end
 
@@ -580,9 +668,9 @@ describe OAuth2ProviderController do
         {
           iss: "someiss",
           sub: client_id,
-          aud: aud,
-          iat: iat,
-          exp: exp,
+          aud:,
+          iat:,
+          exp:,
           jti: SecureRandom.uuid
         }
       end
@@ -681,7 +769,7 @@ describe OAuth2ProviderController do
           Canvas::Security::JwtValidator::REQUIRED_ASSERTIONS.each do |assertion|
             it "returns 400 when #{assertion} missing" do
               jwt.delete assertion.to_sym
-              expected = assertion == "sub" ? :unauthorized : :bad_request
+              expected = (assertion == "sub") ? :unauthorized : :bad_request
               expect(subject).to have_http_status expected
             end
           end
@@ -703,8 +791,8 @@ describe OAuth2ProviderController do
         context "with symmetric client identification" do
           let(:client_credentials_params) do
             {
-              client_id: client_id,
-              client_secret: client_secret,
+              client_id:,
+              client_secret:,
               redirect_uri: "https://example.com",
               scope: TokenScopes::USER_INFO_SCOPE[:scope]
             }
@@ -745,7 +833,7 @@ describe OAuth2ProviderController do
     it "saves the requested scopes with the code" do
       scopes = "userinfo"
       session_hash[:oauth2][:scopes] = scopes
-      expect(Canvas::OAuth::Token).to receive(:generate_code_for).with(user.global_id, user.global_id, key.id, { scopes: scopes, remember_access: nil, purpose: nil }).and_return("code")
+      expect(Canvas::OAuth::Token).to receive(:generate_code_for).with(user.global_id, user.global_id, key.id, { scopes:, remember_access: nil, purpose: nil }).and_return("code")
       oauth_accept
     end
 
@@ -807,7 +895,7 @@ describe OAuth2ProviderController do
 
     it "deletes the token" do
       delete :destroy, params: { access_token: token.full_token }
-      expect(JSON.parse(response.body)).to eq({})
+      expect(response.parsed_body).to eq({})
       expect(AccessToken.not_deleted.exists?(token.id)).to be(false)
     end
 
@@ -828,13 +916,13 @@ describe OAuth2ProviderController do
       let(:session) { { login_aac: ap.global_id } }
 
       it "includes forward URL when possible" do
-        delete :destroy, params: { access_token: token.full_token, expire_sessions: true }, session: session
-        expect(JSON.parse(response.body)).to eq({ "forward_url" => "somewhere" })
+        delete(:destroy, params: { access_token: token.full_token, expire_sessions: true }, session:)
+        expect(response.parsed_body).to eq({ "forward_url" => "somewhere" })
       end
 
       it "does not include forward URL when not ending sessions" do
-        delete :destroy, params: { access_token: token.full_token }, session: session
-        expect(JSON.parse(response.body)).to eq({})
+        delete(:destroy, params: { access_token: token.full_token }, session:)
+        expect(response.parsed_body).to eq({})
       end
     end
   end

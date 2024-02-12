@@ -38,11 +38,13 @@ class MissingPolicyApplicator
     Submission.active
               .joins(assignment: { course: [:late_policy, :enrollments] })
               .where("enrollments.user_id = submissions.user_id")
-              .eager_load(:grading_period, assignment: [:post_policy, { course: [:late_policy, :default_post_policy] }])
+              .preload(:grading_period, assignment: :post_policy, course: [:late_policy, :default_post_policy])
               .merge(Assignment.published)
               .merge(Enrollment.all_active_or_pending)
               .missing
-              .where(score: nil, grade: nil, cached_due_date: 1.day.ago(now)..now,
+              .where(score: nil,
+                     grade: nil,
+                     cached_due_date: 1.day.ago(now)..now,
                      late_policies: { missing_submission_deduction_enabled: true })
   end
 
@@ -53,11 +55,12 @@ class MissingPolicyApplicator
     now = Time.zone.now
 
     GuardRail.activate(:primary) do
+      plucked_submissions = submissions.pluck(:user_id, :id, :course_id)
       submissions = Submission.active.where(id: submissions)
 
       submissions.update_all(
-        score: score,
-        grade: grade,
+        score:,
+        grade:,
         graded_at: now,
         grader_id: nil,
         posted_at: assignment.post_manually? ? nil : now,
@@ -72,7 +75,12 @@ class MissingPolicyApplicator
         Canvas::LiveEvents.delay_if_production.submissions_bulk_updated(submissions)
       end
 
-      assignment.course.recompute_student_scores(submissions.map(&:user_id).uniq)
+      if Account.site_admin.feature_enabled?(:fix_missing_policy_applicator_gradebook_history)
+        Auditors::GradeChange.delay_if_production.bulk_record_submission_events(submissions.reload)
+      end
+      unique_users = submissions.map(&:user_id).uniq
+      Auditors::GradeChange.delay_if_production(strand: "CreateParticipationsForMissingPolicy:#{assignment.root_account.global_id}").create_content_participations(plucked_submissions, assignment, unique_users)
+      assignment.course.recompute_student_scores(unique_users)
     end
   end
 end

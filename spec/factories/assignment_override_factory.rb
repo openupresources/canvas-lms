@@ -21,7 +21,7 @@
 module Factories
   def assignment_override_model(opts = {})
     override_for = opts.delete(:set)
-    assignment = opts.delete(:assignment) || opts.delete(:quiz) || assignment_model(opts)
+    assignment = opts.delete(:assignment) || opts.delete(:quiz) || opts[:context_module] || assignment_model(opts)
     attrs = assignment_override_valid_attributes.merge(opts)
     attrs[:due_at_overridden] = opts.key?(:due_at)
     attrs[:lock_at_overridden] = opts.key?(:lock_at)
@@ -65,7 +65,7 @@ module Factories
                                              due_at: 2.days.from_now,
                                              due_at_overridden: true,
                                              set_type: "Group",
-                                             group: group,
+                                             group:,
                                              title: "group override",
                                              workflow_state: "active"
                                            })

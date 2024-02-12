@@ -44,7 +44,7 @@ describe "teacher k5 dashboard" do
   end
 
   context "homeroom dashboard standard" do
-    it "shows homeroom enabled for course", ignore_js_errors: true do
+    it "shows homeroom enabled for course", :ignore_js_errors do
       get "/courses/#{@homeroom_course.id}/settings"
 
       expect(is_checked(enable_homeroom_checkbox_selector)).to be_truthy
@@ -53,7 +53,7 @@ describe "teacher k5 dashboard" do
     it "provides the homeroom dashboard tabs on dashboard" do
       get "/"
 
-      expect(retrieve_welcome_text).to match(/Welcome,/)
+      expect(welcome_title).to be_present
       expect(homeroom_tab).to be_displayed
       expect(schedule_tab).to be_displayed
       expect(grades_tab).to be_displayed
@@ -82,8 +82,8 @@ describe "teacher k5 dashboard" do
     it "does not show homeroom course on dashboard" do
       get "/"
 
-      expect(element_exists?(course_card_selector(@course_name))).to eq(false)
-      expect(element_exists?(course_card_selector(@subject_course_title))).to eq(true)
+      expect(element_exists?(course_card_selector(@course_name))).to be(false)
+      expect(element_exists?(course_card_selector(@subject_course_title))).to be(true)
     end
 
     it "shows Important Info on the course navigation list" do
@@ -275,8 +275,7 @@ describe "teacher k5 dashboard" do
       expect(k5_app_buttons[0].text).to eq lti_resource_name
     end
 
-    it "shows course modal to choose which LTI resource context when button clicked",
-       ignore_js_errors: true do
+    it "shows course modal to choose which LTI resource context when button clicked", :ignore_js_errors do
       second_course_title = "Second Course"
       course_with_teacher(
         active_course: 1,
@@ -292,7 +291,7 @@ describe "teacher k5 dashboard" do
       expect(course_list.count).to eq(2)
     end
 
-    it "shows the LTI resource scoped to the course", ignore_js_errors: true do
+    it "shows the LTI resource scoped to the course", :ignore_js_errors do
       create_lti_resource("New Commons")
 
       get "/#resources"
@@ -361,7 +360,7 @@ describe "teacher k5 dashboard" do
     end
 
     it "creates course with account name and course name",
-       ignore_js_errors: true,
+       :ignore_js_errors,
        custom_timeout: 30 do
       @sub_account = @account.sub_accounts.create!(name: "test")
       course_with_teacher(
@@ -385,7 +384,7 @@ describe "teacher k5 dashboard" do
     end
 
     it "allows for sync of course to selected homeroom",
-       ignore_js_errors: true,
+       :ignore_js_errors,
        custom_timeout: 30 do
       second_homeroom_course_name = "Second homeroom course"
 

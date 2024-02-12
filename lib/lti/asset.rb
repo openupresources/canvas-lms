@@ -25,12 +25,12 @@ module Lti
       shard = asset.shard
       shard.activate do
         lti_context_id = context_id_for(asset, shard)
-        set_asset_context_id(asset, lti_context_id, context: context)
+        set_asset_context_id(asset, lti_context_id, context:)
       end
     end
 
     def self.set_asset_context_id(asset, lti_context_id, context: nil)
-      if asset.respond_to?("lti_context_id")
+      if asset.respond_to?(:lti_context_id)
         global_context_id = global_context_id_for(asset)
         if asset.new_record?
           asset.lti_context_id = global_context_id
@@ -40,7 +40,21 @@ module Lti
           GuardRail.activate(:primary) { asset.reload }
           unless asset.lti_context_id
             asset.lti_context_id = global_context_id
-            GuardRail.activate(:primary) { asset.save! }
+            GuardRail.activate(:primary) do
+              asset.save!
+            rescue ActiveRecord::RecordNotUnique => e
+              raise e unless /index_.+_on_lti_context_id/.match?(e.message)
+
+              conflicting_asset = asset.class.where(lti_context_id: asset.lti_context_id).first
+              raise e unless conflicting_asset.present?
+
+              if conflicting_asset.workflow_state == "deleted" && conflicting_asset.canonical?
+                conflicting_asset.update_attribute(:lti_context_id, nil)
+              else
+                asset.lti_context_id = SecureRandom.uuid
+              end
+              retry
+            end
           end
           lti_context_id = asset.lti_context_id
         end
@@ -56,7 +70,7 @@ module Lti
               id.context_id == context.id && id.context_type == context.class_name
             end&.user_lti_context_id
           else
-            asset.past_lti_ids.shard(context.shard).where(context: context).pluck(:user_lti_context_id).first
+            asset.past_lti_ids.shard(context.shard).where(context:).pluck(:user_lti_context_id).first
           end
         end
       end

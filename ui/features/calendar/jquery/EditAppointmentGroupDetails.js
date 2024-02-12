@@ -17,20 +17,21 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import htmlEscape from 'html-escape'
+import _, {some} from 'lodash'
+import htmlEscape from '@instructure/html-escape'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 import TimeBlockList from './TimeBlockList'
 import editAppointmentGroupTemplate from '../jst/editAppointmentGroup.handlebars'
 import genericSelectTemplate from '../jst/genericSelect.handlebars'
 import ContextSelector from './ContextSelector'
-import preventDefault from 'prevent-default'
+import preventDefault from '@canvas/util/preventDefault'
 import {publish as jqueryPublish} from 'jquery-tinypubsub'
 import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/jquery/jquery.disableWhileLoading'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
+import {CommonEventShowError} from '@canvas/calendar/jquery/CommonEvent/CommonEvent'
 
 const I18n = useI18nScope('EditAppointmentGroupDetails')
 
@@ -46,6 +47,7 @@ export default class EditAppointmentGroupDetails {
       use_group_signup: this.apptGroup.participant_type === 'Group',
       ...this.apptGroup,
     }
+    this.allowObserverOption = false
 
     $(selector).html(
       editAppointmentGroupTemplate({
@@ -151,6 +153,7 @@ export default class EditAppointmentGroupDetails {
       const checked = !!jsEvent.target.checked
       this.form.find('.per_appointment_groups_label').toggle(checked)
       this.form.find('.per_appointment_users_label').toggle(!checked)
+      this.toggleObserverSignupVisibility()
       return this.form.find('.group-signup').toggle(checked)
     })
     this.form.find('.group-signup-checkbox').change()
@@ -210,7 +213,7 @@ export default class EditAppointmentGroupDetails {
     const slotLimit = parseInt(input.val(), 10)
     return this.helpIconShowIf(
       checkbox,
-      _.some(this.apptGroup.appointments, a => a.child_events_count > slotLimit)
+      some(this.apptGroup.appointments, a => a.child_events_count > slotLimit)
     )
   }
 
@@ -227,7 +230,7 @@ export default class EditAppointmentGroupDetails {
       })
     return this.helpIconShowIf(
       checkbox,
-      _.some(apptCounts, (count, _userId) => count > apptLimit)
+      some(apptCounts, (count, _userId) => count > apptLimit)
     )
   }
 
@@ -327,6 +330,10 @@ export default class EditAppointmentGroupDetails {
     params['appointment_group[participant_visibility]'] =
       data.participant_visibility === '1' ? 'protected' : 'private'
 
+    if (this.allowObserverOption) {
+      params['appointment_group[allow_observer_signup]'] = data.allow_observer_signup
+    }
+
     // get the context/section info from @contextSelector instead
     delete data['context_codes[]']
     delete data['sections[]']
@@ -362,7 +369,7 @@ export default class EditAppointmentGroupDetails {
       })
       this.closeCB(true)
     }
-    const onError = () => {}
+    const onError = CommonEventShowError
 
     const method = this.editing() ? 'PUT' : 'POST'
 
@@ -420,6 +427,19 @@ export default class EditAppointmentGroupDetails {
     } else {
       this.disableGroups()
     }
+
+    this.toggleObserverSignupVisibility()
+  }
+
+  toggleObserverSignupVisibility = () => {
+    const contextCodes = this.contextSelector?.selectedContexts() || []
+    const groupSignupEnabled = this.form.find('.group-signup-checkbox').is(':checked')
+    const showObserverSignupCheckbox =
+      !groupSignupEnabled &&
+      contextCodes.length > 0 &&
+      contextCodes.every(c => this.contextsHash[c].allow_observers_in_appointment_groups)
+    this.allowObserverOption = showObserverSignupCheckbox
+    this.form.find('#observer-signup-option').toggle(showObserverSignupCheckbox)
   }
 
   disableGroups() {

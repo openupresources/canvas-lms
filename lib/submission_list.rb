@@ -18,9 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "hashery/dictionary"
-
-# Contains a dictionary of arrays with hashes in them. This is so that
+# Contains a hash of arrays with hashes in them. This is so that
 # we can get all the submissions for a course grouped by date and
 # ordered by date, person, then assignment.  Since working with this is
 # a loop in a loop in a loop, it gets a little awkward for controllers
@@ -53,27 +51,56 @@ require "hashery/dictionary"
 # simply_versioned.
 class SubmissionList
   VALID_KEYS = %i[
-    assignment_id assignment_name attachment_id attachment_ids
-    body course_id created_at current_grade current_graded_at
-    current_grader grade_matches_current_submission graded_at
-    graded_on grader grader_id group_id id new_grade
-    new_graded_at new_grader previous_grade previous_graded_at
-    previous_grader processed published_grade
-    published_score safe_grader_id score student_entered_score
-    student_user_id submission_id student_name submission_type
-    updated_at url user_id workflow_state score_before_regrade
+    assignment_id
+    assignment_name
+    attachment_id
+    attachment_ids
+    body
+    course_id
+    created_at
+    current_grade
+    current_graded_at
+    current_grader
+    grade_matches_current_submission
+    graded_at
+    graded_on
+    grader
+    grader_id
+    group_id
+    id
+    new_grade
+    new_graded_at
+    new_grader
+    previous_grade
+    previous_graded_at
+    previous_grader
+    processed
+    published_grade
+    published_score
+    safe_grader_id
+    score
+    student_entered_score
+    student_user_id
+    submission_id
+    student_name
+    submission_type
+    updated_at
+    url
+    user_id
+    workflow_state
+    score_before_regrade
   ].freeze
 
   class << self
     # Shortcut for SubmissionList.each(course) { ... }
-    def each(course, &block)
+    def each(course, &)
       sl = new(course)
-      sl.each(&block)
+      sl.each(&)
     end
 
-    def each_day(course, &block)
+    def each_day(course, &)
       sl = new(course)
-      sl.each_day(&block)
+      sl.each_day(&)
     end
 
     def days(course)
@@ -103,13 +130,13 @@ class SubmissionList
   end
 
   # An iterator on a sorted and filtered list of submission versions.
-  def each(&block)
-    submission_entries.each(&block)
+  def each(&)
+    submission_entries.each(&)
   end
 
   # An iterator on the day only, not each submission
-  def each_day(&block)
-    list.each(&block)
+  def each_day(&)
+    list.each(&)
   end
 
   # An array of days with an array of grader open structs for that day and course.
@@ -192,7 +219,7 @@ class SubmissionList
   # all the meta data we need and no banned keys included.
   def process
     @list = submission_entries.sort_by { |a| [a[:graded_at] ? -a[:graded_at].to_f : CanvasSort::Last, a[:safe_grader_id], a[:assignment_id]] }
-                              .each_with_object(Hashery::Dictionary.new) do |se, d|
+                              .each_with_object({}) do |se, d|
       d[se[:graded_on]] ||= []
       d[se[:graded_on]] << se
     end
@@ -208,7 +235,7 @@ class SubmissionList
 
       hash[submission.id] = OpenObject.new(grade: translate_grade(submission),
                                            graded_at: submission.graded_at,
-                                           grader: grader)
+                                           grader:)
     end
   end
 

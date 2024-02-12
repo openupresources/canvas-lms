@@ -61,6 +61,7 @@ class Group < ActiveRecord::Base
   has_many :messages, as: :context, inverse_of: :context, dependent: :destroy
   belongs_to :wiki
   has_many :wiki_pages, as: :context, inverse_of: :context
+  has_many :wiki_page_lookups, as: :context, inverse_of: :context
   has_many :web_conferences, as: :context, inverse_of: :context, dependent: :destroy
   has_many :collaborations, -> { order(Arel.sql("collaborations.title, collaborations.created_at")) }, as: :context, inverse_of: :context, dependent: :destroy
   has_many :media_objects, as: :context, inverse_of: :context
@@ -136,13 +137,13 @@ class Group < ActiveRecord::Base
   end
 
   def all_real_students
-    return context.all_real_students.where(users: { id: group_memberships.select(:user_id) }) if context.respond_to? "all_real_students"
+    return context.all_real_students.where(users: { id: group_memberships.select(:user_id) }) if context.respond_to? :all_real_students
 
     users
   end
 
   def all_real_student_enrollments
-    return context.all_real_student_enrollments.where(user_id: group_memberships.select(:user_id)) if context.respond_to? "all_real_student_enrollments"
+    return context.all_real_student_enrollments.where(user_id: group_memberships.select(:user_id)) if context.respond_to? :all_real_student_enrollments
 
     group_memberships
   end
@@ -238,7 +239,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_member?(user)
-    return nil unless user.present?
+    return false unless user.present?
 
     if group_memberships.loaded?
       group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id }
@@ -248,7 +249,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_moderator?(user)
-    return nil unless user.present?
+    return false unless user.present?
     if group_memberships.loaded?
       return group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id && gm.moderator }
     end
@@ -346,7 +347,7 @@ class Group < ActiveRecord::Base
   def add_user(user, new_record_state = nil, moderator = nil)
     return nil unless user
 
-    attrs = { user: user, moderator: !!moderator }
+    attrs = { user:, moderator: !!moderator }
     new_record_state ||= { "invitation_only" => "invited",
                            "parent_context_request" => "requested",
                            "parent_context_auto_join" => "accepted" }[join_level]
@@ -382,7 +383,7 @@ class Group < ActiveRecord::Base
 
   def broadcast_data
     if context_type == "Course"
-      { course_id: context_id, root_account_id: root_account_id }
+      { course_id: context_id, root_account_id: }
     else
       {}
     end
@@ -427,7 +428,7 @@ class Group < ActiveRecord::Base
       moderator: false,
       created_at: current_time,
       updated_at: current_time,
-      root_account_id: root_account_id
+      root_account_id:
     }.merge(options)
     GroupMembership.bulk_insert(users.map do |user|
       options.merge({ user_id: user.id, uuid: CanvasSlug.generate_securish_uuid })
@@ -569,15 +570,34 @@ class Group < ActiveRecord::Base
           context.grants_right?(user, session, :manage_groups)
       end
       can %i[
-        create create_collaborations delete manage
-        manage_admin_users allow_course_admin_actions manage_calendar
-        manage_content manage_course_content_add
-        manage_course_content_edit manage_course_content_delete
-        manage_files_add manage_files_edit manage_files_delete
-        manage_students manage_wiki_create manage_wiki_delete
-        manage_wiki_update moderate_forum post_to_forum
-        create_forum read read_forum read_announcements
-        read_roster send_messages send_messages_all update
+        create
+        create_collaborations
+        delete
+        manage
+        manage_admin_users
+        allow_course_admin_actions
+        manage_calendar
+        manage_content
+        manage_course_content_add
+        manage_course_content_edit
+        manage_course_content_delete
+        manage_files_add
+        manage_files_edit
+        manage_files_delete
+        manage_students
+        manage_wiki_create
+        manage_wiki_delete
+        manage_wiki_update
+        moderate_forum
+        post_to_forum
+        create_forum
+        read
+        read_forum
+        read_announcements
+        read_roster
+        send_messages
+        send_messages_all
+        update
         view_unpublished_items
         read_files
       ]
@@ -596,15 +616,33 @@ class Group < ActiveRecord::Base
           context.grants_right?(user, session, :manage_groups_manage)
       end
       can %i[
-        read update create_collaborations manage
-        manage_admin_users allow_course_admin_actions manage_calendar
-        manage_content manage_course_content_add
-        manage_course_content_edit manage_course_content_delete
-        manage_files_add manage_files_edit manage_files_delete
-        manage_students manage_wiki_create manage_wiki_delete
-        manage_wiki_update moderate_forum post_to_forum
-        create_forum read_forum read_announcements read_roster
-        send_messages send_messages_all view_unpublished_items
+        read
+        update
+        create_collaborations
+        manage
+        manage_admin_users
+        allow_course_admin_actions
+        manage_calendar
+        manage_content
+        manage_course_content_add
+        manage_course_content_edit
+        manage_course_content_delete
+        manage_files_add
+        manage_files_edit
+        manage_files_delete
+        manage_students
+        manage_wiki_create
+        manage_wiki_delete
+        manage_wiki_update
+        moderate_forum
+        post_to_forum
+        create_forum
+        read_forum
+        read_announcements
+        read_roster
+        send_messages
+        send_messages_all
+        view_unpublished_items
         read_files
       ]
 

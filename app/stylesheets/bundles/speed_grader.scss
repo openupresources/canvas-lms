@@ -50,7 +50,6 @@ $gradebook_header_height: 3.5em;
 #gradebook_header {
   background-color: var(--ic-brand-global-nav-bgd);
   color: var(--ic-brand-global-nav-menu-item__text-color);
-
   padding: 0.375em 0.75em;
   @include fontSize(11px);
   min-width: 960px;
@@ -412,16 +411,13 @@ $icon-size: 1.4rem;
     display: none;
   }
 
-  .submission-status-pill {
-    display: none;
-  }
-
-  .submission-late-pill,
-  .submission-missing-pill,
+  .submission-status-pill,
   .submission-excused-pill,
-  .submission-extended-pill {
-    display: inline;
+  [class*='submission-custom-grade-status-pill-'] {
     font-size: 1rem;
+    display: flex;
+    justify-content: flex-end;
+    flex: 1;
     padding-left: 10px;
     padding-right: 10px;
   }
@@ -704,7 +700,7 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
     padding: $ic-sp*0.5 0;
   }
   #submission_attachment_viewed_at_container {
-    margin-top: 40px;
+    margin-top: 58px;
   }
   .submission_attachment_viewed_at {
     display: inline;
@@ -985,4 +981,15 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
 
 figure {
   margin: 0;
+}
+
+// even though we show no headers in speed grader, we want the
+// masquerade bar to always show if someone is masquerading
+// (#masquerade_bar is set to 'display: none !important' for
+// body.no-headers at the top level _layout.scss, and speed grader
+// uses body.no-headers to hide the standard canvas headers/footer)
+body.no-headers {
+  #masquerade_bar {
+    display: flex !important
+  }
 }

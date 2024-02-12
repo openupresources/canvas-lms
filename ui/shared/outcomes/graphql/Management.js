@@ -17,7 +17,7 @@
  */
 
 import axios from '@canvas/axios'
-import pluralize from 'str-pluralize'
+import pluralize from '@canvas/util/stringPluralize'
 import {gql} from '@canvas/apollo'
 
 export const groupFields = `
@@ -169,6 +169,7 @@ export const SEARCH_GROUP_OUTCOMES = gql`
                   points
                 }
                 canEdit
+                canArchive(contextId: $outcomesContextId, contextType: $outcomesContextType)
                 contextType
                 contextId
                 friendlyDescription(
@@ -397,6 +398,11 @@ export const SEARCH_OUTCOME_ALIGNMENTS = gql`
                   moduleName
                   moduleUrl
                   moduleWorkflowState
+                  quizItems {
+                    _id
+                    title
+                  }
+                  alignmentsCount
                 }
               }
             }

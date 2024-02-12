@@ -28,16 +28,69 @@ describe "reply attachment" do
     @topic_title = "discussion topic"
     course_with_teacher_logged_in
     @topic = create_discussion(@topic_title, "threaded")
-    @student = student_in_course.user
+    @student = student_in_course(active_all: true).user
   end
 
   before do
     stub_rcs_config
   end
 
-  context "when react_discussions_post ff is OFF" do
+  # ignoring unrelated rce errors
+  context "when react_discussions_post ff is OFF", :ignore_js_errors do
     before :once do
       Account.site_admin.disable_feature! :react_discussions_post
+    end
+
+    it "prevents XSS by not loading rubric urls in user content" do
+      assignment = @course.assignments.create!(
+        name: "Assignment",
+        submission_types: ["online_text_entry"],
+        points_possible: 20
+      )
+      dt = @course.discussion_topics.create!(
+        title: "Graded Discussion",
+        discussion_type: "threaded",
+        posted_at: "2017-07-09 16:32:34",
+        user: @teacher,
+        message: '{{<div id="rubric_dialog"><div class="select_rubric_link">Click me!</div><a class="select_rubric_url" href="https://google.com"></a></div>}}',
+        assignment:
+      )
+      get "/courses/#{@course.id}/discussion_topics/#{dt.id}"
+
+      f(".admin-links").click
+      f(".rubric_dialog_trigger").click
+      f(".ui-dialog-titlebar-close").click
+      f(".select_rubric_link").click
+      browser_logs = driver.logs.get(:browser)
+      xss_requests = browser_logs.select { |e| e&.message&.include?("Failed to load resource: net::ERR_NAME_NOT_RESOLVED") }
+
+      expect(xss_requests.length).to eq 0
+    end
+
+    it "searches for and adds a rubric" do
+      assignment = @course.assignments.create!(
+        name: "Assignment",
+        submission_types: ["online_text_entry"],
+        points_possible: 20
+      )
+      dt = @course.discussion_topics.create!(
+        title: "Graded Discussion",
+        discussion_type: "threaded",
+        posted_at: "2017-07-09 16:32:34",
+        user: @teacher,
+        assignment:
+      )
+      rubric = rubric_model({ context: @course })
+      rubric.associate_with(assignment, @course, purpose: "grading")
+
+      get "/courses/#{@course.id}/discussion_topics/#{dt.id}"
+
+      f(".admin-links").click
+      f(".rubric_dialog_trigger").click
+      fj(".find_rubric_link:visible").click
+      fj(".select_rubric_link:visible").click
+
+      expect(f(".rubric_title").text).to eq rubric.title
     end
 
     it "allows reply after cancel" do
@@ -49,7 +102,7 @@ describe "reply attachment" do
       wait_for_ajaximations
       begin
         tinymce = f(".tox-tinymce")
-        expect(tinymce.enabled?).to eq true
+        expect(tinymce.enabled?).to be true
       rescue Selenium::WebDriver::Error::NoSuchElementError
         expect("tinymce not loaded").to eq "loaded"
       end
@@ -91,7 +144,7 @@ describe "reply attachment" do
     end
   end
 
-  context "when react_discussions_post ff is ON" do
+  context "when react_discussions_post ff is ON", :ignore_js_errors do
     before :once do
       Account.site_admin.enable_feature! :react_discussions_post
     end
@@ -109,6 +162,69 @@ describe "reply attachment" do
       wait_for_ajaximations
     end
 
+    it "prevents XSS by not loading rubric urls in user content" do
+      assignment = @course.assignments.create!(
+        name: "Assignment",
+        submission_types: ["online_text_entry"],
+        points_possible: 20
+      )
+      dt = @course.discussion_topics.create!(
+        title: "Graded Discussion",
+        discussion_type: "threaded",
+        posted_at: "2017-07-09 16:32:34",
+        user: @teacher,
+        message: '{{<div id="rubric_dialog"><div class="select_rubric_link">Click me!</div><a class="select_rubric_url" href="https://google.com"></a></div>}}',
+        assignment:
+      )
+      get "/courses/#{@course.id}/discussion_topics/#{dt.id}"
+
+      f("button[data-testid='discussion-post-menu-trigger']").click
+      fj("span[role='menuitem']:contains('Add Rubric')").click
+      f(".ui-dialog-titlebar-close").click
+      f(".select_rubric_link").click
+      browser_logs = driver.logs.get(:browser)
+      xss_requests = browser_logs.select { |e| e&.message&.include?("Failed to load resource: net::ERR_NAME_NOT_RESOLVED") }
+
+      expect(xss_requests.length).to eq 0
+    end
+
+    it "searches for and adds a rubric" do
+      assignment = @course.assignments.create!(
+        name: "Assignment",
+        submission_types: ["online_text_entry"],
+        points_possible: 20
+      )
+      dt = @course.discussion_topics.create!(
+        title: "Graded Discussion",
+        discussion_type: "threaded",
+        posted_at: "2017-07-09 16:32:34",
+        user: @teacher,
+        assignment:
+      )
+      rubric = rubric_model({ context: @course })
+      rubric.associate_with(assignment, @course, purpose: "grading")
+
+      get "/courses/#{@course.id}/discussion_topics/#{dt.id}"
+
+      f("button[data-testid='discussion-post-menu-trigger']").click
+      fj("span[role='menuitem']:contains('Show Rubric')").click
+      fj(".find_rubric_link:visible").click
+      fj(".select_rubric_link:visible").click
+
+      expect(f(".rubric_title").text).to eq rubric.title
+    end
+
+    it "can add a mention from the mentions menu" do
+      Discussion.visit(@course, @topic)
+      f("button[data-testid='discussion-topic-reply']").click
+      wait_for_ajaximations
+      type_in_tiny "textarea", "@"
+      ff("[data-testid='mention-dropdown-item']")[0].click
+      f("button[data-testid='DiscussionEdit-submit'").click
+      wait_for_ajaximations
+      expect(f(".mceNonEditable.mention")).to be_displayed
+    end
+
     it "replies to the discussion with attachment" do
       file_attachment = "graded.png"
       entry_text = "new entry"
@@ -116,10 +232,66 @@ describe "reply attachment" do
 
       add_a_reply_react(entry_text, file_attachment)
       entry = DiscussionEntry.last
+      expect(entry.attachment.folder.full_name).to include("/unfiled")
 
       attachment_link = fj("a:contains('graded')")
       expect(attachment_link).to be_truthy
       expect(attachment_link.attribute("href")).to include("/files/#{entry.attachment.id}")
+    end
+
+    it "respects quota limits when replying to the discussion with attachment" do
+      Setting.set("user_default_quota", -1)
+      file_attachment = "graded.png"
+      entry_text = "new entry"
+
+      user_session(@student)
+      Discussion.visit(@course, @topic)
+
+      add_a_reply_react(entry_text, file_attachment)
+      entry = DiscussionEntry.last
+
+      expect(entry.attachment).to be_falsey
+      expect(f("body")).not_to contain_jqcss("a:contains('graded')")
+    end
+
+    it "replies to a graded discussion with attachment regardless of quota limit" do
+      discussion_assignment = @course.assignments.create!(name: "graded discussion")
+      graded_discussion_topic = @course.discussion_topics.create!(title: "graded discussion", assignment: discussion_assignment)
+
+      Setting.set("user_default_quota", -1)
+      file_attachment = "graded.png"
+      entry_text = "new entry"
+
+      user_session(@student)
+      Discussion.visit(@course, graded_discussion_topic)
+
+      add_a_reply_react(entry_text, file_attachment)
+      entry = DiscussionEntry.last
+      expect(entry.attachment.folder.full_name).to include("/Submissions/#{@course.name}")
+
+      attachment_link = fj("a:contains('graded')")
+      expect(attachment_link).to be_truthy
+      expect(attachment_link.attribute("href")).to include("/courses/#{@course.id}")
+    end
+
+    it "replies to a graded discussion with attachment regardless of quota limit while being a teacher" do
+      discussion_assignment = @course.assignments.create!(name: "graded discussion")
+      graded_discussion_topic = @course.discussion_topics.create!(title: "graded discussion", assignment: discussion_assignment)
+
+      Setting.set("user_default_quota", -1)
+      file_attachment = "graded.png"
+      entry_text = "new entry"
+
+      user_session(@teacher)
+      Discussion.visit(@course, graded_discussion_topic)
+
+      add_a_reply_react(entry_text, file_attachment)
+      entry = DiscussionEntry.last
+      expect(entry.attachment.folder.full_name).to include("/Submissions/#{@course.name}")
+
+      attachment_link = fj("a:contains('graded')")
+      expect(attachment_link).to be_truthy
+      expect(attachment_link.attribute("href")).to include("/courses/#{@course.id}")
     end
 
     it "can view and delete legacy reply attachments" do

@@ -74,14 +74,13 @@ describe EpubExport do
     let_once(:epub_export) do
       @course.epub_exports.create({
                                     user: @student,
-                                    content_export: content_export
+                                    content_export:
                                   })
     end
 
     it "is stored in instfs if instfs is enabled" do
-      allow(InstFS).to receive(:enabled?).and_return(true)
       uuid = "1234-abcd"
-      allow(InstFS).to receive(:direct_upload).and_return(uuid)
+      allow(InstFS).to receive_messages(enabled?: true, direct_upload: uuid)
       epub_export.convert_to_epub(synchronous: true)
       expect(epub_export.epub_attachment.instfs_uuid).to eq uuid
     end
@@ -96,7 +95,7 @@ describe EpubExport do
     let_once(:epub_export) do
       @course.epub_exports.create({
                                     user: @student,
-                                    content_export: content_export
+                                    content_export:
                                   })
     end
 
@@ -164,7 +163,7 @@ describe EpubExport do
     let_once(:epub_export) do
       @course.epub_exports.create({
                                     user: @student,
-                                    content_export: content_export
+                                    content_export:
                                   })
     end
 
@@ -273,7 +272,7 @@ describe EpubExport do
     let_once(:epub_export) do
       @course.epub_exports.create({
                                     user: @student,
-                                    content_export: content_export
+                                    content_export:
                                   })
     end
 
@@ -287,21 +286,18 @@ describe EpubExport do
 
     it "sets locale based on user preference" do
       @student.update_attribute(:locale, "es")
-      epub_export.reload.send(:set_locale)
-      expect(I18n.locale).to eq :es
+      expect(epub_export.reload.send(:set_locale)).to eq "es"
     end
 
     it "sets locale based on course override" do
       @course.update_attribute(:locale, "da")
-      epub_export.reload.send(:set_locale)
-      expect(I18n.locale).to eq :da
+      expect(epub_export.reload.send(:set_locale)).to eq "da"
     end
 
     it "allows course locale to override user locale" do
       @student.update_attribute(:locale, "es")
       @course.update_attribute(:locale, "da")
-      epub_export.reload.send(:set_locale)
-      expect(I18n.locale).to eq :da
+      expect(epub_export.reload.send(:set_locale)).to eq "da"
     end
   end
 
@@ -319,21 +315,21 @@ describe EpubExport do
       communication_channel_model.confirm!
 
       @epub.workflow_state = "generated"
-      expect { @epub.save! }.to change(DelayedMessage, :count).by 0
+      expect { @epub.save! }.not_to change(DelayedMessage, :count)
       expect(@epub.messages_sent["Content Export Finished"]).not_to be_blank
 
       @epub.workflow_state = "failed"
-      expect { @epub.save! }.to change(DelayedMessage, :count).by 0
+      expect { @epub.save! }.not_to change(DelayedMessage, :count)
       expect(@epub.messages_sent["Content Export Failed"]).not_to be_blank
     end
 
     it "does not send emails for epub or webzip exports when content export has exported" do
       @ce.workflow_state = "exported"
-      expect { @ce.save! }.to change(DelayedMessage, :count).by 0
+      expect { @ce.save! }.not_to change(DelayedMessage, :count)
       expect(@ce.messages_sent["Content Export Finished"]).to be_blank
 
       @ce.workflow_state = "failed"
-      expect { @ce.save! }.to change(DelayedMessage, :count).by 0
+      expect { @ce.save! }.not_to change(DelayedMessage, :count)
       expect(@ce.messages_sent["Content Export Failed"]).to be_blank
     end
   end

@@ -191,7 +191,7 @@ class Quizzes::QuizSubmissionService
         score, comment = question_data[:score], question_data[:comment]
 
         if score.present?
-          legacy_params["question_score_#{question_id}".to_sym] = begin
+          legacy_params[:"question_score_#{question_id}"] = begin
             score.to_f
           rescue
             reject! "question score must be an unsigned decimal", 400
@@ -200,7 +200,7 @@ class Quizzes::QuizSubmissionService
 
         # nil represents lack of change to a comment, '' means no comment
         unless comment.nil?
-          legacy_params["question_comment_#{question_id}".to_sym] = comment.to_s
+          legacy_params[:"question_comment_#{question_id}"] = comment.to_s
         end
       end
     end
@@ -297,7 +297,7 @@ class Quizzes::QuizSubmissionService
     end
 
     can_take = Quizzes::QuizEligibility.new(course: quiz.context,
-                                            quiz: quiz,
+                                            quiz:,
                                             user: participant.user,
                                             remote_ip: participant.ip_address,
                                             access_code: participant.access_code)

@@ -32,7 +32,7 @@ class CanvadocSessionsController < ApplicationController
       return render_unauthorized_action
     end
 
-    return render_unauthorized_action unless submission.grants_right?(@current_user, :read)
+    return unless authorized_action(submission, @current_user, :read)
     return render_unauthorized_action if submission.assignment.annotatable_attachment_id.blank?
 
     is_draft = submission_attempt == "draft"
@@ -73,7 +73,8 @@ class CanvadocSessionsController < ApplicationController
   # This API can only be accessed when another endpoint provides a signed URL.
   # It will simply redirect you to the 3rd party document preview.
   def show
-    blob = extract_blob(params[:hmac], params[:blob],
+    blob = extract_blob(params[:hmac],
+                        params[:blob],
                         "user_id" => @current_user.try(:global_id),
                         "type" => "canvadoc")
     attachment = Attachment.find(blob["attachment_id"])
@@ -89,7 +90,7 @@ class CanvadocSessionsController < ApplicationController
       submission_id = blob["submission_id"]
       if submission_id
         submission = Submission.preload(:assignment).find(submission_id)
-        options = { submission: submission }
+        options = { submission: }
 
         if blob["annotation_context"]
           attempt = submission.canvadocs_annotation_contexts.find_by(launch_id: blob["annotation_context"])&.submission_attempt
@@ -98,7 +99,7 @@ class CanvadocSessionsController < ApplicationController
 
         user_session_params = Canvadocs.user_session_params(@current_user, **options)
       else
-        user_session_params = Canvadocs.user_session_params(@current_user, attachment: attachment)
+        user_session_params = Canvadocs.user_session_params(@current_user, attachment:)
       end
 
       if opts[:enable_annotations]
@@ -137,6 +138,18 @@ class CanvadocSessionsController < ApplicationController
         opts[:preferred_plugins].unshift Canvadocs::RENDER_O365
       end
 
+      if blob["annotation_context"]
+        annotation_context_id = if ApplicationController.test_cluster?
+                                  # since Canvas test environments are often configured to point at production
+                                  # DocViewer environments, this prevents making an annotation on Canavs beta and
+                                  # having it show up on Canvas prod.  See CAS-1551
+                                  # TODO: a proper Canvas/DocViewer environment pairing and beta refresh from prod on DocViewer
+                                  blob["annotation_context"] + "-#{ApplicationController.test_cluster_name}"
+                                else
+                                  blob["annotation_context"]
+                                end
+        opts[:annotation_context] = annotation_context_id
+      end
       attachment.submit_to_canvadocs(1, **opts) unless attachment.canvadoc_available?
 
       url = attachment.canvadoc.session_url(opts.merge(user_session_params))

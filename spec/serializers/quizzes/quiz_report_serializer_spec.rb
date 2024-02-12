@@ -23,9 +23,9 @@ shared_examples_for "QuizReportSerializer Associations" do
     statistics.reload
 
     serializer = Quizzes::QuizReportSerializer.new(statistics, {
-                                                     controller: controller,
+                                                     controller:,
                                                      scope: user,
-                                                     session: session,
+                                                     session:,
                                                      includes: ["file"]
                                                    })
 
@@ -38,9 +38,9 @@ shared_examples_for "QuizReportSerializer Associations" do
     statistics.generate_csv_in_background
 
     serializer = Quizzes::QuizReportSerializer.new(statistics, {
-                                                     controller: controller,
+                                                     controller:,
                                                      scope: user,
-                                                     session: session,
+                                                     session:,
                                                      includes: ["progress"]
                                                    })
 
@@ -53,9 +53,9 @@ end
 describe Quizzes::QuizReportSerializer do
   subject do
     Quizzes::QuizReportSerializer.new(statistics, {
-                                        controller: controller,
+                                        controller:,
                                         scope: user,
-                                        session: session
+                                        session:
                                       })
   end
 
@@ -82,8 +82,7 @@ describe Quizzes::QuizReportSerializer do
 
   let :controller do
     ActiveModel::FakeController.new({}).tap do |controller|
-      allow(controller).to receive(:session).and_return session
-      allow(controller).to receive(:context).and_return context
+      allow(controller).to receive_messages(session:, context:)
     end
   end
 
@@ -93,8 +92,12 @@ describe Quizzes::QuizReportSerializer do
 
   context "format independent" do
     %w[
-      report_type readable_type includes_all_versions anonymous
-      created_at updated_at
+      report_type
+      readable_type
+      includes_all_versions
+      anonymous
+      created_at
+      updated_at
     ].each do |attr|
       it "serializes #{attr}" do
         expect(json[attr]).to eq statistics.send(attr)

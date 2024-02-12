@@ -39,8 +39,8 @@ describe "user_content post processing" do
     @course.wiki_pages.create!(title: page_title, body: page_content)
   end
 
-  def wait_for_loading_image(&block)
-    wait_for_transient_element(".loading_image_holder", &block)
+  def wait_for_loading_image(&)
+    wait_for_transient_element(".loading_image_holder", &)
   end
 
   describe "file downloads" do
@@ -282,7 +282,7 @@ describe "user_content post processing" do
       browser_tabs = driver.window_handles
       expect(browser_tabs.length).to eq(1)
 
-      modifier_key = driver.capabilities.platform.include?("mac") ? :meta : :control
+      modifier_key = driver.capabilities[:platform_name].include?("mac") ? :meta : :control
       file_link = f("a#thelink")
       driver.action.key_down(modifier_key).click(file_link).key_up(modifier_key).perform
 
@@ -307,7 +307,7 @@ describe "user_content post processing" do
       browser_tabs = driver.window_handles
       expect(browser_tabs.length).to eq(1)
 
-      modifier_key = driver.capabilities.platform.include?("mac") ? :meta : :control
+      modifier_key = driver.capabilities[:platform_name].include?("mac") ? :meta : :control
       file_link = f("a#thelink")
       driver.action.key_down(modifier_key).click(file_link).key_up(modifier_key).perform
 

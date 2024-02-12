@@ -31,7 +31,8 @@ module BroadcastPolicies
         just_submitted_late? &&
         submission.submitted? &&
         submission.has_submission? &&
-        submission.late?
+        submission.late? &&
+        !assignment.deleted?
     end
 
     def should_dispatch_assignment_submitted?
@@ -118,7 +119,7 @@ module BroadcastPolicies
     end
 
     def just_submitted_late?
-      (just_submitted? || submission.saved_change_to_submitted_at?)
+      just_submitted? || submission.saved_change_to_submitted_at?
     end
 
     def is_a_resubmission?

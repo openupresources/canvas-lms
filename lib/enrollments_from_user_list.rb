@@ -52,7 +52,7 @@ class EnrollmentsFromUserList
         # list of user ids
         User.from_tokens(list)
       end
-    users.each_slice(Setting.get("enrollments_from_user_list_batch_size", 50).to_i) do |users_slice|
+    users.each_slice(50) do |users_slice|
       @course.transaction do
         Enrollment.suspend_callbacks(:set_update_cached_due_dates) do
           users_slice.each { |user| enroll_user(user) }
@@ -62,7 +62,7 @@ class EnrollmentsFromUserList
     if @enrollments.present?
       @course.transaction do
         user_ids = @enrollments.map(&:user_id).uniq
-        DueDateCacher.recompute_users_for_course(
+        SubmissionLifecycleManager.recompute_users_for_course(
           user_ids,
           @course,
           nil,
@@ -86,7 +86,8 @@ class EnrollmentsFromUserList
     return if @enrolled_users.key?(user.id)
 
     @enrolled_users[user.id] = true
-    enrollment = @course.enroll_user(user, @enrollment_type,
+    enrollment = @course.enroll_user(user,
+                                     @enrollment_type,
                                      section: @section,
                                      limit_privileges_to_course_section: @limit_privileges_to_course_section,
                                      allow_multiple_enrollments: true,

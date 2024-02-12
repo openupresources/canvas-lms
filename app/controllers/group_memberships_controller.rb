@@ -150,7 +150,7 @@ class GroupMembershipsController < ApplicationController
   def create
     @user = api_find(User, params[:user_id])
     if authorized_action(GroupMembership.new(group: @group, user: @user), @current_user, :create)
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         @membership = @group.add_user(@user)
 
         if @membership.valid?
@@ -191,7 +191,7 @@ class GroupMembershipsController < ApplicationController
       attrs = params.permit(*UPDATABLE_MEMBERSHIP_ATTRIBUTES)
       attrs.delete(:workflow_state) unless attrs[:workflow_state] == "accepted"
 
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         if @membership.update(attrs)
           render json: group_membership_json(@membership, @current_user, session)
         else
@@ -239,7 +239,7 @@ class GroupMembershipsController < ApplicationController
       @membership = @group.group_memberships.find(params[:membership_id])
     else
       user_id = Api.map_ids([params[:user_id]], @group.users, @domain_root_account, @current_user).first
-      @membership = @group.group_memberships.where(user_id: user_id).first!
+      @membership = @group.group_memberships.where(user_id:).first!
     end
   end
 end

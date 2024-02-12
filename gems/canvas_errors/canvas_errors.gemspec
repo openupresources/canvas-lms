@@ -9,13 +9,13 @@ Gem::Specification.new do |spec|
 
   spec.files         = Dir.glob("{lib,spec}/**/*") + %w[test.sh]
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
-  spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
 
   spec.add_dependency "activesupport"
+  spec.add_dependency "code_ownership"
   spec.add_dependency "inst-jobs"
 
   spec.add_development_dependency "bundler"
-  spec.add_development_dependency "byebug"
+  spec.add_development_dependency "debug"
   spec.add_development_dependency "rspec"
 end

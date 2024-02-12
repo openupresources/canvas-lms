@@ -49,7 +49,7 @@ class Mutations::SetFriendlyDescription < Mutations::BaseMutation
     validate!(context, outcome)
 
     friendly_description = OutcomeFriendlyDescription.find_or_initialize_by(
-      context: context,
+      context:,
       learning_outcome: outcome
     )
 
@@ -57,17 +57,15 @@ class Mutations::SetFriendlyDescription < Mutations::BaseMutation
       friendly_description.workflow_state = "active"
       friendly_description.description = description
       friendly_description.save!
-      return {
-        outcome_friendly_description: friendly_description
-      }
-    elsif friendly_description.persisted?
-      friendly_description.destroy
-      return {
-        outcome_friendly_description: friendly_description
-      }
+
+    else
+      friendly_description.destroy if friendly_description.persisted?
+      friendly_description.description = ""
     end
 
-    {}
+    {
+      outcome_friendly_description: friendly_description
+    }
   end
 
   private
@@ -94,7 +92,7 @@ class Mutations::SetFriendlyDescription < Mutations::BaseMutation
       unless context
         raise GraphQL::ExecutionError, I18n.t(
           "No such context for %{context_type}#%{context_id}",
-          context_type: context_type,
+          context_type:,
           context_id: context_id.to_s
         )
       end

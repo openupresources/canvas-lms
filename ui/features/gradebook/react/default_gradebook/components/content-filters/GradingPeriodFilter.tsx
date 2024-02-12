@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -18,6 +19,7 @@
 
 import React from 'react'
 import {arrayOf, shape, string, bool, func} from 'prop-types'
+import {formatGradingPeriodTitleForDisplay} from '../../Gradebook.utils'
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import ContentFilter from '@canvas/gradebook-content-filters/react/ContentFilter'
@@ -29,7 +31,7 @@ const I18n = useI18nScope(
 function normalizeGradingPeriods(gradingPeriods) {
   return gradingPeriods.map(gradingPeriod => ({
     id: gradingPeriod.id,
-    name: gradingPeriod.title,
+    name: formatGradingPeriodTitleForDisplay(gradingPeriod),
   }))
 }
 

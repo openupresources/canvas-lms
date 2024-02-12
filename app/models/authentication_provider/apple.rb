@@ -48,7 +48,7 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
   validates :login_attribute, inclusion: login_attributes
 
   def self.recognized_params
-    super - open_id_connect_params
+    [*(super - open_id_connect_params), :login_attribute, :jit_provisioning].freeze
   end
 
   def self.recognized_federated_attributes
@@ -73,20 +73,12 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
     end
 
     user = JSON.parse(params[:user]) if params[:user]
-    id_token.merge!(user["name"].slice("firstName", "lastName")) if user["name"]
+    id_token.merge!(user["name"].slice("firstName", "lastName")) if user && user["name"]
     id_token
   end
 
   def claims(token)
     token
-  end
-
-  def generate_authorize_url(redirect_uri, state)
-    # wtf Apple https://forums.developer.apple.com/thread/122458
-    # we _could_ update faraday, which has been fixed to deal with this as well,
-    # but that's a long rabbit whole of other gems that would need updating and
-    # have very large breaking changes, so far riskier
-    super.gsub("+", "%20")
   end
 
   protected
@@ -96,13 +88,13 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
   end
 
   def authorize_options
-    { scope: scope, response_type: "code id_token", response_mode: "form_post" }
+    { scope:, response_type: "code id_token", response_mode: "form_post" }
   end
 
   def scope
     result = []
-    requested_attributes = [login_attribute] + federated_attributes.values.map { |v| v["attribute"] }
-    result << "name" unless (requested_attributes & ["firstName", "lastName"]).empty?
+    requested_attributes = [login_attribute] + federated_attributes.values.pluck("attribute")
+    result << "name" if requested_attributes.intersect?(["firstName", "lastName"])
     result << "email" if requested_attributes.include?("email")
     result.join(" ")
   end

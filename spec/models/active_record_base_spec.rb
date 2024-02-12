@@ -44,7 +44,7 @@ describe ActiveRecord::Base do
       # updated_at
       expect(account.courses.count_by_date).to eql({ start_times.first.to_date => 10 })
 
-      expect(account.courses.count_by_date(column: :start_at)).to eql start_times.each_with_index.map { |t, i| [t.to_date, i + 1] }.to_h
+      expect(account.courses.count_by_date(column: :start_at)).to eql(start_times.each_with_index.to_h { |t, i| [t.to_date, i + 1] })
     end
 
     it "justs do the last 20 days by default" do
@@ -59,7 +59,7 @@ describe ActiveRecord::Base do
       # updated_at
       expect(account.courses.count_by_date).to eql({ start_times.first.to_date => 10 })
 
-      expect(account.courses.count_by_date(column: :start_at)).to eql start_times[0..1].each_with_index.map { |t, i| [t.to_date, i + 1] }.to_h
+      expect(account.courses.count_by_date(column: :start_at)).to eql(start_times[0..1].each_with_index.to_h { |t, i| [t.to_date, i + 1] })
     end
   end
 
@@ -82,7 +82,7 @@ describe ActiveRecord::Base do
       def do_batches(relation, **kwargs)
         result = []
         extra = defined?(extra_kwargs) ? extra_kwargs : {}
-        relation.in_batches(**kwargs.reverse_merge(extra).reverse_merge(strategy: strategy)) do |batch|
+        relation.in_batches(**kwargs.reverse_merge(extra).reverse_merge(strategy:)) do |batch|
           result << (block_given? ? (yield batch) : batch.to_a)
         end
         result
@@ -111,7 +111,7 @@ describe ActiveRecord::Base do
       it "preloads" do
         Account.default.courses.create!
         a = do_batches(Account.where(id: Account.default).preload(:courses)).flatten.first
-        expect(a.courses.loaded?).to eq true
+        expect(a.courses.loaded?).to be true
       end
 
       it "handles pluck" do
@@ -135,7 +135,7 @@ describe ActiveRecord::Base do
       include_examples "batches"
 
       it "raises an error when not in a transaction" do
-        expect { User.all.find_in_batches(strategy: :temp_table) { nil } }.to raise_error(ArgumentError)
+        expect { User.find_in_batches(strategy: :temp_table) { nil } }.to raise_error(ArgumentError)
       end
 
       it "finds all enrollments from course join" do
@@ -144,7 +144,7 @@ describe ActiveRecord::Base do
         batch_size = 2
         es = []
         Course.transaction do
-          e.find_in_batches(strategy: :temp_table, batch_size: batch_size) do |batch|
+          e.find_in_batches(strategy: :temp_table, batch_size:) do |batch|
             expect(batch.size).to eq batch_size
             batch.each do |r|
               es << r["e_id"].to_i
@@ -207,7 +207,7 @@ describe ActiveRecord::Base do
     it "generates appropriate rank hashes" do
       hash = ActiveRecord::Base.rank_hash(["a", ["b", "c"], ["d"]])
       expect(hash).to eq({ "a" => 1, "b" => 2, "c" => 2, "d" => 3 })
-      expect(hash["e"]).to eql 4
+      expect(hash["e"]).to be 4
     end
   end
 
@@ -244,8 +244,8 @@ describe ActiveRecord::Base do
           Submission.create!(user: @user, assignment: @assignment)
         end
       end.to raise_error(ActiveRecord::RecordNotUnique)
-      expect(Submission.count).to eql 1
-      expect(tries).to eql 2
+      expect(Submission.count).to be 1
+      expect(tries).to be 2
       expect(User.count).to eql @orig_user_count
     end
 
@@ -259,8 +259,8 @@ describe ActiveRecord::Base do
           Submission.create!(user: @user, assignment: @assignment)
         end
       end.to raise_error(ActiveRecord::RecordNotUnique)
-      expect(tries).to eql 3
-      expect(Submission.count).to eql 1
+      expect(tries).to be 3
+      expect(Submission.count).to be 1
     end
 
     it "does not cause outer transactions to roll back if the second attempt succeeds" do
@@ -275,7 +275,7 @@ describe ActiveRecord::Base do
         end
         User.create!
       end
-      expect(Submission.count).to eql 1
+      expect(Submission.count).to be 1
       expect(User.count).to eql @orig_user_count + 3
     end
 
@@ -287,7 +287,7 @@ describe ActiveRecord::Base do
           User.connection.execute "this is not valid sql"
         end
       end.to raise_error(ActiveRecord::StatementInvalid)
-      expect(tries).to eql 1
+      expect(tries).to be 1
     end
 
     it "does not eat any other exceptions" do
@@ -298,7 +298,7 @@ describe ActiveRecord::Base do
           raise "oh crap"
         end
       end.to raise_error("oh crap")
-      expect(tries).to eql 1
+      expect(tries).to be 1
     end
   end
 
@@ -356,8 +356,8 @@ describe ActiveRecord::Base do
         { name: "bulk_insert_2", workflow_state: "registered", created_at: now, updated_at: now }
       ]
       names = User.order(:name).pluck(:name)
-      expect(names).to be_include("bulk_insert_1")
-      expect(names).to be_include("bulk_insert_2")
+      expect(names).to include("bulk_insert_1")
+      expect(names).to include("bulk_insert_2")
     end
 
     it "handles arrays" do
@@ -369,12 +369,12 @@ describe ActiveRecord::Base do
         { name: "bulk_insert_2", workflow_state: "registered", redirect_uris: arr2, root_account_id: Account.default.id, created_at: now, updated_at: now }
       ]
       names = DeveloperKey.order(:name).pluck(:redirect_uris)
-      expect(names).to be_include(arr1.map(&:to_s))
-      expect(names).to be_include(arr2)
+      expect(names).to include(arr1.map(&:to_s))
+      expect(names).to include(arr2)
     end
 
     it "does not raise an error if there are no records" do
-      expect { Course.bulk_insert [] }.to change(Course, :count).by(0)
+      expect { Course.bulk_insert [] }.not_to change(Course, :count)
     end
 
     it "works through bulk insert objects" do
@@ -487,7 +487,7 @@ describe ActiveRecord::Base do
       u = User.create!
       expect(ActiveRecord::Base.find_by_asset_string(u.asset_string)).to eq u
       expect(ActiveRecord::Base.find_by_asset_string(u.asset_string, ["User"])).to eq u
-      expect(ActiveRecord::Base.find_by_asset_string(u.asset_string, ["Course"])).to eq nil
+      expect(ActiveRecord::Base.find_by_asset_string(u.asset_string, ["Course"])).to be_nil
     end
   end
 
@@ -630,96 +630,125 @@ describe ActiveRecord::Base do
 
     let_once(:u) { User.create!(name: "abcdefg") }
 
+    let(:exec_query_method) { ($canvas_rails == "7.0") ? :exec_query : :internal_exec_query }
+
+    def assert_bare_update
+      allow(User.connection).to receive(exec_query_method).and_call_original
+      expect(User.connection).to receive(:exec_update).once.and_call_original
+      yield
+      expect(User.connection).not_to have_received(exec_query_method)
+    end
+
+    def assert_multi_stage_update
+      allow(User.connection).to receive(exec_query_method).and_call_original
+      expect(User.connection).to receive(:exec_update).once.and_call_original
+      yield
+      expect(User.connection).to have_received(exec_query_method).once
+    end
+
     it "just does a bare update, instead of an ordered select and then update" do
-      # only the reload
-      expect(User.connection).to receive(:exec_query).once.and_call_original
-      expect(User.where(name: "abcdefg").in_batches.update_all(name: "bob")).to eq 1
+      assert_bare_update do
+        s = User.where(name: "abcdefg").in_batches
+        expect(s.update_all(name: "bob")).to eq 1
+      end
       expect(u.reload.name).to eq "bob"
     end
 
     it "does multi-stage if the updated column isn't mentioned in the where clause" do
-      expect(User.connection).to receive(:exec_query).twice.and_call_original
-      expect(User.in_batches.update_all(name: "bob")).to eq 1
+      assert_multi_stage_update do
+        expect(User.in_batches.update_all(name: "bob")).to eq 1
+      end
       expect(u.reload.name).to eq "bob"
     end
 
     it "does multi-stage if the updated column isn't mentioned in the where clause (that does exist)" do
-      expect(User.connection).to receive(:exec_query).twice.and_call_original
-      expect(User.where(id: u.id).in_batches.update_all(name: "bob")).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(id: u.id).in_batches.update_all(name: "bob")).to eq 1
+      end
       expect(u.reload.name).to eq "bob"
     end
 
     it "does multi-stage if the updated column is being assigned to the same value as the condition" do
-      expect(User.connection).to receive(:exec_query).twice.and_call_original
-      expect(User.where(name: "abcdefg").in_batches.update_all(name: "abcdefg")).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(name: "abcdefg").in_batches.update_all(name: "abcdefg")).to eq 1
+      end
       expect(u.reload.name).to eq "abcdefg"
     end
 
     it "does a bare update for an array condition non-matching value" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where(name: ["abcdefg", "hijklmn"]).in_batches.update_all(name: "bob")).to eq 1
+      assert_bare_update do
+        expect(User.where(name: ["abcdefg", "hijklmn"]).in_batches.update_all(name: "bob")).to eq 1
+      end
       expect(u.reload.name).to eq "bob"
     end
 
     it "does a bare update for a negated array condition non-matching value" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where.not(name: ["bob", "hijklmn"]).in_batches.update_all(name: "bob")).to eq 1
+      assert_bare_update do
+        expect(User.where.not(name: ["bob", "hijklmn"]).in_batches.update_all(name: "bob")).to eq 1
+      end
       expect(u.reload.name).to eq "bob"
     end
 
     it "does multi-stage for an array condition matching value" do
-      expect(User.connection).to receive(:exec_query).twice.and_call_original
-      expect(User.where(name: ["abcdefg", "hijklmn"]).in_batches.update_all(name: "abcdefg")).to eq 1
-      allow(User.connection).to receive(:exec_query).and_call_original
+      assert_multi_stage_update do
+        expect(User.where(name: ["abcdefg", "hijklmn"]).in_batches.update_all(name: "abcdefg")).to eq 1
+      end
       expect(u.reload.name).to eq "abcdefg"
     end
 
     it "does a bare update for a comparison condition non-matching value" do
-      expect(User.connection).not_to receive(:exec_query)
-      expect(User.where(updated_at: 5.minutes.ago..).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      assert_bare_update do
+        expect(User.where(updated_at: 5.minutes.ago..).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      end
     end
 
     it "does multi-stage for a comparison condition matching value" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where(updated_at: 5.minutes.ago..).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(updated_at: 5.minutes.ago..).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      end
     end
 
     it "does a bare update for a range condition non-matching value" do
-      expect(User.connection).not_to receive(:exec_query)
-      expect(User.where(updated_at: 5.minutes.ago..5.minutes.from_now).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      assert_bare_update do
+        expect(User.where(updated_at: 5.minutes.ago..5.minutes.from_now).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      end
     end
 
     it "does multi-stage for a range condition matching value" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where(updated_at: 5.minutes.ago..5.minutes.from_now).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(updated_at: 5.minutes.ago..5.minutes.from_now).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      end
     end
 
     # because this forms an And predicate that we don't care to handle. gotta draw the line somewhere
     it "does a multi-stage update for an open range condition even with non-matching value" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where(updated_at: 5.minutes.ago...5.minutes.from_now).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(updated_at: 5.minutes.ago...5.minutes.from_now).in_batches.update_all(updated_at: 10.minutes.ago)).to eq 1
+      end
     end
 
     it "does multi-stage for a sub-query condition" do
-      expect(User.connection).to receive(:exec_query).and_call_original
-      expect(User.where(name: User.select(:name).where(id: u.id)).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      assert_multi_stage_update do
+        expect(User.where(name: User.select(:name).where(id: u.id)).in_batches.update_all(updated_at: Time.now.utc)).to eq 1
+      end
     end
 
     it "does bare update for negated boolean condition" do
-      expect(User.connection).not_to receive(:exec_query)
-      Assignment.where.not(grader_comments_visible_to_graders: true)
-                .where.not(grader_names_visible_to_final_grader: true)
-                .in_batches.update_all(
-                  grader_comments_visible_to_graders: true,
-                  grader_names_visible_to_final_grader: true
-                )
+      assert_bare_update do
+        Assignment.where.not(grader_comments_visible_to_graders: true)
+                  .where.not(grader_names_visible_to_final_grader: true)
+                  .in_batches.update_all(
+                    grader_comments_visible_to_graders: true,
+                    grader_names_visible_to_final_grader: true
+                  )
+      end
     end
   end
 
   describe "add_index" do
     it "raises an error on too long of name" do
       name = "some_really_long_name_" * 10
-      expect { User.connection.add_index :users, [:id], name: name }.to raise_error(/Index name .+ is too long/)
+      expect { User.connection.add_index :users, [:id], name: }.to raise_error(/Index name .+ is too long/)
     end
   end
 
@@ -802,10 +831,10 @@ describe ActiveRecord::Base do
       si = StreamItem.new
       si.asset_type = "Submission"
       si.data = {}
-      expect(si.valid?).to eq true
+      expect(si.valid?).to be true
 
       si.context_type = "User"
-      expect(si.valid?).to eq false
+      expect(si.valid?).to be false
     end
 
     it "doesn't allow mismatched assignment" do
@@ -828,7 +857,7 @@ describe ActiveRecord::Base do
     it "returns nil for the specific type if it's not that type" do
       si = StreamItem.new
       si.discussion_topic = DiscussionTopic.new
-      expect(si.conversation).to eq nil
+      expect(si.conversation).to be_nil
     end
 
     it "doesn't ignores specific type if we're setting nil" do
@@ -838,15 +867,15 @@ describe ActiveRecord::Base do
       si.conversation = nil
       expect(si.asset).to eq dt
       si.discussion_topic = nil
-      expect(si.asset).to eq nil
+      expect(si.asset).to be_nil
     end
 
     it "prefixes specific associations" do
-      expect(AssessmentRequest.reflections.keys).to be_include("assessor_asset_submission")
+      expect(AssessmentRequest.reflections.keys).to include("assessor_asset_submission")
     end
 
     it "prefixes specific associations with an explicit name" do
-      expect(LearningOutcomeResult.reflections.keys).to be_include("association_assignment")
+      expect(LearningOutcomeResult.reflections.keys).to include("association_assignment")
     end
 
     it "passes the correct foreign key down to specific associations" do

@@ -19,8 +19,8 @@
 
 require_relative "../common"
 require_relative "../helpers/notifications_common"
-require_relative "./pages/k5_dashboard_page"
-require_relative "./pages/dashboard_page"
+require_relative "pages/k5_dashboard_page"
+require_relative "pages/dashboard_page"
 
 describe "dashboard" do
   include NotificationsCommon
@@ -462,7 +462,6 @@ describe "dashboard" do
       end
 
       it "loads the second student's cards when selected in the picker" do
-        skip("LS-3282 07/15/2022")
         get "/"
         expect(element_value_for_attr(observed_student_dropdown, "value")).to eq("Student 1")
         click_observed_student_option("Student 2")

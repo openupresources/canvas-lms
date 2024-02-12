@@ -449,9 +449,7 @@ describe "More Standard Common Cartridge importing" do
     @copy_to.course_code = "alt name"
 
     @migration = ContentMigration.new
-    allow(@migration).to receive(:to_import).and_return(nil)
-    allow(@migration).to receive(:context).and_return(@copy_to)
-    allow(@migration).to receive(:import_object?).and_return(true)
+    allow(@migration).to receive_messages(to_import: nil, context: @copy_to, import_object?: true)
     allow(@migration).to receive(:add_imported_item)
   end
 
@@ -638,8 +636,10 @@ describe "other cc files" do
     @migration.migration_type = "common_cartridge_importer"
     @migration.migration_settings[:migration_ids_to_import] = { copy: {} }
 
-    converter = CC::Importer::Standard::Converter.new(export_archive_path: archive_file_path, course_name: "oi",
-                                                      base_download_dir: unzipped_file_path, content_migration: @migration)
+    converter = CC::Importer::Standard::Converter.new(export_archive_path: archive_file_path,
+                                                      course_name: "oi",
+                                                      base_download_dir: unzipped_file_path,
+                                                      content_migration: @migration)
     converter.export
     @course_data = converter.course.with_indifferent_access
     Importers::CourseContentImporter.import_content(@course, @course_data, nil, @migration)

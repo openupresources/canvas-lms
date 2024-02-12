@@ -43,7 +43,7 @@ describe UserProfile do
       end
 
       it "shows shared content tab when user has account membership" do
-        account_admin_user(account: account)
+        account_admin_user(account:)
         tabs = @admin.profile.tabs_available(@admin, root_account: account)
         expect(tabs.pluck(:id)).to include UserProfile::TAB_CONTENT_SHARES
       end
@@ -58,9 +58,10 @@ describe UserProfile do
 
     it "is i18n'd" do
       student_in_course(active_all: true)
-      I18n.locale = :es
-      tabs = @student.profile.tabs_available(@user, root_account: account)
-      expect(tabs.detect { |t| t[:id] == UserProfile::TAB_FILES }[:label]).to_not eq "Files"
+      I18n.with_locale(:es) do
+        tabs = @student.profile.tabs_available(@user, root_account: account)
+        expect(tabs.detect { |t| t[:id] == UserProfile::TAB_FILES }[:label]).to_not eq "Files"
+      end
     end
 
     context "with lti tabs" do

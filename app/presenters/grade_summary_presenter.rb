@@ -79,7 +79,7 @@ class GradeSummaryPresenter
   end
 
   def observed_students
-    @observed_students ||= ObserverEnrollment.observed_students(@context, @current_user, include_restricted_access: false)
+    @observed_students ||= ObserverEnrollment.observed_students(@context, @current_user, include_restricted_access: false, grade_summary: true)
   end
 
   def observed_student
@@ -128,11 +128,11 @@ class GradeSummaryPresenter
   end
 
   def student_name
-    student ? student.name : nil
+    student&.name
   end
 
   def student_id
-    student ? student.id : nil
+    student&.id
   end
 
   def groups
@@ -159,11 +159,15 @@ class GradeSummaryPresenter
     # for deactivated students (who themselves can not view those assignments).
     assignments = if user_has_elevated_permissions?
                     AssignmentGroup
-                      .visible_assignments(nil, @context, all_groups, includes: includes)
+                      .visible_assignments(nil, @context, all_groups, includes:)
                       .assigned_to_student(student.id)
                   else
-                    AssignmentGroup.visible_assignments(student, @context, all_groups, includes: includes)
+                    AssignmentGroup.visible_assignments(student, @context, all_groups, includes:)
                   end
+
+    if Account.site_admin.feature_enabled?(:hide_zero_point_quizzes_option)
+      assignments = assignments.not_hidden_in_gradebook
+    end
 
     assignments.where.not(submission_types: %w[not_graded wiki_page]).except(:order)
   end
@@ -204,13 +208,9 @@ class GradeSummaryPresenter
       :visible_submission_comments,
       { rubric_assessments: [:rubric, :rubric_association] },
       :content_participations,
-      { assignment: [:context, :post_policy] }
+      { assignment: [:context, :post_policy] },
+      { submission_comments: :viewed_submission_comments }
     ]
-
-    if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
-      preload_params << { submission_comments: :viewed_submission_comments }
-    end
-
     @submissions ||= begin
       ss = @context.submissions
                    .preload(*preload_params)
@@ -279,7 +279,7 @@ class GradeSummaryPresenter
     @courses_with_grades ||= student.shard.activate do
       course_list = if student_is_user?
                       Course.preload(:enrollment_term, :grading_period_groups)
-                            .where(id: student.participating_student_current_and_concluded_course_ids).to_a
+                            .where(id: student.participating_student_current_and_unrestricted_concluded_course_ids).to_a
                     elsif user_an_observer_of_student?
                       observed_courses = []
                       Shard.partition_by_shard(student.participating_student_current_and_concluded_course_ids) do |course_ids|
@@ -379,7 +379,7 @@ class GradeSummaryPresenter
     # if module position above is the same, compare by assignment
     # position within the module
     if module_position_comparison.zero?
-      module_tag1.position <=> module_tag2.position
+      module_tag1.position.to_i <=> module_tag2.position.to_i
     else
       module_position_comparison
     end

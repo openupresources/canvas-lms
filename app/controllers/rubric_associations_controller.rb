@@ -91,18 +91,21 @@ class RubricAssociationsController < ApplicationController
     rubric_id = association_params.delete(:rubric_id)
     @rubric = @association ? @association.rubric : Rubric.find(rubric_id)
     # raise "User doesn't have access to this rubric" unless @rubric.grants_right?(@current_user, session, :read)
-    return unless can_manage_rubrics_or_association_object?(@assocation, @association_object)
+    return unless can_manage_rubrics_or_association_object?(@association, @association_object)
     return unless can_update_association?(@association)
 
     # create a new rubric if associating in a different course
     rubric_context = @rubric.context
+    from_different_shard = rubric_context.shard != @context.shard
     if rubric_context != @context && rubric_context.is_a?(Course)
       @rubric = @rubric.dup
       @rubric.rubric_id = rubric_id
+      @rubric.rubric_id = nil if from_different_shard
       @rubric.update_criteria(params[:rubric]) if params[:rubric]
       @rubric.user = @current_user
       @rubric.context = @context
       @rubric.update_mastery_scales(false)
+      @rubric.shard = @context.shard if from_different_shard
       @rubric.save!
     elsif params[:rubric] && @rubric.grants_right?(@current_user, session, :update)
       @rubric.update_criteria(params[:rubric])
@@ -114,10 +117,10 @@ class RubricAssociationsController < ApplicationController
     @association = RubricAssociation.generate(@current_user, @rubric, @context, association_params)
     json_res = {
       rubric: @rubric.as_json(methods: :criteria, include_root: false, permissions: { user: @current_user,
-                                                                                      session: session }),
+                                                                                      session: }),
       rubric_association: @association.as_json(include_root: false,
                                                include: %i[rubric_assessments assessment_requests],
-                                               permissions: { user: @current_user, session: session })
+                                               permissions: { user: @current_user, session: })
     }
     render json: json_res
   end

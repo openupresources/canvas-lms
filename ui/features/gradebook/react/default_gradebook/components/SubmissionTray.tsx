@@ -21,7 +21,8 @@ import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {ApolloProvider, createClient} from '@canvas/apollo'
 import FriendlyDatetime from '@canvas/datetime/react/components/FriendlyDatetime'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Alert} from '@instructure/ui-alerts'
 import {Text} from '@instructure/ui-text'
 import {Heading} from '@instructure/ui-heading'
@@ -47,7 +48,12 @@ import type {
   PendingGradeInfo,
   SerializedComment,
 } from '../gradebook.d'
-import {CamelizedAssignment, CamelizedSubmission} from '@canvas/grading/grading'
+import {
+  CamelizedAssignment,
+  CamelizedSubmission,
+  GradeEntryMode,
+  GradeResult,
+} from '@canvas/grading/grading.d'
 
 import {Link} from '@instructure/ui-link'
 
@@ -85,10 +91,10 @@ export type SubmissionTrayProps = {
   }
   student: {
     id: string
-    avatarUrl?: string
+    avatarUrl?: string | null
     gradesUrl: string
     isConcluded: boolean
-    name: string
+    name: string | null
   }
   submission: CamelizedSubmission
   courseId: string
@@ -100,7 +106,7 @@ export type SubmissionTrayProps = {
   isInClosedGradingPeriod: boolean
   isInNoGradingPeriod: boolean
   isNotCountedForScore: boolean
-  enterGradesAs: 'points' | 'percent' | 'passFail' | 'gradingScheme'
+  enterGradesAs: GradeEntryMode
   isOpen: boolean
   isFirstStudent: boolean
   isLastStudent: boolean
@@ -110,13 +116,13 @@ export type SubmissionTrayProps = {
   onClose: () => void
   requireStudentGroupForSpeedGrader: boolean
   gradingScheme: null | GradingStandard[]
-  onGradeSubmission: (grade: string, excused: boolean) => void
+  onGradeSubmission: (submission: CamelizedSubmission, gradeInfo: GradeResult) => void
   onRequestClose: () => void
   selectNextAssignment: () => void
   selectPreviousAssignment: () => void
   selectNextStudent: () => void
   selectPreviousStudent: () => void
-  updateSubmission: (submission: any) => void
+  updateSubmission: (submission: CamelizedSubmission) => void
   updateSubmissionComment: (commentId: string, comment: string) => void
   createSubmissionComment: (comment: string) => void
   deleteSubmissionComment: (commentId: string) => void
@@ -126,6 +132,9 @@ export type SubmissionTrayProps = {
   showSimilarityScore: boolean
   proxySubmissionsAllowed: boolean
   reloadSubmission: (student: any, submission: any, proxyDetails: any) => void
+  customGradeStatuses: GradeStatus[]
+  customGradeStatusesEnabled: boolean
+  contentRef?: React.RefObject<HTMLDivElement>
 }
 
 type SubmissionTrayState = {
@@ -278,7 +287,9 @@ export default class SubmissionTray extends React.Component<
     if (submission.proxySubmitter) {
       return (
         <View as="div" textAlign="center">
-          <Text>{I18n.t('Submitted by %{submitter}', {submitter: submission.proxySubmitter})}</Text>
+          <Text data-testid="proxy_submitter_name">
+            {I18n.t('Submitted by %{submitter}', {submitter: submission.proxySubmitter})}
+          </Text>
           <br />
           <FriendlyDatetime
             format={I18n.t('#date.formats.date_at_time')}
@@ -407,11 +418,13 @@ export default class SubmissionTray extends React.Component<
                   onRightArrowClick={this.props.selectNextStudent}
                   rightArrowDescription={I18n.t('Next student')}
                 >
-                  <ApplyTheme theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}>
+                  <InstUISettingsProvider
+                    theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
+                  >
                     <Link href={this.props.student.gradesUrl} isWithinText={false}>
                       {name}
                     </Link>
-                  </ApplyTheme>
+                  </InstUISettingsProvider>
                 </Carousel>
 
                 <View as="div" margin="small 0" className="hr" />
@@ -426,11 +439,13 @@ export default class SubmissionTray extends React.Component<
                   onRightArrowClick={this.props.selectNextAssignment}
                   rightArrowDescription={I18n.t('Next assignment')}
                 >
-                  <ApplyTheme theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}>
+                  <InstUISettingsProvider
+                    theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
+                  >
                     <Link href={this.props.assignment.htmlUrl} isWithinText={false}>
                       {this.props.assignment.name}
                     </Link>
-                  </ApplyTheme>
+                  </InstUISettingsProvider>
                 </Carousel>
 
                 {this.props.speedGraderEnabled && this.renderSpeedGraderLink(speedGraderProps)}
@@ -446,7 +461,6 @@ export default class SubmissionTray extends React.Component<
 
               <div style={{overflowY: 'auto', flex: '1 1 auto'}}>
                 {this.props.showSimilarityScore && this.renderSimilarityScore()}
-
                 <SubmissionStatus
                   assignment={this.props.assignment}
                   isConcluded={this.props.student.isConcluded}
@@ -456,7 +470,6 @@ export default class SubmissionTray extends React.Component<
                   isNotCountedForScore={this.props.isNotCountedForScore}
                   submission={this.props.submission}
                 />
-
                 <GradeInput
                   assignment={this.props.assignment}
                   disabled={this.props.gradingDisabled}
@@ -467,7 +480,6 @@ export default class SubmissionTray extends React.Component<
                   submission={this.props.submission}
                   submissionUpdating={this.props.submissionUpdating}
                 />
-
                 {!!this.props.submission.pointsDeducted && (
                   <View as="div" margin="small 0 0 0">
                     <LatePolicyGrade
@@ -478,26 +490,22 @@ export default class SubmissionTray extends React.Component<
                     />
                   </View>
                 )}
-
                 <View as="div" margin="small 0" className="hr" />
-
-                <View as="div" margin="0 0 small 0">
-                  <div id="SubmissionTray__RadioInputGroup">
-                    <SubmissionTrayRadioInputGroup
-                      assignment={this.props.assignment}
-                      colors={this.props.colors}
-                      disabled={this.props.gradingDisabled}
-                      locale={this.props.locale}
-                      latePolicy={this.props.latePolicy}
-                      submission={this.props.submission}
-                      submissionUpdating={this.props.submissionUpdating}
-                      updateSubmission={this.props.updateSubmission}
-                    />
-                  </div>
+                <View as="div" margin="0 0 small 0" data-testid="SubmissionTray__RadioInputGroup">
+                  <SubmissionTrayRadioInputGroup
+                    assignment={this.props.assignment}
+                    colors={this.props.colors}
+                    customGradeStatuses={this.props.customGradeStatuses}
+                    customGradeStatusesEnabled={this.props.customGradeStatusesEnabled}
+                    disabled={this.props.gradingDisabled}
+                    locale={this.props.locale}
+                    latePolicy={this.props.latePolicy}
+                    submission={this.props.submission}
+                    submissionUpdating={this.props.submissionUpdating}
+                    updateSubmission={this.props.updateSubmission}
+                  />
                 </View>
-
                 <View as="div" margin="small 0" className="hr" />
-
                 <View as="div" padding="xx-small">
                   <div id="SubmissionTray__Comments">
                     {this.renderSubmissionComments(submissionCommentsProps)}

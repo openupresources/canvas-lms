@@ -24,8 +24,8 @@ describe Loaders::DiscussionEntryLoader do
     student_in_course(active_all: true)
     @student.update(name: "Student")
     @de1 = @discussion.discussion_entries.create!(message: "peekaboo", user: @teacher, created_at: Time.zone.now)
-    @de2 = @discussion.discussion_entries.create!(message: "can't touch this.", user: @student, created_at: Time.zone.now - 1.day)
-    @de3 = @discussion.discussion_entries.create!(message: "goodbye", user: @teacher, created_at: Time.zone.now - 2.days)
+    @de2 = @discussion.discussion_entries.create!(message: "can't touch this.", user: @student, created_at: 1.day.ago)
+    @de3 = @discussion.discussion_entries.create!(message: "goodbye", user: @teacher, created_at: 2.days.ago)
     @de4 = @discussion.discussion_entries.create!(message: "sub entry", user: @teacher, parent_id: @de2.id)
     @de3.destroy
   end
@@ -124,15 +124,6 @@ describe Loaders::DiscussionEntryLoader do
         current_user: @teacher
       ).load(@de2).then do |discussion_entries|
         expect(discussion_entries.map(&:id)).to match_array [@de4.id]
-      end
-    end
-
-    Account.site_admin.enable_feature!(:isolated_view)
-    GraphQL::Batch.batch do
-      Loaders::DiscussionEntryLoader.for(
-        current_user: @teacher
-      ).load(@de2).then do |discussion_entries|
-        expect(discussion_entries.map(&:id)).to match_array [@de4.id, de5.id, de6.id]
       end
     end
   end

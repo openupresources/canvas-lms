@@ -195,7 +195,7 @@ module RCENextPage
 
   def rce_validate_wiki_style_attrib(type, value, selectors)
     in_frame rce_page_body_ifr_id do
-      expect(f("#tinymce #{selectors}").attribute("style")).to match("#{type}: #{value}\;")
+      expect(f("#tinymce #{selectors}").attribute("style")).to match("#{type}: #{value};")
     end
   end
 
@@ -522,6 +522,18 @@ module RCENextPage
     fj('label:contains("Display Text Link (Opens in a new tab)")')
   end
 
+  def current_link_label
+    f('[data-testid="selected-link-name"]')
+  end
+
+  def click_replace_link_button
+    f('[data-testid="replace-link-button"]').click
+  end
+
+  def click_cancel_replace_button
+    f('[data-testid="cancel-replace-button"]').click
+  end
+
   def click_display_text_link_option
     display_text_link_option.click
   end
@@ -567,6 +579,23 @@ module RCENextPage
 
   def sidebar_link(title)
     fj("aside li:contains('#{title}')")
+  end
+
+  def create_wiki_page_link(title)
+    click_course_links_toolbar_menuitem
+    click_pages_accordion
+    click_course_item_link(title)
+  end
+
+  def open_edit_link_tray
+    click_link_for_options
+    click_link_options_button
+  end
+
+  def change_link_text_input(new_text)
+    input = f('[data-testid="link-text-input"]')
+    input.send_keys(:backspace) until input.property("value").empty?
+    input.send_keys(new_text)
   end
 
   #=====================================================================================================================
@@ -938,6 +967,54 @@ module RCENextPage
     element_exists?(".assignment-title .MathJax_Preview")
   end
 
+  def equation_editor_modal_exists?
+    element_exists?("[aria-label='Equation Editor']")
+  end
+
+  def math_rendering_exists?
+    element_exists?("#MathJax-Element-1-Frame")
+  end
+
+  def equation_editor_button
+    possibly_hidden_toolbar_button('button[aria-label="Insert Math Equation"]')
+  end
+
+  def equation_editor_done_button
+    f("[data-testid='equation-editor-modal-done']")
+  end
+
+  def equation_editor_close_button
+    f("[data-testid='equation-editor-modal-close']")
+  end
+
+  def math_image
+    f(".equation_image")
+  end
+
+  def edit_math_image_button
+    find_button("Edit Equation")
+  end
+
+  def advanced_editor_toggle
+    parent_fxpath(advanced_editor_toggle_child)
+  end
+
+  def advanced_editor_toggle_child
+    f("[data-testid='advanced-toggle']")
+  end
+
+  def advanced_editor_textarea
+    f("[data-testid='advanced-editor']")
+  end
+
+  def basic_editor_textarea
+    f("[data-testid='math-field")
+  end
+
+  def first_math_symbol_button
+    find_from_element_fxpath(ff('[data-testid="math-symbol-icon"]')[0], "../../../../..")
+  end
+
   #=====================================================================================================================
   # Embed
 
@@ -1026,10 +1103,15 @@ module RCENextPage
   end
 
   def possibly_hidden_toolbar_button(selector)
-    f(selector)
-  rescue Selenium::WebDriver::Error::NoSuchElementError
-    more_toolbar_button.click
-    f(selector)
+    element = f(selector)
+    if !element.displayed? || !element.enabled?
+      more_toolbar_button.click
+
+      # Wait for the toolbar opening animation to finish
+      # Toolbar buttons can't be interacted with until it's done
+      wait_for_no_such_element { f(".tox-toolbar__overflow--growing") }
+    end
+    element
   end
 
   def toolbar_button(button_label)

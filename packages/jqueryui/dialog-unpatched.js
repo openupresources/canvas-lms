@@ -16,6 +16,11 @@
  *	jquery.ui.position.js
  *	jquery.ui.resizable.js
  */
+
+/* eslint-disable eslint-comments/no-unlimited-disable */
+/* eslint-disable */
+/* tslint:disable */
+
 import $ from 'jquery'
 import './core'
 import './widget'
@@ -24,6 +29,15 @@ import './draggable'
 import './mouse'
 import './position'
 import './resizable'
+
+function isSafari() {
+  return (
+    !/Firefox/i.test(navigator.userAgent) &&
+    navigator.userAgent.indexOf('AppleWebKit') !== -1 &&
+    escape(navigator.javaEnabled.toString()) !==
+      'function%20javaEnabled%28%29%20%7B%20%5Bnative%20code%5D%20%7D'
+  )
+}
 
 var uiDialogClasses = "ui-dialog ui-widget ui-widget-content ui-corner-all ",
 	sizeRelatedOptions = {
@@ -392,7 +406,7 @@ $.widget("ui.dialog", {
 		}
 
 		this.uiDialog.attr('aria-hidden', false);
-		if ($.browser && $.browser.safari) {
+		if (isSafari()) {
       var titleClose = this.uiDialog.find('.ui-dialog-titlebar-close');
       if (titleClose.length) {
         titleClose.focus();
@@ -789,7 +803,9 @@ $.extend( $.ui.dialog.overlay, {
 						// INSTRUCTURE - make sure that the element isn't in the dialog
 						// before stopping all events
 						if ( $( event.target ).zIndex() < $.ui.dialog.overlay.maxZ &&
-								!(dialog.element.has(event.target).length ) ) {
+								!(dialog.element.has(event.target).length ) &&
+								!event.target.parentElement?.getAttribute('data-instui-modal-close-button')
+						) {
 							return false;
 						}
 					});
@@ -852,51 +868,13 @@ $.extend( $.ui.dialog.overlay, {
 	height: function() {
 		var scrollHeight,
 			offsetHeight;
-		// handle IE
-		if ( $.browser.msie ) {
-			scrollHeight = Math.max(
-				document.documentElement.scrollHeight,
-				document.body.scrollHeight
-			);
-			offsetHeight = Math.max(
-				document.documentElement.offsetHeight,
-				document.body.offsetHeight
-			);
-
-			if ( scrollHeight < offsetHeight ) {
-				return $( window ).height() + "px";
-			} else {
-				return scrollHeight + "px";
-			}
-		// handle "good" browsers
-		} else {
-			return $( document ).height() + "px";
-		}
+    return $( document ).height() + "px";
 	},
 
 	width: function() {
 		var scrollWidth,
 			offsetWidth;
-		// handle IE
-		if ( $.browser.msie ) {
-			scrollWidth = Math.max(
-				document.documentElement.scrollWidth,
-				document.body.scrollWidth
-			);
-			offsetWidth = Math.max(
-				document.documentElement.offsetWidth,
-				document.body.offsetWidth
-			);
-
-			if ( scrollWidth < offsetWidth ) {
-				return $( window ).width() + "px";
-			} else {
-				return scrollWidth + "px";
-			}
-		// handle "good" browsers
-		} else {
-			return $( document ).width() + "px";
-		}
+    return $( document ).width() + "px";
 	},
 
 	resize: function() {

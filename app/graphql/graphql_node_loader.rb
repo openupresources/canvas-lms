@@ -29,6 +29,10 @@ module GraphQLNodeLoader
       Loaders::SISIDLoader.for(Account).load(id).then(check_read_permission)
     when "Course"
       Loaders::IDLoader.for(Course).load(id).then(check_read_permission)
+    when "CustomGradeStatus"
+      Loaders::IDLoader.for(CustomGradeStatus).load(id).then(check_read_permission)
+    when "StandardGradeStatus"
+      Loaders::IDLoader.for(StandardGradeStatus).load(id).then(check_read_permission)
     when "CourseBySis"
       Loaders::SISIDLoader.for(Course).load(id).then(check_read_permission)
     when "Assignment"
@@ -92,6 +96,8 @@ module GraphQLNodeLoader
       end
     when "GradingPeriod"
       Loaders::IDLoader.for(GradingPeriod).load(id).then(check_read_permission)
+    when "GradingPeriodGroup"
+      Loaders::IDLoader.for(GradingPeriodGroup).load(id).then(check_read_permission)
     when "InternalSetting"
       return nil unless Account.site_admin.grants_right?(ctx[:current_user], ctx[:session], :manage_internal_settings)
 
@@ -171,6 +177,8 @@ module GraphQLNodeLoader
       Loaders::IDLoader.for(Rubric).load(id).then(check_read_permission)
     when "Term"
       Loaders::IDLoader.for(EnrollmentTerm).load(id).then do |enrollment_term|
+        next nil unless enrollment_term
+
         Loaders::AssociationLoader.for(EnrollmentTerm, :root_account).load(enrollment_term).then do
           next nil unless enrollment_term.root_account.grants_right?(ctx[:current_user], :read)
 
@@ -178,7 +186,9 @@ module GraphQLNodeLoader
         end
       end
     when "TermBySis"
-      Loaders::SISIDLoader.for(EnrollmentTerm).load(id).then do |enrollment_term|
+      Loaders::SISIDLoader.for(EnrollmentTerm, root_account: ctx[:domain_root_account]).load(id).then do |enrollment_term|
+        next nil unless enrollment_term
+
         Loaders::AssociationLoader.for(EnrollmentTerm, :root_account).load(enrollment_term).then do
           next nil unless enrollment_term.root_account.grants_right?(ctx[:current_user], :read)
 
@@ -209,7 +219,7 @@ module GraphQLNodeLoader
       end
     when "Conversation"
       Loaders::IDLoader.for(Conversation).load(id).then do |conversation|
-        next nil unless conversation.conversation_participants.where(user: ctx[:current_user]).first
+        next nil unless conversation&.conversation_participants&.where(user: ctx[:current_user])&.first
 
         conversation
       end
@@ -234,6 +244,12 @@ module GraphQLNodeLoader
         next if !record || record.deleted? || !record.context.grants_right?(ctx[:current_user], :read)
 
         record
+      end
+    when "UsageRights"
+      Loaders::IDLoader.for(UsageRights).load(id).then do |usage_rights|
+        next unless usage_rights.context.grants_right?(ctx[:current_user], :read)
+
+        usage_rights
       end
     else
       raise UnsupportedTypeError, "don't know how to load #{type}"

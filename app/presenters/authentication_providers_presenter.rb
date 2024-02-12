@@ -92,16 +92,6 @@ class AuthenticationProvidersPresenter
     config.new_record? ? [["Last", nil]] + position_options : position_options
   end
 
-  def ips_configured?
-    !!ip_addresses_setting.presence
-  end
-
-  def ip_list
-    return "" unless ips_configured?
-
-    ip_addresses_setting.split(",").map(&:strip).join("\n")
-  end
-
   def saml_identifiers
     return [] unless saml_enabled?
 
@@ -131,7 +121,7 @@ class AuthenticationProvidersPresenter
   end
 
   def new_config(auth_type)
-    AuthenticationProvider.new(auth_type: auth_type, account: account)
+    AuthenticationProvider.new(auth_type:, account:)
   end
 
   def parent_reg_selected
@@ -147,12 +137,12 @@ class AuthenticationProvidersPresenter
     id = "aacfa_#{canvas_attribute}_attribute_#{id_suffix(aac)}"
     if aac.class.recognized_federated_attributes.nil?
       if selected
-        text_field_tag(name, selected, id: id)
+        text_field_tag(name, selected, id:)
       else
         text_field_tag(nil)
       end
     else
-      select_tag(name, options_for_select(aac.class.recognized_federated_attributes, selected), class: "ic-Input", id: id)
+      select_tag(name, options_for_select(aac.class.recognized_federated_attributes, selected), class: "ic-Input", id:)
     end
   end
 
@@ -160,11 +150,5 @@ class AuthenticationProvidersPresenter
     suf = aac.class.sti_name
     suf += "_#{aac.id}" unless aac.new_record?
     suf
-  end
-
-  private
-
-  def ip_addresses_setting
-    Setting.get("account_authorization_config_ip_addresses", nil)
   end
 end

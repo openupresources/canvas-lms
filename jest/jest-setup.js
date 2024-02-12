@@ -16,24 +16,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import 'cross-fetch/polyfill'
+import {TextDecoder, TextEncoder} from 'util'
 import CoreTranslations from '../public/javascripts/translations/en.json'
 import Enzyme from 'enzyme'
 import Adapter from 'enzyme-adapter-react-16'
-import {filterUselessConsoleMessages} from '@instructure/js-utils'
-import rceFormatMessage from '@instructure/canvas-rce/lib/format-message'
-import plannerFormatMessage from '@instructure/canvas-planner/lib/format-message'
+import filterUselessConsoleMessages from '@instructure/filter-console-messages'
+import rceFormatMessage from '@instructure/canvas-rce/es/format-message'
 import {up as configureDateTime} from '../ui/boot/initializers/configureDateTime'
 import {up as configureDateTimeMomentParser} from '../ui/boot/initializers/configureDateTimeMomentParser'
 import {useTranslations} from '@canvas/i18n'
+import MockBroadcastChannel from './MockBroadcastChannel'
 
 useTranslations('en', CoreTranslations)
 
 rceFormatMessage.setup({
-  locale: 'en',
-  missingTranslation: 'ignore',
-})
-
-plannerFormatMessage.setup({
   locale: 'en',
   missingTranslation: 'ignore',
 })
@@ -47,54 +44,17 @@ plannerFormatMessage.setup({
 /* eslint-disable no-console */
 const globalError = global.console.error
 const ignoredErrors = [
-  /\[object Object\]/,
-  /%s has a method called shouldComponentUpdate/,
-  /`NaN` is an invalid value for the `%s` css style property/,
-  /<Provider> does not support changing `store` on the fly/,
-  /A component is changing a controlled input of type %s to be uncontrolled/,
-  /A theme registry has already been initialized/,
-  /An update to (%s|DefaultToolForm) inside a test was not wrapped in act/,
+  /An update to %s inside a test was not wrapped in act/,
   /Can't perform a React state update on an unmounted component/,
-  /Cannot read property '(activeElement|useRealTimers)' of undefined/,
-  /Cannot read property 'name' of null/,
-  /Cannot update during an existing state transition/,
-  /contextType was defined as an instance property on %s/,
-  /Error writing result to store for query/,
-  /Expected one of Group, Option in Select but found 'option'/,
-  /Failed loading the language file for/,
   /Function components cannot be given refs/,
-  /invalid messageType: (notSupported|undefined)/,
-  /Invalid prop `children` supplied to `(Option|View)`/,
-  /Invalid prop `editorOptions.plugins` of type `string` supplied to `(ForwardRef|RCEWrapper)`/, // https://instructure.atlassian.net/browse/MAT-453
-  /Invalid prop `editorOptions.toolbar\[0\]` of type `string` supplied to `(ForwardRef|RCEWrapper)`/, // https://instructure.atlassian.net/browse/MAT-453
   /Invalid prop `heading` of type `object` supplied to `Billboard`/, // https://instructure.atlassian.net/browse/QUIZ-8870
-  /Invalid prop `selectedDate` of type `date` supplied to `CanvasDateInput`/,
-  /Invariant Violation/,
-  /It looks like you're using the wrong act/,
-  /Prop `children` should be supplied unless/,
-  /React does not recognize the `%s` prop on a DOM element/,
-  /Render methods should be a pure function of props and state/,
-  /The 'screenReaderOnly' prop must be used in conjunction with 'liveRegion'/,
+  /Invariant Violation/, // https://instructure.atlassian.net/browse/VICE-3968
+  /Prop `children` should be supplied unless/, // https://instructure.atlassian.net/browse/FOO-3407
   /The above error occurred in the <.*> component/,
-  /The prop `focusOnInit` is marked as required in `(FileUpload|TextEntry|UrlEntry)`/,
-  /The prop `id` is marked as required in `(ColHeader|FormField|Option)`/,
-  /The prop `label` is marked as required in `(FormFieldLayout|Modal)`/,
-  /The prop `renderLabel` is marked as required in `Select`/,
-  /validateDOMNesting\(...\): %s cannot appear as a child of <%s>/,
-  /WARNING: heuristic fragment matching going on!/,
-  /Warning: Failed prop type: Expected one of Checkbox in CheckboxGroup but found `View`/,
-  /You are using the simple \(heuristic\) fragment matcher, but your queries contain union or interface types./,
   /You seem to have overlapping act\(\) calls/,
 ]
 const globalWarn = global.console.warn
-const ignoredWarnings = [
-  /\[View|Text\] .* in version 8.0.0/i,
-  /Error getting \/media_objects\/dummy_media_id\/info/,
-  /Exactly one focusable child is required/,
-  /Please update the following components: %s/,
-  /shared_brand_configs.* not called/,
-  /value provided is not in a recognized RFC2822 or ISO format/,
-]
+const ignoredWarnings = []
 global.console = {
   log: console.log,
   error: error => {
@@ -120,8 +80,6 @@ global.console = {
 }
 /* eslint-enable no-console */
 filterUselessConsoleMessages(global.console)
-
-require('jest-fetch-mock').enableFetchMocks()
 
 window.scroll = () => {}
 window.ENV = {
@@ -215,6 +173,10 @@ if (!('ResizeObserver' in window)) {
       unobserve() {
         return null
       }
+
+      disconnect() {
+        return null
+      }
     },
   })
 }
@@ -227,6 +189,13 @@ if (!('matchMedia' in window)) {
   })
   window.matchMedia._mocked = true
 }
+
+global.BroadcastChannel = global.BroadcastChannel || MockBroadcastChannel
+
+global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
+
+global.performance = global.performance || {}
+global.performance.getEntriesByType = global.performance.getEntriesByType || (() => [])
 
 if (!('scrollIntoView' in window.HTMLElement.prototype)) {
   window.HTMLElement.prototype.scrollIntoView = () => {}
@@ -261,3 +230,42 @@ Object.defineProperty(window, 'location', {
   // Prevents JSDOM errors from doing window.location = ...
   set: () => {},
 })
+
+if (!('structuredClone' in window)) {
+  Object.defineProperty(window, 'structuredClone', {
+    value: obj => JSON.parse(JSON.stringify(obj)),
+  })
+}
+
+if (typeof window.URL.createObjectURL === 'undefined') {
+  Object.defineProperty(window.URL, 'createObjectURL', {value: () => 'http://example.com/whatever'})
+}
+
+if (typeof window.URL.revokeObjectURL === 'undefined') {
+  Object.defineProperty(window.URL, 'revokeObjectURL', {value: () => undefined})
+}
+
+global.fetch =
+  global.fetch || jest.fn().mockImplementation(() => Promise.resolve({json: () => ({})}))
+
+Document.prototype.createRange =
+  Document.prototype.createRange ||
+  function () {
+    return {
+      setEnd() {},
+      setStart() {},
+      getBoundingClientRect() {
+        return {right: 0}
+      },
+      getClientRects() {
+        return {
+          length: 0,
+          left: 0,
+          right: 0,
+        }
+      },
+    }
+  }
+
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder

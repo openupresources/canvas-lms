@@ -78,7 +78,7 @@ describe ErrorsController do
     it "does not return nil.id if report creation failed" do
       expect(ErrorReport).to receive(:where).once.and_raise("failed!")
       post "create", params: { error: { id: 1 } }, format: "json"
-      expect(JSON.parse(response.body)).to eq({ "logged" => true, "id" => nil })
+      expect(response.parsed_body).to eq({ "logged" => true, "id" => nil })
     end
 
     it "does not record the user as nil.id if report creation failed" do
@@ -109,6 +109,13 @@ describe ErrorsController do
       session[:become_user_id] = other_user.id
       post "create", params: { eerror: { message: "test message" } }
       expect(ErrorReport.order(:id).last.user_id).to eq other_user.id
+    end
+
+    it "doesn't create a report if we're out of region" do
+      expect(Shard.current).to receive(:in_current_region?).and_return(false)
+      expect do
+        post "create", params: { error: { id: "garbage" } }
+      end.not_to change { ErrorReport.count }
     end
   end
 end

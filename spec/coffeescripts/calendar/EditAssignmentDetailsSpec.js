@@ -18,9 +18,9 @@
 
 import $ from 'jquery'
 import EditAssignmentDetails from 'ui/features/calendar/backbone/views/EditAssignmentDetails'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import timezone from 'timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import detroit from 'timezone/America/Detroit'
 import french from 'timezone/fr_FR'
 import fakeENV from 'helpers/fakeENV'
@@ -71,7 +71,6 @@ QUnit.module('EditAssignmentDetails', {
       startDate() {
         return fcUtil.wrap('2015-08-07T17:00:00Z')
       },
-      allDay: false,
     }
     fakeENV.setup()
   },
@@ -109,21 +108,15 @@ const nameLengthHelper = function (
     []
   )
 }
-test('should initialize input with start date', function () {
+test('should initialize input with start date and time', function () {
   const view = createView(commonEvent(), this.event)
-  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015')
+  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015 5:00pm')
 })
 
 test('should have blank input when no start date', function () {
   this.event.startDate = () => null
   const view = createView(commonEvent(), this.event)
   equal(view.$('.datetime_field').val(), '')
-})
-
-test('should include start date only if all day', function () {
-  this.event.allDay = true
-  const view = createView(commonEvent(), this.event)
-  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015')
 })
 
 test('should treat start date as fudged', function () {
@@ -135,7 +128,7 @@ test('should treat start date as fudged', function () {
     formats: getI18nFormats(),
   })
   const view = createView(commonEvent(), this.event)
-  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015')
+  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015 1:00pm')
 })
 
 test('should localize start date', function () {
@@ -150,7 +143,7 @@ test('should localize start date', function () {
     },
   })
   const view = createView(commonEvent(), this.event)
-  equal(view.$('.datetime_field').val(), 'ven. 7 août 2015')
+  equal(view.$('.datetime_field').val(), 'ven. 7 août 2015 17:00')
 })
 
 test('requires name to save assignment event', function () {
@@ -265,5 +258,6 @@ test('Should disable changing the date if course pacing is enabled', function ()
   this.event.contextInfo = {course_pacing_enabled: true}
   const view = createView(commonEvent(), this.event)
   view.setContext('course_3')
-  equal(view.$('#assignment_due_at').css('disabled'), '')
+  view.contextChange({target: '#assignment_context'}, false)
+  equal(view.$('#assignment_due_at').prop('disabled'), true)
 })

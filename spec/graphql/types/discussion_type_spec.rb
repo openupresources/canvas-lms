@@ -77,9 +77,9 @@ RSpec.shared_context "DiscussionTypeContext" do
         allowed: lambda do |user|
           permission = !discussion.assignment.context.large_roster? && discussion.assignment_id && discussion.assignment.published?
           if discussion.assignment.context.concluded?
-            return permission && discussion.assignment.context.grants_right?(user, :read_as_admin)
+            permission && discussion.assignment.context.grants_right?(user, :read_as_admin)
           else
-            return permission && discussion.assignment.context.grants_any_right?(user, :manage_grades, :view_all_grades)
+            permission && discussion.assignment.context.grants_any_right?(user, :manage_grades, :view_all_grades)
           end
         end
       },
@@ -175,11 +175,11 @@ RSpec.shared_examples "DiscussionType" do
     student_in_course(active_all: true)
     type_with_student = GraphQLTypeTester.new(discussion, current_user: @student)
 
-    expect(type_with_student.resolve("initialPostRequiredForCurrentUser")).to eq true
+    expect(type_with_student.resolve("initialPostRequiredForCurrentUser")).to be true
     expect(type_with_student.resolve("discussionEntriesConnection { nodes { message } }").count).to eq 0
 
     discussion.discussion_entries.create!(message: "Here is my entry", user: @student)
-    expect(type_with_student.resolve("initialPostRequiredForCurrentUser")).to eq false
+    expect(type_with_student.resolve("initialPostRequiredForCurrentUser")).to be false
     expect(type_with_student.resolve("discussionEntriesConnection { nodes { message } }").count).to eq 2
   end
 
@@ -198,12 +198,14 @@ RSpec.shared_examples "DiscussionType" do
   it "queries the attribute" do
     expect(discussion_type.resolve("title")).to eq discussion.title
     expect(discussion_type.resolve("anonymousState")).to eq discussion.anonymous_state
+    expect(discussion_type.resolve("podcastEnabled")).to eq discussion.podcast_enabled
     expect(discussion_type.resolve("podcastHasStudentPosts")).to eq discussion.podcast_has_student_posts
     expect(discussion_type.resolve("discussionType")).to eq discussion.discussion_type
     expect(discussion_type.resolve("position")).to eq discussion.position
     expect(discussion_type.resolve("allowRating")).to eq discussion.allow_rating
     expect(discussion_type.resolve("onlyGradersCanRate")).to eq discussion.only_graders_can_rate
     expect(discussion_type.resolve("sortByRating")).to eq discussion.sort_by_rating
+    expect(discussion_type.resolve("todoDate")).to eq discussion.todo_date
     expect(discussion_type.resolve("isSectionSpecific")).to eq discussion.is_section_specific
 
     expect(discussion_type.resolve("rootTopic { _id }")).to eq discussion.root_topic_id&.to_s
@@ -271,7 +273,7 @@ RSpec.shared_examples "DiscussionType" do
   context "graded discussion" do
     it "allows querying the assignment type on a discussion" do
       Assignment::ALLOWED_GRADING_TYPES.each do |grading_type|
-        discussion.assignment.update!(grading_type: grading_type)
+        discussion.assignment.update!(grading_type:)
         expect(discussion_type.resolve("assignment { gradingType }")).to eq grading_type
       end
     end
@@ -410,11 +412,11 @@ RSpec.shared_examples "DiscussionType" do
     end
 
     it "author is nil" do
-      expect(@anon_discussion_type.resolve("author { shortName }")).to eq nil
+      expect(@anon_discussion_type.resolve("author { shortName }")).to be_nil
     end
 
     it "editor is nil" do
-      expect(@anon_discussion_type.resolve("editor { shortName }")).to eq nil
+      expect(@anon_discussion_type.resolve("editor { shortName }")).to be_nil
     end
 
     it "anonymous_author is not nil" do
@@ -422,7 +424,7 @@ RSpec.shared_examples "DiscussionType" do
     end
 
     it "mentionableUsersConnection is nil" do
-      expect(@anon_discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq nil
+      expect(@anon_discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to be_nil
     end
 
     it "returns the teacher author if a course id is provided" do
@@ -454,11 +456,11 @@ RSpec.shared_examples "DiscussionType" do
     end
 
     it "does not return the student author if a course id is provided" do
-      expect(@anon_student_discussion_type.resolve("author(courseId: \"#{@course.id}\") { shortName }")).to eq nil
+      expect(@anon_student_discussion_type.resolve("author(courseId: \"#{@course.id}\") { shortName }")).to be_nil
     end
 
     it "does not return the student editor if a course id is provided" do
-      expect(@anon_student_discussion_type.resolve("editor(courseId: \"#{@course.id}\") { shortName }")).to eq nil
+      expect(@anon_student_discussion_type.resolve("editor(courseId: \"#{@course.id}\") { shortName }")).to be_nil
     end
 
     context "partial anonymity" do
@@ -468,11 +470,11 @@ RSpec.shared_examples "DiscussionType" do
         end
 
         it "does not return as student author" do
-          expect(@anon_student_discussion_with_anonymous_author_type.resolve("author(courseId: \"#{@course.id}\") { shortName }")).to eq nil
+          expect(@anon_student_discussion_with_anonymous_author_type.resolve("author(courseId: \"#{@course.id}\") { shortName }")).to be_nil
         end
 
         it "does not return as student editor" do
-          expect(@anon_student_discussion_with_anonymous_author_type.resolve("editor(courseId: \"#{@course.id}\") { shortName }")).to eq nil
+          expect(@anon_student_discussion_with_anonymous_author_type.resolve("editor(courseId: \"#{@course.id}\") { shortName }")).to be_nil
         end
 
         it "returns student's anonymousAuthor" do
@@ -494,18 +496,18 @@ RSpec.shared_examples "DiscussionType" do
         end
 
         it "does not return student's anonymousAuthor" do
-          expect(@anon_student_discussion_with_non_anonymous_author_type.resolve("anonymousAuthor { shortName }")).to eq nil
+          expect(@anon_student_discussion_with_non_anonymous_author_type.resolve("anonymousAuthor { shortName }")).to be_nil
         end
       end
     end
 
     context "can reply anonymously" do
       it "returns false for teachers" do
-        expect(@anon_discussion_type.resolve("canReplyAnonymously")).to eq false
+        expect(@anon_discussion_type.resolve("canReplyAnonymously")).to be false
       end
 
       it "returns true for students" do
-        expect(@anon_discussion_as_student_type.resolve("canReplyAnonymously")).to eq true
+        expect(@anon_discussion_as_student_type.resolve("canReplyAnonymously")).to be true
       end
     end
   end
@@ -570,7 +572,7 @@ RSpec.shared_examples "DiscussionType" do
       result = discussion_type.resolve("discussionEntriesConnection(filter:deleted) { nodes { deleted } }")
 
       expect(result.count).to be 1
-      expect(result[0]).to eq true
+      expect(result[0]).to be true
     end
   end
 
@@ -675,7 +677,7 @@ describe Types::DiscussionType do
 
     describe "mentionable users connection" do
       it "finds lists the user" do
-        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(discussion.context.users.map(&:id).map(&:to_s))
+        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(discussion.context.users.map { |u| u.id.to_s })
       end
     end
 
@@ -723,7 +725,7 @@ describe Types::DiscussionType do
       end
 
       it "returns nil for message and emtpy entries array for student" do
-        expect(@delayed_type_with_student.resolve("message")).to be nil
+        expect(@delayed_type_with_student.resolve("message")).to be_nil
         expect(@delayed_type_with_student.resolve("discussionEntriesConnection { nodes { message } }")).to eq []
       end
 
@@ -733,7 +735,7 @@ describe Types::DiscussionType do
       end
 
       it "returns correct message and entries of topics when delayed_post_at is nil" do
-        expect(discussion.delayed_post_at).to eq nil
+        expect(discussion.delayed_post_at).to be_nil
         expect(@nil_delayed_at_type_with_student.resolve("message")).to eq discussion.message
         expect(@nil_delayed_at_type_with_student.resolve("discussionEntriesConnection { nodes { message } }").count).to eq 1
       end
@@ -751,8 +753,16 @@ describe Types::DiscussionType do
 
     describe "mentionable users connection" do
       it "finds lists the user" do
-        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(discussion.context.participating_users_in_context.map(&:id).map(&:to_s))
+        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(discussion.context.participating_users_in_context.map { |u| u.id.to_s })
       end
+    end
+
+    it "returns can_group correctly" do
+      student_in_course(active_all: true)
+      expect(discussion_type.resolve("canGroup")).to be true
+
+      discussion.discussion_entries.create!(message: "other student entry", user: @student)
+      expect(discussion_type.resolve("canGroup")).to be false
     end
   end
 
@@ -765,14 +775,43 @@ describe Types::DiscussionType do
     end
   end
 
+  context "editing group category id" do
+    it "changing group category id returns only group new group child topics" do
+      course = @course || course_factory(active_all: true)
+
+      discussion = course.discussion_topics.build(title: "topic")
+      discussion.save!
+
+      group_category_a = course.group_categories.create(name: "category_a", context: course, context_type: "Course", account: course.account)
+      group_category_a.groups.create!(name: "group 1a", context: course, context_type: "Course", account: course.account)
+      group_category_a.groups.create!(name: "group 2a", context: course, context_type: "Course", account: course.account)
+
+      group_category_b = course.group_categories.create(name: "category_b", context: course, context_type: "Course", account: course.account)
+      group_category_b.groups.create!(name: "group 1b", context: course, context_type: "Course", account: course.account)
+      group_category_b.groups.create!(name: "group 2b", context: course, context_type: "Course", account: course.account)
+
+      discussion.group_category = group_category_a
+      discussion.save!
+
+      discussion_type = GraphQLTypeTester.new(discussion, current_user: @teacher)
+
+      expect(discussion_type.resolve("childTopics { contextName }")).to match_array(["group 1a", "group 2a"])
+
+      discussion.group_category = group_category_b
+      discussion.save!
+
+      expect(discussion_type.resolve("childTopics { contextName }")).to match_array(["group 1b", "group 2b"])
+    end
+  end
+
   context "group discussion context name sorting" do
     let_once(:discussion) do
       course = @course || course_factory(active_all: true)
       group_category = course.group_categories.create!(name: "category")
-      course.groups.create!(name: "group 10", group_category: group_category)
-      course.groups.create!(name: "group 2", group_category: group_category)
-      course.groups.create!(name: "group 1", group_category: group_category)
-      course.groups.create!(name: "group 11", group_category: group_category)
+      course.groups.create!(name: "group 10", group_category:)
+      course.groups.create!(name: "group 2", group_category:)
+      course.groups.create!(name: "group 1", group_category:)
+      course.groups.create!(name: "group 11", group_category:)
 
       topic = course.discussion_topics.build(title: "topic")
       topic.group_category = group_category

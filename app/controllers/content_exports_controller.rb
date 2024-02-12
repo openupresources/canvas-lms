@@ -27,7 +27,7 @@ class ContentExportsController < ApplicationController
   def require_permission
     get_context
     @context ||= @current_user # if we're going through the dashboard
-    return render_unauthorized_action unless @context&.grants_all_rights?(@current_user, :read, :read_as_admin)
+    authorized_action(@context, @current_user, [:read, :read_as_admin], all_rights: true)
   end
 
   def index
@@ -100,6 +100,6 @@ class ContentExportsController < ApplicationController
   def render_export(export)
     json = export.as_json(only: %i[id progress workflow_state], methods: [:error_message])
     json["content_export"]["download_url"] = verified_file_download_url(export.attachment, export) if export.attachment && !export.expired?
-    render json: json
+    render json:
   end
 end

@@ -33,6 +33,7 @@ class DeveloperKey < ActiveRecord::Base
   belongs_to :user
   belongs_to :account
   belongs_to :root_account, class_name: "Account"
+  belongs_to :service_user, class_name: "User"
 
   has_many :page_views
   has_many :access_tokens, -> { where(workflow_state: "active") }
@@ -41,7 +42,8 @@ class DeveloperKey < ActiveRecord::Base
 
   has_one :tool_consumer_profile, class_name: "Lti::ToolConsumerProfile", inverse_of: :developer_key
   has_one :tool_configuration, class_name: "Lti::ToolConfiguration", dependent: :destroy, inverse_of: :developer_key
-  serialize :scopes, Array
+  has_one :lti_registration, class_name: "Lti::IMS::Registration", dependent: :destroy, inverse_of: :developer_key
+  serialize :scopes, type: Array
 
   before_validation :normalize_public_jwk_url
   before_validation :normalize_scopes
@@ -94,7 +96,10 @@ class DeveloperKey < ActiveRecord::Base
     state :deleted
   end
 
-  self.ignored_columns = %i[oidc_login_uri tool_id]
+  self.ignored_columns += %i[oidc_login_uri tool_id]
+
+  # https://stackoverflow.com/a/2500819
+  alias_method :referenced_tool_configuration, :tool_configuration
 
   alias_method :destroy_permanently!, :destroy
   def destroy
@@ -122,6 +127,10 @@ class DeveloperKey < ActiveRecord::Base
     super(value)
   end
 
+  def lti_registration?
+    lti_registration.present?
+  end
+
   def validate_redirect_uris
     uris = redirect_uris&.map do |value|
       value, _ = CanvasHttp.validate_url(value, allowed_schemes: nil)
@@ -131,7 +140,7 @@ class DeveloperKey < ActiveRecord::Base
     errors.add :redirect_uris, "a redirect_uri is too long" if uris.any? { |uri| uri.length > 4096 }
 
     self.redirect_uris = uris unless uris == redirect_uris
-  rescue URI::Error, ArgumentError
+  rescue CanvasHttp::Error, URI::Error, ArgumentError
     errors.add :redirect_uris, "is not a valid URI"
   end
 
@@ -194,7 +203,7 @@ class DeveloperKey < ActiveRecord::Base
 
       unless @sns[region].present?
         settings = Rails.application.credentials.sns_creds
-        @sns[region] = Aws::SNS::Client.new(settings.merge(region: region)) if settings
+        @sns[region] = Aws::SNS::Client.new(settings.merge(region:)) if settings
       end
       @sns[region]
     end
@@ -214,7 +223,14 @@ class DeveloperKey < ActiveRecord::Base
 
     def by_cached_vendor_code(vendor_code)
       MultiCache.fetch("developer_keys/#{vendor_code}") do
-        DeveloperKey.shard([Shard.current, Account.site_admin.shard].uniq).where(vendor_code: vendor_code).to_a
+        DeveloperKey.shard([Shard.current, Account.site_admin.shard].uniq).where(vendor_code:).to_a
+      end
+    end
+
+    def mobile_app_keys(active: true)
+      GuardRail.activate(:secondary) do
+        keys = shard(Shard.default).where.not(sns_arn: nil)
+        active ? keys.nondeleted : keys
       end
     end
   end
@@ -369,6 +385,22 @@ class DeveloperKey < ActiveRecord::Base
     internal_service
   end
 
+  # If true, this key can be used for "service authentication" (a token request
+  # using a client_credentials grant type and a pre-determined service user).
+  #
+  # For now we will only allow this pattern for internal services in the
+  # site admin account.
+  def site_admin_service_auth?
+    Account.site_admin.feature_enabled?(:site_admin_service_auth) &&
+      service_user.present? &&
+      internal_service? &&
+      site_admin?
+  end
+
+  def tool_configuration
+    lti_registration.presence || referenced_tool_configuration
+  end
+
   private
 
   def validate_lti_fields
@@ -405,10 +437,26 @@ class DeveloperKey < ActiveRecord::Base
     end
   end
 
-  def manage_external_tools_multi_shard(enqueue_args, method, affected_account, start_time)
-    Shard.with_each_shard do
+  def manage_external_tools_multi_shard_in_region(enqueue_args, method, affected_account, start_time)
+    Shard.with_each_shard(Shard.in_current_region) do
       delay(**enqueue_args).manage_external_tools_on_shard(method, affected_account, start_time)
+    rescue
+      raise Delayed::RetriableError
     end
+  end
+
+  def manage_external_tools_multi_shard(enqueue_args, method, affected_account, start_time)
+    DatabaseServer.send_in_each_region(
+      self,
+      :manage_external_tools_multi_shard_in_region,
+      enqueue_args, # args passed to delay() this time when creating job in each region
+      enqueue_args, # first argument to manage_external_tools_multi_shard_in_region
+      method,
+      affected_account,
+      start_time
+    )
+  rescue
+    raise Delayed::RetriableError
   end
 
   def manage_external_tools_on_shard(method, account, start_time)
@@ -423,11 +471,11 @@ class DeveloperKey < ActiveRecord::Base
     stat_prefix = "developer_key.manage_external_tools"
     stat_prefix += ".error" if exception
 
-    tags = { method: method }
+    tags = { method: }
     latency = (Time.zone.now.to_i - start_time) * 1000 # ms for DD
 
-    InstStatsd::Statsd.increment("#{stat_prefix}.count", tags: tags)
-    InstStatsd::Statsd.timing("#{stat_prefix}.latency", latency, tags: tags)
+    InstStatsd::Statsd.increment("#{stat_prefix}.count", tags:)
+    InstStatsd::Statsd.timing("#{stat_prefix}.latency", latency, tags:)
 
     if exception
       Canvas::Errors.capture_exception(:developer_keys, exception, :error)
@@ -437,7 +485,8 @@ class DeveloperKey < ActiveRecord::Base
   def tool_management_enqueue_args
     {
       n_strand: ["developer_key_tool_management", account&.global_id || "site_admin"],
-      priority: Delayed::LOW_PRIORITY
+      priority: Delayed::LOW_PRIORITY,
+      max_attempts: 4
     }
   end
 
@@ -482,7 +531,11 @@ class DeveloperKey < ActiveRecord::Base
 
     base_scope = ContextExternalTool.where.not(workflow_state: "deleted")
     tool_management_scope(base_scope, account).select(:id).find_in_batches do |tool_ids|
+      # There appear to be broken tools with no context, which break later on in the process.
+      # Skip them.
       ContextExternalTool.where(id: tool_ids).preload(:context).each do |tool|
+        next unless tool.context
+
         tool_configuration.new_external_tool(
           tool.context,
           existing_tool: tool

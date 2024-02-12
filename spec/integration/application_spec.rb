@@ -69,7 +69,7 @@ describe "site-wide" do
       course_with_teacher_logged_in
 
       get "/"
-      expect(response[content_security_policy]).to eq "frame-src 'self' localhost; frame-ancestors 'self' ;"
+      expect(response[content_security_policy]).to eq "frame-src 'self' blob: localhost; frame-ancestors 'self' ;"
     end
   end
 
@@ -165,11 +165,14 @@ describe "site-wide" do
     user_session(@user)
 
     post "/users/#{@fake_user.id}/masquerade"
+
+    allow(I18n).to receive(:locale=)
+
     get "/"
 
     expect(assigns[:real_current_user]).to eq @user
     expect(Time.zone.name).to eq "Hawaii"
-    expect(I18n.locale).to eq :es
+    expect(I18n).to have_received(:locale=).with("es")
   end
 
   it "uses the masqueree's timezone and locale setting when masquerading" do
@@ -183,11 +186,14 @@ describe "site-wide" do
     user_session(@user)
 
     post "/users/#{@other_user.id}/masquerade"
+
+    allow(I18n).to receive(:locale=)
+
     get "/"
 
     expect(assigns[:real_current_user]).to eq @user
     expect(Time.zone.name).to eq "Hawaii"
-    expect(I18n.locale).to eq :es
+    expect(I18n).to have_received(:locale=).with("es").at_least(:once)
   end
 
   context "csrf protection" do
@@ -203,7 +209,7 @@ describe "site-wide" do
         user_session(@admin, @admin.pseudonyms.first)
         post "/users/#{@student.id}/masquerade"
 
-        expect(response.status).to eq 422
+        expect(response).to have_http_status :unprocessable_entity
       end
     end
   end

@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {map} from 'lodash'
 import $ from 'jquery'
 import {
   createGradebook,
@@ -24,6 +24,8 @@ import {
 } from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
 import studentRowHeaderConstants from 'ui/features/gradebook/react/default_gradebook/constants/studentRowHeaderConstants'
 import ContentFilterDriver from './default_gradebook/components/content-filters/ContentFilterDriver'
+import PostGradesStore from 'ui/features/gradebook/react/SISGradePassback/PostGradesStore'
+import {hideAggregateColumns} from 'ui/features/gradebook/react/default_gradebook/GradebookGrid/Grid.utils'
 
 const $fixtures = document.getElementById('fixtures')
 
@@ -50,8 +52,8 @@ test('renders the module select when not already rendered', function () {
   ok(this.container.children.length > 0, 'something was rendered')
 })
 
-test('does not render when modules do not exist', function () {
-  this.gradebook.setContextModules(undefined)
+test('does not render when modules are empty', function () {
+  this.gradebook.setContextModules([])
   this.gradebook.updateModulesFilterVisibility()
   strictEqual(this.container.children.length, 0, 'nothing was rendered')
 })
@@ -422,11 +424,16 @@ QUnit.module('Gradebook#updateCurrentSection', {
   setup() {
     this.server = sinon.fakeServer.create({respondImmediately: true})
     this.server.respondWith([200, {}, ''])
+    this.postGradesStore = PostGradesStore({
+      course: {id: '1', sis_id: null},
+      selected: {id: '1', type: 'course'},
+    })
+    this.postGradesStore.setSelectedSection = sinon.stub()
 
-    this.gradebook = createGradebook({settings_update_url: '/settingUrl'})
-    this.gradebook.postGradesStore = {
-      setSelectedSection: sinon.stub(),
-    }
+    this.gradebook = createGradebook({
+      settings_update_url: '/settingUrl',
+      postGradesStore: this.postGradesStore,
+    })
     sinon.stub(this.gradebook, 'saveSettings').callsFake(() => Promise.resolve())
     sandbox.stub(this.gradebook, 'updateSectionFilterVisibility')
   },
@@ -443,29 +450,13 @@ test('updates the filter setting with the given section id', function () {
 
 test('sets the selected section on the post grades store', function () {
   this.gradebook.updateCurrentSection('2001')
-  strictEqual(this.gradebook.postGradesStore.setSelectedSection.callCount, 1)
+  strictEqual(this.postGradesStore.setSelectedSection.callCount, 3)
 })
 
 test('includes the selected section when updating the post grades store', function () {
   this.gradebook.updateCurrentSection('2001')
-  const [sectionId] = this.gradebook.postGradesStore.setSelectedSection.firstCall.args
+  const [sectionId] = this.postGradesStore.setSelectedSection.thirdCall.args
   strictEqual(sectionId, '2001')
-})
-
-test('re-renders the section filter', async function () {
-  await this.gradebook.updateCurrentSection('2001')
-  strictEqual(this.gradebook.updateSectionFilterVisibility.callCount, 1)
-})
-
-test('re-renders the section filter after setting the selected section', function () {
-  this.gradebook.updateSectionFilterVisibility.callsFake(() => {
-    strictEqual(
-      this.gradebook.getFilterRowsBySetting('sectionId'),
-      '2001',
-      'section was already updated'
-    )
-  })
-  this.gradebook.updateCurrentSection('2001')
 })
 
 test('saves settings', function () {
@@ -581,7 +572,61 @@ QUnit.module('Gradebook#filterAssignments', {
         module_ids: ['1'],
       },
     ]
+    const submissionsChunk = [
+      {
+        submissions: [
+          {
+            assignment_id: '2301',
+            id: '2501',
+            posted_at: null,
+            score: 10,
+            user_id: '1101',
+            late: true,
+            workflow_state: 'graded',
+          },
+          {
+            assignment_id: '2302',
+            id: '2502',
+            posted_at: null,
+            score: 9,
+            user_id: '1101',
+            missing: true,
+            workflow_state: 'missing',
+          },
+        ],
+        user_id: '1101',
+      },
+    ]
     this.gradebook = createGradebook()
+    this.gradebook.assignments = {
+      2301: this.assignments[0],
+      2302: this.assignments[1],
+      2303: this.assignments[2],
+      2304: this.assignments[3],
+    }
+    this.gradebook.students = {
+      1101: {
+        id: '1101',
+        name: 'Adam Jones',
+        assignment_2301: {
+          assignment_id: '2301',
+          late: false,
+          missing: false,
+          excused: false,
+          seconds_late: 0,
+          user_id: '1101',
+        },
+        assignment_2302: {
+          assignment_id: '2302',
+          late: false,
+          missing: false,
+          excused: false,
+          seconds_late: 0,
+          user_id: '1101',
+        },
+      },
+    }
+    this.gradebook.gotSubmissionsChunk(submissionsChunk)
     this.gradebook.setAssignmentGroups([
       {id: '1', name: 'Assignments', position: 1},
       {id: '2', name: 'Homework', position: 2},
@@ -603,12 +648,14 @@ QUnit.module('Gradebook#filterAssignments', {
     }
     this.gradebook.gridDisplaySettings.showUnpublishedAssignments = true
     this.gradebook.show_attendance = true
+    this.gradebook.setAssignmentsLoaded()
+    this.gradebook.setSubmissionsLoaded(true)
   },
 })
 
 test('when filtering by assignments, only includes assignments in the filter', function () {
   this.gradebook.setFilterColumnsBySetting('gradingPeriodId', '0')
-  this.gradebook.filteredAssignmentIds = ['2301', '2304']
+  this.gradebook.searchFilteredAssignmentIds = ['2301', '2304']
   const assignments = this.gradebook.filterAssignments(this.assignments)
   propEqual(
     assignments.map(a => a.id),
@@ -673,52 +720,276 @@ test('includes "attendance" assignments when "show_attendance" is true', functio
 test('includes assignments from all grading periods when not filtering by grading period', function () {
   this.gradebook.setFilterColumnsBySetting('gradingPeriodId', '0') // value indicates "All Grading Periods"
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301', '2302', '2304'])
+  deepEqual(map(assignments, 'id'), ['2301', '2302', '2304'])
 })
 
 test('excludes assignments from other grading periods when filtering by a grading period', function () {
   this.gradebook.setFilterColumnsBySetting('gradingPeriodId', '1401')
   this.gradebook.setCurrentGradingPeriod()
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301'])
+  deepEqual(map(assignments, 'id'), ['2301'])
 })
 
 test('includes assignments from all grading periods grading period set has not been assigned', function () {
   this.gradebook.gradingPeriodSet = null
   this.gradebook.setFilterColumnsBySetting('gradingPeriodId', '1401')
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301', '2302', '2304'])
+  deepEqual(map(assignments, 'id'), ['2301', '2302', '2304'])
 })
 
 test('includes assignments from all modules when not filtering by module', function () {
   this.gradebook.setFilterColumnsBySetting('contextModuleId', '0') // All Modules
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301', '2302', '2304'])
+  deepEqual(map(assignments, 'id'), ['2301', '2302', '2304'])
 })
 
 test('excludes assignments from other modules when filtering by a module', function () {
   this.gradebook.setFilterColumnsBySetting('contextModuleId', '2')
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301'])
+  deepEqual(map(assignments, 'id'), ['2301'])
 })
 
 test('does not filter assignments when filtering by a module that was deleted', function () {
   this.gradebook.courseContent.contextModules = []
   this.gradebook.setFilterColumnsBySetting('contextModuleId', '2')
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301', '2302', '2304'])
+  deepEqual(map(assignments, 'id'), ['2301', '2302', '2304'])
 })
 
 test('includes assignments from all assignment groups when not filtering by assignment group', function () {
   this.gradebook.setFilterColumnsBySetting('assignmentGroupId', '0') // All Modules
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2301', '2302', '2304'])
+  deepEqual(map(assignments, 'id'), ['2301', '2302', '2304'])
 })
 
 test('excludes assignments from other assignment groups when filtering by an assignment group', function () {
   this.gradebook.setFilterColumnsBySetting('assignmentGroupId', '2')
   const assignments = this.gradebook.filterAssignments(this.assignments)
-  deepEqual(_.map(assignments, 'id'), ['2302'])
+  deepEqual(map(assignments, 'id'), ['2302'])
+})
+
+test('includes assignments filtered by submissions status', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'missing',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  this.gradebook.setFilterColumnsBySetting('submissions', 'missing')
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), ['2302'])
+})
+
+test('includes no assignments when filtered by non existent submissions status', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'extended',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  this.gradebook.setFilterColumnsBySetting('submissions', 'missing')
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), [])
+})
+
+test('includes assignments when filtered by existing status and searchFilteredStudentIds matches the submission', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'missing',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  this.gradebook.searchFilteredStudentIds = ['1101']
+  this.gradebook.setFilterColumnsBySetting('submissions', 'missing')
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), ['2302'])
+})
+
+test('includes no assignments when filtered by existing status but searchFilteredStudentIds does not match submission', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'missing',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  this.gradebook.searchFilteredStudentIds = ['1102']
+  this.gradebook.setFilterColumnsBySetting('submissions', 'missing')
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), [])
+})
+
+test('allows for multiselect when filtering by status and multiselect_gradebook_filters_enabled', function () {
+  window.ENV.GRADEBOOK_OPTIONS = {
+    multiselect_gradebook_filters_enabled: true,
+  }
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'late',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '2',
+      type: 'submissions',
+      value: 'missing',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), ['2301', '2302'])
+})
+
+test('does not allows for multiselect when filtering by status and multiselect_gradebook_filters_enabled is false', function () {
+  window.ENV.GRADEBOOK_OPTIONS = {
+    multiselect_gradebook_filters_enabled: false,
+  }
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'submissions',
+      value: 'late',
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: '2',
+      type: 'submissions',
+      value: 'missing',
+      created_at: new Date().toISOString(),
+    },
+  ]
+  const filteredAssignments = this.gradebook.filterAssignments(this.assignments)
+  deepEqual(map(filteredAssignments, 'id'), [])
+})
+
+QUnit.module('Gradebook#filterStudents', {
+  setup() {
+    this.students = [
+      {
+        id: '1',
+        sections: ['section1', 'section2', 'section3'],
+        enrollments: [
+          {
+            id: '',
+            user_id: '1',
+            enrollment_state: 'active',
+            type: 'StudentEnrollment',
+            course_section_id: 'section1',
+          },
+          {
+            id: '',
+            user_id: '1',
+            enrollment_state: 'completed',
+            type: 'StudentEnrollment',
+            course_section_id: 'section2',
+          },
+          {
+            id: '',
+            user_id: '1',
+            enrollment_state: 'inactive',
+            type: 'StudentEnrollment',
+            course_section_id: 'section3',
+          },
+        ],
+      },
+    ]
+    this.gradebook = createGradebook({
+      settings: {
+        show_concluded_enrollments: 'false',
+        show_inactive_enrollments: 'false',
+      },
+    })
+  },
+})
+
+test('returns selected student when filtering by student and section with an active enrollment ', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'section',
+      created_at: '',
+      value: 'section1',
+    },
+  ]
+  this.gradebook.searchFilteredStudentIds = ['1']
+  const filteredStudents = this.gradebook.filterStudents(this.students)
+  deepEqual(map(filteredStudents, 'id'), ['1'])
+})
+
+test('does not return selected student when filtering by student and section with a concluded enrollment', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'section',
+      created_at: '',
+      value: 'section2',
+    },
+  ]
+  this.gradebook.searchFilteredStudentIds = ['1']
+  const filteredStudents = this.gradebook.filterStudents(this.students)
+  deepEqual(map(filteredStudents, 'id'), [])
+})
+
+test('returns selected student when filtering by student and section with a concluded enrollment and the show concluded enrollments filter on', function () {
+  const gradebook = createGradebook({
+    settings: {
+      show_concluded_enrollments: 'true',
+      show_inactive_enrollments: 'false',
+    },
+  })
+  gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'section',
+      created_at: '',
+      value: 'section2',
+    },
+  ]
+  gradebook.searchFilteredStudentIds = ['1']
+  const filteredStudents = gradebook.filterStudents(this.students)
+  deepEqual(map(filteredStudents, 'id'), ['1'])
+})
+
+test('does not return selected student when filtering by student and section with an inactive enrollment', function () {
+  this.gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'section',
+      created_at: '',
+      value: 'section3',
+    },
+  ]
+  this.gradebook.searchFilteredStudentIds = ['1']
+  const filteredStudents = this.gradebook.filterStudents(this.students)
+  deepEqual(map(filteredStudents, 'id'), [])
+})
+
+test('returns selected student when filtering by student and section with an inactive enrollment and the show inactive enrollments filter on', function () {
+  const gradebook = createGradebook({
+    settings: {
+      show_concluded_enrollments: 'false',
+      show_inactive_enrollments: 'true',
+    },
+  })
+  gradebook.props.appliedFilters = [
+    {
+      id: '1',
+      type: 'section',
+      created_at: '',
+      value: 'section3',
+    },
+  ]
+  gradebook.searchFilteredStudentIds = ['1']
+  const filteredStudents = gradebook.filterStudents(this.students)
+  deepEqual(map(filteredStudents, 'id'), ['1'])
 })
 
 QUnit.module('Gradebook#getSelectedEnrollmentFilters')
@@ -1106,37 +1377,37 @@ QUnit.module('Gradebook#hideAggregateColumns', {
 test('returns false if there are no grading periods', function () {
   const gradebook = this.createGradebook()
   gradebook.gradingPeriodSet = null
-  notOk(gradebook.hideAggregateColumns())
+  notOk(hideAggregateColumns(gradebook.gradingPeriodSet, gradebook.gradingPeriodId))
 })
 
 test('returns false if there are no grading periods, even if isAllGradingPeriods is true', function () {
   const gradebook = this.createGradebook()
   gradebook.gradingPeriodSet = null
   gradebook.setFilterColumnsBySetting('gradingPeriodId', '0')
-  notOk(gradebook.hideAggregateColumns())
+  notOk(hideAggregateColumns(gradebook.gradingPeriodSet, gradebook.gradingPeriodId))
 })
 
 test('returns false if "All Grading Periods" is not selected', function () {
   const gradebook = this.createGradebook()
   gradebook.gradingPeriodId = '701'
   gradebook.setFilterColumnsBySetting('gradingPeriodId', '701')
-  notOk(gradebook.hideAggregateColumns())
+  notOk(hideAggregateColumns(gradebook.gradingPeriodSet, gradebook.gradingPeriodId))
 })
 
 test('returns true if "All Grading Periods" is selected', function () {
   const gradebook = this.createGradebook()
   gradebook.setFilterColumnsBySetting('gradingPeriodId', '0')
-  ok(gradebook.hideAggregateColumns())
+  ok(hideAggregateColumns(gradebook.gradingPeriodSet, gradebook.gradingPeriodId))
 })
 
 test(
   'returns false if "All Grading Periods" is selected and the grading period set has' +
-    '"Display Totals for All Grading Periods option" enabled',
+    ' "Display Totals for All Grading Periods option" enabled',
   function () {
     const gradebook = this.createGradebook()
     gradebook.setFilterColumnsBySetting('gradingPeriodId', '0')
     gradebook.gradingPeriodSet.displayTotalsForAllGradingPeriods = true
-    notOk(gradebook.hideAggregateColumns())
+    notOk(hideAggregateColumns(gradebook.gradingPeriodSet, gradebook.gradingPeriodId))
   }
 )
 

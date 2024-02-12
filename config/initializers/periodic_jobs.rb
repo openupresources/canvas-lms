@@ -56,13 +56,13 @@ class PeriodicJobs
       current_shard = Shard.current(connection_class)
       strand = "#{klass}.#{method}:#{current_shard.database_server.id}"
       # TODO: allow this to work with redis jobs
-      next if Delayed::Job == Delayed::Backend::ActiveRecord::Job && Delayed::Job.where(strand: strand, shard_id: current_shard.id, locked_by: nil).exists?
+      next if Delayed::Job == Delayed::Backend::ActiveRecord::Job && Delayed::Job.where(strand:, shard_id: current_shard.id, locked_by: nil).exists?
 
       dj_params = {
-        strand: strand,
+        strand:,
         priority: 40
       }
-      dj_params[:run_at] = compute_run_at(jitter: jitter, local_offset: local_offset)
+      dj_params[:run_at] = compute_run_at(jitter:, local_offset:)
 
       current_shard.activate do
         klass.delay(**dj_params).__send__(method, *args)
@@ -76,7 +76,12 @@ def with_each_job_cluster(klass, method, *args, jitter: nil, local_offset: false
     PeriodicJobs,
     :with_each_shard_by_database_in_region,
     { singleton: "periodic:region: #{klass}.#{method}" },
-    klass, method, *args, jitter: jitter, local_offset: local_offset, connection_class: Delayed::Backend::ActiveRecord::AbstractJob
+    klass,
+    method,
+    *args,
+    jitter:,
+    local_offset:,
+    connection_class: Delayed::Backend::ActiveRecord::AbstractJob
   )
 end
 
@@ -85,7 +90,13 @@ def with_each_shard_by_database(klass, method, *args, jitter: nil, local_offset:
     PeriodicJobs,
     :with_each_shard_by_database_in_region,
     { singleton: "periodic:region: #{klass}.#{method}" },
-    klass, method, *args, jitter: jitter, local_offset: local_offset, connection_class: ActiveRecord::Base, error_callback: error_callback
+    klass,
+    method,
+    *args,
+    jitter:,
+    local_offset:,
+    connection_class: ActiveRecord::Base,
+    error_callback:
   )
 end
 
@@ -148,14 +159,14 @@ Rails.configuration.after_initialize do
   end
 
   Delayed::Periodic.cron "ErrorReport.destroy_error_reports", "2-59/5 * * * *" do
-    cutoff = Setting.get("error_reports_retain_for", 3.months.to_s).to_i
+    cutoff = 3.months
     if cutoff > 0
       with_each_shard_by_database(ErrorReport, :destroy_error_reports, cutoff.seconds.ago)
     end
   end
 
   Delayed::Periodic.cron "Delayed::Job::Failed.cleanup_old_jobs", "0 * * * *" do
-    cutoff = Setting.get("failed_jobs_retain_for", 3.months.to_s).to_i
+    cutoff = 3.months
     if cutoff > 0
       with_each_job_cluster(Delayed::Job::Failed, :cleanup_old_jobs, cutoff.seconds.ago)
     end
@@ -168,6 +179,16 @@ Rails.configuration.after_initialize do
 
   Delayed::Periodic.cron "Attachment.do_notifications", "*/10 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Attachment, :do_notifications)
+  end
+
+  unless ApplicationController.test_cluster?
+    Delayed::Periodic.cron "Attachment::GarbageCollector::ContentExportAndMigrationContextType.delete_content", "37 1 * * *" do
+      with_each_shard_by_database(Attachment::GarbageCollector::ContentExportAndMigrationContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
+
+    Delayed::Periodic.cron "Attachment::GarbageCollector::ContentExportContextType.delete_content", "37 3 * * *" do
+      with_each_shard_by_database(Attachment::GarbageCollector::ContentExportContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
   end
 
   Delayed::Periodic.cron "Ignore.cleanup", "45 23 * * *" do
@@ -256,6 +277,10 @@ Rails.configuration.after_initialize do
     end
   end
 
+  Delayed::Periodic.cron "AuthenticationProvider::LDAP.ensure_tls_cert_validity", "30 0 * * *" do
+    with_each_shard_by_database(AuthenticationProvider::LDAP, :ensure_tls_cert_validity, local_offset: true)
+  end
+
   Delayed::Periodic.cron "SisBatchError.cleanup_old_errors", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(SisBatchError, :cleanup_old_errors)
   end
@@ -278,6 +303,10 @@ Rails.configuration.after_initialize do
 
   Delayed::Periodic.cron "Assignment.clean_up_duplicating_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Assignment, :clean_up_duplicating_assignments)
+  end
+
+  Delayed::Periodic.cron "Assignment.clean_up_cloning_alignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+    with_each_shard_by_database(Assignment, :clean_up_cloning_alignments)
   end
 
   Delayed::Periodic.cron "Assignment.clean_up_importing_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
@@ -338,7 +367,8 @@ Rails.configuration.after_initialize do
 
   if MultiCache.cache.is_a?(ActiveSupport::Cache::HaStore) && MultiCache.cache.options[:consul_event] && InstStatsd.settings.present?
     Delayed::Periodic.cron "HaStore.validate_consul_event", "5 * * * *" do
-      DatabaseServer.send_in_each_region(MultiCache, :validate_consul_event,
+      DatabaseServer.send_in_each_region(MultiCache,
+                                         :validate_consul_event,
                                          {
                                            run_current_region_asynchronously: true,
                                            singleton: "HaStore.validate_consul_event"

@@ -37,7 +37,7 @@ module ContentNotices
     def define_content_notice(tag, opts)
       notice = ContentNotice.new
       NOTICE_ATTRIBUTES.each do |attr|
-        notice.instance_variable_set "@#{attr}", opts[attr] if opts.include?(attr)
+        notice.instance_variable_set :"@#{attr}", opts[attr] if opts.include?(attr)
       end
       notice.tag ||= tag
       @content_notices ||= {}
@@ -60,7 +60,7 @@ module ContentNotices
   # add a notice to this context. if the notice with the given tag is already active for the context,
   # its expiration time will be reset.
   def add_content_notice(tag, expires_in = nil)
-    Rails.cache.write(cn_cache_key(tag), true, expires_in: expires_in)
+    Rails.cache.write(cn_cache_key(tag), true, expires_in:)
   end
 
   # remove a notice from this context

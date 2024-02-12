@@ -9,14 +9,14 @@ Gem::Specification.new do |spec|
   spec.email         = ["ahmad@instructure.com"]
   spec.summary       = "PostgreSQL partitioning manager and helper."
   spec.files         = Dir.glob("{lib,spec}/**/*") + %w[Gemfile LICENSE.txt README.md]
-  spec.test_files    = spec.files.grep(/spec/)
   spec.require_paths = ["lib"]
   spec.license       = "AGPL"
 
-  spec.add_dependency "activerecord", ">= 6.1", "< 7.1"
+  spec.add_dependency "activerecord", ">= 6.1", "< 7.2"
   spec.add_dependency "activerecord-pg-extensions", "~> 0.4"
   spec.add_dependency "pg", ">= 0.17", "< 2.0"
 
   spec.add_development_dependency "bundler", "~> 2.2"
-  spec.add_development_dependency "rspec", "~> 3.5.0"
+  spec.add_development_dependency "rspec", "~> 3.12"
+  spec.add_development_dependency "simplecov", "~> 0.22"
 end

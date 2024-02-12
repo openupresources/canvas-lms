@@ -74,7 +74,7 @@ class ErrorsController < ApplicationController
   end
 
   def index
-    params[:page] = params[:page].to_i > 0 ? params[:page].to_i : 1
+    params[:page] = (params[:page].to_i > 0) ? params[:page].to_i : 1
     @reports = ErrorReport.preload(:user, :account)
 
     @message = params[:message]
@@ -140,6 +140,11 @@ class ErrorsController < ApplicationController
 
     # this is a honeypot field to catch spambots. it's hidden via css and should always be empty.
     return render(nothing: true, status: :bad_request) if error.delete(:username).present?
+
+    unless Shard.current.in_current_region?
+      logger.debug("Out of region error report received")
+      return render(nothing: true, status: :bad_request)
+    end
 
     error[:user_agent] = request.headers["User-Agent"]
     begin

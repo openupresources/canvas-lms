@@ -19,11 +19,11 @@
 import {getByText, queryByText, findByText, waitForToBeRemoved} from '@testing-library/dom'
 import fetchMock from 'fetch-mock'
 import Backbone from '@canvas/backbone'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
 import Submission from '@canvas/assignments/backbone/models/Submission'
 import AssignmentListItemView from 'ui/features/assignment_index/backbone/views/AssignmentListItemView'
 import $ from 'jquery'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
 import juneau from 'timezone/America/Juneau'
 import french from 'timezone/fr_FR'
@@ -31,7 +31,7 @@ import I18nStubber from 'helpers/I18nStubber'
 import fakeENV from 'helpers/fakeENV'
 import CyoeHelper from '@canvas/conditional-release-cyoe-helper'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 let screenreaderText = null
 let nonScreenreaderText = null
@@ -129,6 +129,12 @@ const createView = function (model, options) {
   ENV.POST_TO_SIS = options.post_to_sis
   ENV.DIRECT_SHARE_ENABLED = options.directShareEnabled
   ENV.COURSE_ID = options.courseId
+  ENV.FLAGS = {
+    show_additional_speed_grader_link: options.show_additional_speed_grader_link,
+    newquizzes_on_quiz_page: options.newquizzes_on_quiz_page,
+  }
+  ENV.SHOW_SPEED_GRADER_LINK = options.show_additional_speed_grader_link
+  ENV.FEATURES.differentiated_modules = options.differentiated_modules
 
   const view = new AssignmentListItemView({
     model,
@@ -148,6 +154,7 @@ const genModules = function (count) {
 const genSetup = function (model = assignment1()) {
   fakeENV.setup({
     current_user_roles: ['teacher'],
+    current_user_is_admin: false,
     PERMISSIONS: {manage: false},
     URLS: {assignment_sort_base_url: 'test'},
   })
@@ -169,6 +176,7 @@ QUnit.module('AssignmentListItemViewSpec', {
     fakeENV.setup({
       current_user_roles: ['teacher'],
       URLS: {assignment_sort_base_url: 'test'},
+      current_user_is_admin: false,
     })
     genSetup.call(this)
     return I18nStubber.pushFrame()
@@ -689,6 +697,50 @@ test('renders due date column in appropriate time zone', function () {
   )
 })
 
+test('renders link to speed grader if canManage', () => {
+  const model = buildAssignment({
+    id: 1,
+    title: 'Chicken Noodle',
+  })
+  const view = createView(model, {
+    userIsAdmin: true,
+    canManage: true,
+    show_additional_speed_grader_link: true,
+  })
+  equal(view.$('.speed-grader-link').length, 1)
+})
+
+test('does NOT render link when assignment is unpublished', () => {
+  const model = buildAssignment({
+    id: 1,
+    title: 'Chicken Noodle',
+    published: false,
+  })
+  const view = createView(model, {
+    userIsAdmin: true,
+    canManage: true,
+    show_additional_speed_grader_link: true,
+  })
+  ok(view.$('.speed-grader-link-container').attr('class').includes('hidden'))
+})
+
+test('speed grader link is correct', () => {
+  const model = buildAssignment({
+    id: 11,
+    title: 'Cream of Mushroom',
+  })
+  const view = createView(model, {
+    userIsAdmin: true,
+    canManage: true,
+    show_additional_speed_grader_link: true,
+  })
+  ok(
+    view
+      .$('.speed-grader-link')[0]
+      ?.href.includes('/courses/1/gradebook/speed_grader?assignment_id=11')
+  )
+})
+
 test('can duplicate when assignment can be duplicated', () => {
   const model = buildAssignment({
     id: 1,
@@ -767,6 +819,53 @@ test('displays failed to duplicate message when assignment failed to duplicate',
   ok(view.$el.text().includes('Something went wrong with making a copy of "Foo"'))
 })
 
+test('does not display cancel button when assignment failed to duplicate is blueprint', () => {
+  const model = buildAssignment({
+    id: 2,
+    title: 'Foo Copy',
+    original_assignment_name: 'Foo',
+    workflow_state: 'failed_to_duplicate',
+    is_master_course_child_content: true,
+  })
+  const view = createView(model)
+  strictEqual(view.$('button.duplicate-failed-cancel.btn').length, 0)
+})
+
+test('displays cancel button when assignment failed to duplicate is not blueprint', () => {
+  const model = buildAssignment({
+    id: 2,
+    title: 'Foo Copy',
+    original_assignment_name: 'Foo',
+    workflow_state: 'failed_to_duplicate',
+  })
+  const view = createView(model)
+  ok(view.$('button.duplicate-failed-cancel.btn').text().includes('Cancel'))
+})
+
+test('can assign assignment if flag is on and has edit permissions', function () {
+  const view = createView(this.model, {
+    canManage: true,
+    differentiated_modules: true,
+  })
+  equal(view.$('.assign-to-link').length, 1)
+})
+
+test('canot assign assignment if no edit permissions', function () {
+  const view = createView(this.model, {
+    canManage: false,
+    differentiated_modules: true,
+  })
+  equal(view.$('.assign-to-link').length, 0)
+})
+
+test('cannot assign assignment if flag is off', function () {
+  const view = createView(this.model, {
+    canManage: true,
+    differentiated_modules: false,
+  })
+  equal(view.$('.assign-to-link').length, 0)
+})
+
 test('can move when userIsAdmin is true', function () {
   const view = createView(this.model, {
     userIsAdmin: true,
@@ -836,6 +935,7 @@ QUnit.module('AssignmentListItemViewSpec - editing assignments', function (hooks
     fakeENV.setup({
       current_user_roles: ['teacher'],
       URLS: {assignment_sort_base_url: 'test'},
+      current_user__is_admin: false,
     })
 
     genSetup.call(this)
@@ -929,9 +1029,6 @@ QUnit.module('AssignmentListItemViewSpec - skip to build screen button', functio
       current_user_roles: ['teacher'],
       URLS: {assignment_sort_base_url: 'test'},
       QUIZ_LTI_ENABLED: true,
-      FLAGS: {
-        new_quizzes_skip_to_build_module_button: true,
-      },
     })
   })
 
@@ -940,7 +1037,7 @@ QUnit.module('AssignmentListItemViewSpec - skip to build screen button', functio
     genTeardown.call(this)
   })
 
-  test('canShowBuildLink is true if QUIZ_LTI_ENABLED and the skip to build button are enabled', function () {
+  test('canShowBuildLink is true if QUIZ_LTI_ENABLED', function () {
     const view = createView(
       buildAssignment({
         id: 1,
@@ -948,25 +1045,8 @@ QUnit.module('AssignmentListItemViewSpec - skip to build screen button', functio
         is_quiz_lti_assignment: true,
       })
     )
-
     const json = view.toJSON()
     strictEqual(json.canShowBuildLink, true)
-  })
-
-  test('canShowBuildLink is false if new_quizzes_skip_to_build_module_button is false', function () {
-    ENV.FLAGS = {
-      new_quizzes_skip_to_build_module_button: false,
-    }
-    const view = createView(
-      buildAssignment({
-        id: 1,
-        title: 'Foo',
-        is_quiz_lti_assignment: true,
-      })
-    )
-
-    const json = view.toJSON()
-    strictEqual(json.canShowBuildLink, false)
   })
 
   test('canShowBuildLink is false if the assignment is not a new quiz', function () {
@@ -1435,24 +1515,22 @@ test('renders page icon for wiki page', () => {
 })
 
 test('renders solid quiz icon for new quizzes', () => {
-  ENV.FLAGS = {newquizzes_on_quiz_page: true}
   const model = buildAssignment({
     id: 1,
     title: 'Foo',
     is_quiz_lti_assignment: true,
   })
-  const view = createView(model)
+  const view = createView(model, {newquizzes_on_quiz_page: true})
   equal(view.$('i.icon-quiz.icon-Solid').length, 1)
 })
 
 test('renders assignment icon for new quizzes if FF is off', () => {
-  ENV.FLAGS = {newquizzes_on_quiz_page: false}
   const model = buildAssignment({
     id: 1,
     title: 'Foo',
     is_quiz_lti_assignment: true,
   })
-  const view = createView(model)
+  const view = createView(model, {newquizzes_on_quiz_page: false})
   equal(view.$('i.icon-quiz.icon-Solid').length, 0)
   equal(view.$('i.icon-assignment').length, 1)
 })

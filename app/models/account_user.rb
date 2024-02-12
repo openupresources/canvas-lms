@@ -42,6 +42,7 @@ class AccountUser < ActiveRecord::Base
   alias_method :context, :account
 
   scope :active, -> { where.not(workflow_state: "deleted") }
+  scope :deleted, -> { where(workflow_state: "deleted") }
 
   include Workflow
   workflow do
@@ -69,7 +70,8 @@ class AccountUser < ActiveRecord::Base
 
   def update_account_associations_if_changed
     being_deleted = workflow_state == "deleted" && workflow_state_before_last_save != "deleted"
-    if (saved_change_to_account_id? || saved_change_to_user_id?) || being_deleted
+    being_undeleted = workflow_state == "active" && workflow_state_before_last_save == "deleted"
+    if (saved_change_to_account_id? || saved_change_to_user_id?) || being_deleted || being_undeleted
       if new_record?
         return if %w[creation_pending deleted].include?(user.workflow_state)
 
@@ -127,7 +129,7 @@ class AccountUser < ActiveRecord::Base
     # account/role to make things significantly faster.
     account_users.distinct.pluck(:account_id, :role_id).each_with_object({}) do |obj, hash|
       account_id, role_id = obj
-      account_user = account_users.where(account_id: account_id, role_id: role_id).first
+      account_user = account_users.where(account_id:, role_id:).first
 
       # Create and destory are granted by the same conditions, no reason to do two
       # grants_right? checks here.
@@ -158,8 +160,12 @@ class AccountUser < ActiveRecord::Base
     @permission_lookup[[context.class, context.global_id, action]] ||= RoleOverride.enabled_for?(context, action, self.role, account)
   end
 
-  def has_permission_to?(context, action)
-    enabled_for?(context, action).include?(:self)
+  def permission_check(context, action)
+    enabled_for?(context, action).include?(:self) ? AdheresToPolicy::Success.instance : AdheresToPolicy::Failure.instance
+  end
+
+  def permitted_for_account?(_target_account)
+    AdheresToPolicy::Success.instance
   end
 
   def self.all_permissions_for(user, account)

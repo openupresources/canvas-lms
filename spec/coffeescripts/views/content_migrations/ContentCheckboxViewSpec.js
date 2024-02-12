@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CheckboxCollection from 'ui/features/content_migrations/backbone/collections/ContentCheckboxCollection.coffee'
-import CheckboxView from 'ui/features/content_migrations/backbone/views/ContentCheckboxView.coffee'
-import CheckboxModel from 'ui/features/content_migrations/backbone/models/ContentCheckbox.coffee'
+import CheckboxCollection from 'ui/features/content_migrations/backbone/collections/ContentCheckboxCollection'
+import CheckboxView from 'ui/features/content_migrations/backbone/views/ContentCheckboxView'
+import CheckboxModel from 'ui/features/content_migrations/backbone/models/ContentCheckbox'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 class CheckboxHelper {
   static initClass() {

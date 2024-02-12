@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -65,12 +66,12 @@ const FILTER_OPTIONS = [
   },
 ]
 
-export const FilterControls: React.FC<ComponentProps> = ({
+export const FilterControls = ({
   searchValue,
   filterValue,
   setSearchValue,
   setFilterValue,
-}) => {
+}: ComponentProps) => {
   const clearSearchButton = (
     <IconButton
       renderIcon={IconXLine}
@@ -91,8 +92,7 @@ export const FilterControls: React.FC<ComponentProps> = ({
         placeholder={I18n.t('Search Calendars')}
         renderBeforeInput={IconSearchLine}
         renderAfterInput={searchValue?.length ? clearSearchButton : undefined}
-        // @ts-ignore
-        theme={{
+        themeOverride={{
           borderRadius: '2rem',
         }}
         value={searchValue}
@@ -111,7 +111,12 @@ export const FilterControls: React.FC<ComponentProps> = ({
           size="small"
           width="18rem"
           isInline={true}
-          onChange={(_, data) => setFilterValue(data.value)}
+          onChange={(_, data) => {
+            const {value} = data
+            if (!Object.values(FilterType).includes(value as FilterType))
+              throw new RangeError(`Unexpected filter type "${value}!`)
+            setFilterValue(value as FilterType)
+          }}
         >
           {FILTER_OPTIONS.map(option => (
             <SimpleSelectOption

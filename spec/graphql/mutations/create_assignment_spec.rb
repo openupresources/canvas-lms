@@ -92,7 +92,7 @@ describe Mutations::CreateAssignment do
       }
     GQL
     context = { current_user: user_executing, request: ActionDispatch::TestRequest.create, session: {} }
-    CanvasSchema.execute(mutation_command, context: context)
+    CanvasSchema.execute(mutation_command, context:)
   end
 
   let(:test_attrs) do
@@ -149,11 +149,11 @@ describe Mutations::CreateAssignment do
     expect(result["errors"]).to be_nil
     expect(result.dig("data", "createAssignment", "errors")).to be_nil
     expect(result.dig("data", "createAssignment", "assignment", "name")).to eq "moderated grading test assignment"
-    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "enabled")).to eq true
+    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "enabled")).to be true
     expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "graderCount")).to eq 1
-    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "graderCommentsVisibleToGraders")).to eq false
-    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "graderNamesVisibleToFinalGrader")).to eq false
-    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "gradersAnonymousToGraders")).to eq false
+    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "graderCommentsVisibleToGraders")).to be false
+    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "graderNamesVisibleToFinalGrader")).to be false
+    expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "gradersAnonymousToGraders")).to be false
     expect(result.dig("data", "createAssignment", "assignment", "moderatedGrading", "finalGrader", "_id")).to eq @teacher.to_param
 
     assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
@@ -184,21 +184,21 @@ describe Mutations::CreateAssignment do
     GQL
     expect(result["errors"]).to be_nil
     expect(result.dig("data", "createAssignment", "errors")).to be_nil
-    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "enabled")).to eq true
+    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "enabled")).to be true
     expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "count")).to eq 2
     expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "dueAt")).to eq "2018-01-01T01:00:00Z"
-    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "intraReviews")).to eq true
-    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "anonymousReviews")).to eq true
-    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "automaticReviews")).to eq true
+    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "intraReviews")).to be true
+    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "anonymousReviews")).to be true
+    expect(result.dig("data", "createAssignment", "assignment", "peerReviews", "automaticReviews")).to be true
 
     assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
     expect(assignment.name).to eq "peer review test assignment"
-    expect(assignment.peer_reviews).to eq true
+    expect(assignment.peer_reviews).to be true
     expect(assignment.peer_review_count).to eq 2
     expect(assignment.peer_reviews_due_at).to eq "2018-01-01T01:00:00Z"
-    expect(assignment.intra_group_peer_reviews).to eq true
-    expect(assignment.anonymous_peer_reviews).to eq true
-    expect(assignment.automatic_peer_reviews).to eq true
+    expect(assignment.intra_group_peer_reviews).to be true
+    expect(assignment.anonymous_peer_reviews).to be true
+    expect(assignment.automatic_peer_reviews).to be true
   end
 
   it "creates an assignment in an assignment group" do
@@ -217,9 +217,9 @@ describe Mutations::CreateAssignment do
 
     assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
     expect(assignment.assignment_group).to eq new_assignment_group
-    expect(assignment.grade_group_students_individually).to eq false
+    expect(assignment.grade_group_students_individually).to be false
     expect(assignment.group_category_id).to eq gc.id
-    expect(assignment.grade_as_group?).to eq true
+    expect(assignment.grade_as_group?).to be true
   end
 
   it "creates an assignment in an assignment group with grading group students individually" do
@@ -238,9 +238,9 @@ describe Mutations::CreateAssignment do
 
     assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
     expect(assignment.assignment_group).to eq new_assignment_group
-    expect(assignment.grade_group_students_individually).to eq true
+    expect(assignment.grade_group_students_individually).to be true
     expect(assignment.group_category_id).to eq gc.id
-    expect(assignment.grade_as_group?).to eq false
+    expect(assignment.grade_as_group?).to be false
   end
 
   it "creates an assignment in a module" do
@@ -282,7 +282,7 @@ describe Mutations::CreateAssignment do
           dueAt: "#{due2.iso8601}"
         },
         {
-          sectionId: #{@course.default_section.to_param}
+          courseSectionId: #{@course.default_section.to_param}
           dueAt: "#{due3.iso8601}"
         }
       ]
@@ -302,6 +302,66 @@ describe Mutations::CreateAssignment do
     section_override = assignment.assignment_overrides.where(set_type: "CourseSection").first
     expect(section_override.set_id).to eq @course.default_section.id
     expect(section_override.due_at).to eq due3
+  end
+
+  it "creates an assignment with a mastery path override" do
+    # .round to avoid round-trip truncation errors, .change(min: 1) to avoid fancy midnight timebombs
+    result = execute_with_input <<~GQL
+      name: "assignment with overrides"
+      courseId: "#{@course.to_param}"
+      onlyVisibleToOverrides: true
+      assignmentOverrides: [
+        {
+          noopId: "1",
+          title: "Mastery Paths"
+        }
+      ]
+    GQL
+
+    assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
+    expect(assignment).to be_only_visible_to_overrides
+
+    noop_override = assignment.assignment_overrides.where(set_type: "Noop").first
+    expect(noop_override.set_id).to eq 1
+    expect(noop_override.title).to eq "Mastery Paths"
+  end
+
+  it "sets lock_at_overridden" do
+    due1 = 1.day.from_now.round.change(min: 1)
+
+    result = execute_with_input <<~GQL
+      name: "assignment with overrides"
+      courseId: "#{@course.to_param}"
+      onlyVisibleToOverrides: true
+      assignmentOverrides: [
+        {
+          studentIds: [#{@student.to_param}]
+          dueAt: "#{due1.iso8601}"
+          lockAt: "#{due1.iso8601}"
+          unlockAt: "#{due1.iso8601}"
+        }
+      ]
+    GQL
+
+    assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
+    expect(assignment).to be_only_visible_to_overrides
+
+    student_override = assignment.assignment_overrides.where(set_type: "ADHOC").first
+    expect(student_override.due_at_overridden).to be true
+    expect(student_override.lock_at_overridden).to be true
+    expect(student_override.unlock_at_overridden).to be true
+  end
+
+  it "sets grade_standard_id" do
+    @standard = @course.account.grading_standards.create!(title: "account standard", standard_data: { a: { name: "A", value: "95" }, b: { name: "B", value: "80" }, f: { name: "F", value: "" } })
+    result = execute_with_input <<~GQL
+      name: "assignment with overrides"
+      courseId: "#{@course.to_param}"
+      gradingStandardId: "#{@standard.id}"
+    GQL
+
+    assignment = Assignment.find(result.dig("data", "createAssignment", "assignment", "_id"))
+    expect(assignment.grading_standard_id).to eq @standard.id
   end
 
   it "requires a name" do
@@ -339,5 +399,61 @@ describe Mutations::CreateAssignment do
     errors = result["errors"]
     expect(errors).to_not be_nil
     expect(errors[0]["message"]).to include "invalid course"
+  end
+
+  it "gets an error when trying to set a restricted params (pointsPossible) and forCheckpoints is true" do
+    result = execute_with_input <<~GQL
+      name: "Parent Assignment for Checkpoints"
+      courseId: "#{@course.to_param}"
+      pointsPossible: 100
+      forCheckpoints: true
+    GQL
+    errors = result["errors"]
+
+    expect(errors[0]["message"]).to eq "Cannot set points_possible in the parent assignment for checkpoints."
+  end
+
+  it "allows to set a restricted params (pointsPossible) and forCheckpoints is undefined thus false" do
+    result = execute_with_input <<~GQL
+      name: "Regular Assignment"
+      courseId: "#{@course.to_param}"
+      pointsPossible: 100
+    GQL
+    errors = result["errors"]
+
+    expect(errors).to be_nil
+  end
+
+  it "gets an error when trying to set assignmentOverrides and forCheckpoints is true" do
+    result = execute_with_input <<~GQL
+      name: "Parent Assignment for Checkpoints"
+      courseId: "#{@course.to_param}"
+      assignmentOverrides: [
+        {
+          noopId: "1",
+          title: "Mastery Paths"
+        }
+      ]
+      forCheckpoints: true
+    GQL
+    errors = result["errors"]
+
+    expect(errors[0]["message"]).to eq "Assignment overrides are not allowed in the parent assignment for checkpoints."
+  end
+
+  it "allows to set assignmentOverrides and forCheckpoints is undefined thus false" do
+    result = execute_with_input <<~GQL
+      name: "Regular Assignment"
+      courseId: "#{@course.to_param}"
+      assignmentOverrides: [
+        {
+          noopId: "1",
+          title: "Mastery Paths"
+        }
+      ]
+    GQL
+    errors = result["errors"]
+
+    expect(errors).to be_nil
   end
 end

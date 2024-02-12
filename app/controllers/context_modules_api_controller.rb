@@ -179,6 +179,7 @@ class ContextModulesApiController < ApplicationController
         opts[:observed_student_ids] = ObserverEnrollment.observed_student_ids(context, (@student || @current_user))
       end
 
+      opts[:can_view_published] = @context.grants_right?((@student || @current_user), session, :read_as_admin)
       render json: modules_and_progressions.filter_map { |mod, prog| module_json(mod, @student || @current_user, session, prog, includes, opts) }
     end
   end
@@ -214,7 +215,9 @@ class ContextModulesApiController < ApplicationController
       includes = Array(params[:include])
       ActiveRecord::Associations.preload(mod, content_tags: :content) if includes.include?("items")
       prog = @student ? mod.evaluate_for(@student) : nil
-      render json: module_json(mod, @student || @current_user, session, prog, includes)
+
+      opts = { can_view_published: @context.grants_right?(@current_user, session, :read_as_admin) }
+      render json: module_json(mod, @student || @current_user, session, prog, includes, opts)
     end
   end
 
@@ -284,22 +287,22 @@ class ContextModulesApiController < ApplicationController
       return render(json: { message: "no modules found" }, status: :not_found) if modules.empty?
 
       batch_update_params = {
-        event: event,
+        event:,
         module_ids: modules.pluck(:id),
         skip_content_tags: value_to_boolean(params[:skip_content_tags])
       }
-      if value_to_boolean(params[:async]) && Account.site_admin.feature_enabled?(:module_publish_menu)
+      if value_to_boolean(params[:async])
         progress = Progress.create!(context: @context, tag: "context_module_batch_update", user: @current_user)
         progress.process_job(
           @context,
           :batch_update_context_modules,
-          { run_at: Time.now },
+          { run_at: Time.now, priority: Delayed::HIGH_PRIORITY },
           **batch_update_params
         )
       else
         completed_ids = @context.batch_update_context_modules(**batch_update_params)
       end
-      render json: { completed: completed_ids, progress: progress }
+      render json: { completed: completed_ids, progress: }
     end
   end
 
@@ -418,13 +421,13 @@ class ContextModulesApiController < ApplicationController
       if params[:module].key?(:published)
         if value_to_boolean(params[:module][:published])
           @module.publish
-          unless Account.site_admin.feature_enabled?(:module_publish_menu) && value_to_boolean(params[:module][:skip_content_tags])
+          unless value_to_boolean(params[:module][:skip_content_tags])
             @module.publish_items!
             publish_warning = @module.content_tags.any?(&:unpublished?)
           end
         else
           @module.unpublish
-          if Account.site_admin.feature_enabled?(:module_publish_menu) && !value_to_boolean(params[:module][:skip_content_tags])
+          unless value_to_boolean(params[:module][:skip_content_tags])
             @module.unpublish_items!
           end
         end
@@ -435,7 +438,7 @@ class ContextModulesApiController < ApplicationController
         json = module_json(@module, @current_user, session, nil)
         json["relock_warning"] = true if relock_warning || @module.relock_warning?
         json["publish_warning"] = publish_warning.present?
-        render json: json
+        render json:
       else
         render json: @module.errors, status: :bad_request
       end

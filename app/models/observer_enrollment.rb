@@ -32,7 +32,7 @@ class ObserverEnrollment < Enrollment
 
       observer_enrollment_data.group_by(&:first).each do |course_id, course_enroll_data|
         associated_user_ids = course_enroll_data.map(&:last)
-        students = StudentEnrollment.active.where(user_id: associated_user_ids, course_id: course_id)
+        students = StudentEnrollment.active.where(user_id: associated_user_ids, course_id:)
         observed_students.concat(students)
       end
     end
@@ -46,7 +46,7 @@ class ObserverEnrollment < Enrollment
     Shard.partition_by_shard(observer_enrollments) do |sharded_observer_enrollments|
       sharded_observer_enrollments.group_by(&:course_id).each do |course_id, enrollments|
         associated_user_ids = enrollments.map(&:associated_user_id)
-        student_enrolls = StudentEnrollment.active.where(user_id: associated_user_ids, course_id: course_id)
+        student_enrolls = StudentEnrollment.active.where(user_id: associated_user_ids, course_id:)
         student_enrolls = student_enrolls.active_by_date if active_by_date
         observed_student_enrollments.concat(student_enrolls.to_a)
       end
@@ -55,13 +55,11 @@ class ObserverEnrollment < Enrollment
   end
 
   # returns a hash mapping students to arrays of enrollments
-  def self.observed_students(context, current_user, include_restricted_access: true)
+  def self.observed_students(context, current_user, include_restricted_access: true, grade_summary: false)
     RequestCache.cache(:observed_students, context, current_user) do
       context.shard.activate do
-        associated_user_ids = context.observer_enrollments.where(user_id: current_user)
-                                     .where.not(associated_user_id: nil).select(:associated_user_id)
-        students = context.student_enrollments
-                          .where(user_id: associated_user_ids)
+        associated_user_ids = context.observer_enrollments.where(user_id: current_user).where.not(associated_user_id: nil).select(:associated_user_id)
+        students = grade_summary ? context.student_enrollments_including_completed.where(user_id: associated_user_ids) : context.student_enrollments.where(user_id: associated_user_ids)
         unless include_restricted_access
           students = students.joins(:enrollment_state).where(enrollment_states: { restricted_access: false })
         end

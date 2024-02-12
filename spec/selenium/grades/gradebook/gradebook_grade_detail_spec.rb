@@ -21,10 +21,12 @@ require_relative "../pages/gradebook_page"
 require_relative "../pages/gradebook_cells_page"
 require_relative "../pages/gradebook_grade_detail_tray_page"
 require_relative "../../helpers/gradebook_common"
+require_relative "../../helpers/files_common"
 
 describe "Grade Detail Tray:" do
   include_context "in-process server selenium tests"
   include GradebookCommon
+  include FilesCommon
   include_context "late_policy_course_setup"
 
   before(:once) do
@@ -34,6 +36,9 @@ describe "Grade Detail Tray:" do
     create_assignments
     make_submissions
     grade_assignments
+    @custom_status = CustomGradeStatus.create!(name: "Custom Status", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher)
+    @a5 = @course.assignments.create!(name: "Assignment 5", points_possible: 10, submission_types: "online_text_entry")
+    @course.students.first.submissions.find_by(assignment_id: @a5.id).update!(custom_grade_status: @custom_status)
   end
 
   context "status" do
@@ -70,6 +75,12 @@ describe "Grade Detail Tray:" do
       expect(Gradebook::GradeDetailTray.is_radio_button_selected("excused")).to be true
     end
 
+    it "submisison with custom status has custom status radio-button selected" do
+      Gradebook::Cells.open_tray(@course.students.first, @a5)
+
+      expect(Gradebook::GradeDetailTray.is_radio_button_selected(@custom_status.id)).to be true
+    end
+
     it "updates status when excused-option is selected", priority: "1" do
       Gradebook::Cells.open_tray(@course.students.first, @a2)
       Gradebook::GradeDetailTray.change_status_to("Excused")
@@ -86,6 +97,15 @@ describe "Grade Detail Tray:" do
       late_policy_status = @course.students.first.submissions.find_by(assignment_id: @a2.id).late_policy_status
 
       expect(late_policy_status).to eq "missing"
+    end
+
+    it "updates the status when custom status is selected" do
+      Gradebook::Cells.open_tray(@course.students.first, @a2)
+      Gradebook::GradeDetailTray.change_status_to("Custom Status")
+      submission = @course.students.first.submissions.find_by(assignment_id: @a2.id)
+
+      expect(submission.late_policy_status).to be_nil
+      expect(submission.custom_grade_status).to eq @custom_status
     end
 
     it "grade input is saved", priority: "1" do
@@ -191,7 +211,7 @@ describe "Grade Detail Tray:" do
       end
 
       it "right arrow button is not present when rightmost assignment is selected", priority: "2" do
-        Gradebook::Cells.open_tray(@course.students.first, @a4)
+        Gradebook::Cells.open_tray(@course.students.first, @a5)
 
         expect(Gradebook::GradeDetailTray.submission_tray_full_content)
           .not_to contain_css("#assignment-carousel .right-arrow-button-container button")
@@ -290,6 +310,68 @@ describe "Grade Detail Tray:" do
 
       # comment text is in a paragraph element and there is only one comment seeded
       expect(Gradebook::GradeDetailTray.all_comments).not_to contain_css("p")
+    end
+  end
+
+  context "submit for student" do
+    before do
+      Account.site_admin.enable_feature!(:proxy_file_uploads)
+      teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
+      RoleOverride.create!(
+        permission: "proxy_assignment_submission",
+        enabled: true,
+        role: teacher_role,
+        account: @course.root_account
+      )
+      @a1.update!(submission_types: "online_upload,online_text_entry")
+      file_attachment = attachment_model(content_type: "application/pdf", context: @students.first)
+      @submission = @a1.submit_homework(@students.first, submission_type: "online_upload", attachments: [file_attachment])
+      @teacher.update!(short_name: "Test Teacher")
+      @submission.update!(proxy_submitter: @teacher)
+      user_session(@teacher)
+      Gradebook.visit(@course)
+    end
+
+    it "button is availible for assignments with online uploads" do
+      Gradebook::Cells.open_tray(@course.students.first, @a1)
+      expect(Gradebook::GradeDetailTray.submit_for_student_button).to be_displayed
+    end
+
+    it "modal allows multiple files to be uploaded via the file upload drop" do
+      filename1, fullpath1 = get_file("testfile1.txt")
+      filename2, fullpath2 = get_file("testfile2.txt")
+      Gradebook::Cells.open_tray(@course.students.first, @a1)
+      Gradebook::GradeDetailTray.submit_for_student_button.click
+      Gradebook::GradeDetailTray.proxy_file_drop.send_keys(fullpath1)
+      Gradebook::GradeDetailTray.proxy_file_drop.send_keys(fullpath2)
+      expect(f("table[data-testid='proxy_uploaded_files_table']")).to include_text(filename1)
+      expect(f("table[data-testid='proxy_uploaded_files_table']")).to include_text(filename2)
+      expect(Gradebook::GradeDetailTray.proxy_submit_button).to be_displayed
+    end
+
+    it "allows a file to be uploaded via the file upload drop" do
+      Gradebook::Cells.open_tray(@course.students.first, @a1)
+      expect(Gradebook::GradeDetailTray.proxy_submitter_name.text).to include("Submitted by " + @teacher.short_name)
+      expect(Gradebook::GradeDetailTray.proxy_date_time).to be_displayed
+    end
+  end
+
+  context "final grade override" do
+    before do
+      @course.update!(allow_final_grade_override: true)
+      @course.enable_feature!(:final_grades_override)
+      user_session(@teacher)
+      Gradebook.visit(@course)
+    end
+
+    it "allows a custom grade status to be selected" do
+      Gradebook::Cells.edit_override(@students.first, 90.0)
+      f(Gradebook::Cells.grade_override_selector(@students.first)).click
+      Gradebook::Cells.grade_tray_button.click
+      wait_for_ajaximations
+      student_enrollment_score = @students.first.enrollments.first.find_score
+
+      expect { Gradebook::GradeDetailTray.change_status_to("Custom Status") }.to change { student_enrollment_score.reload.custom_grade_status }.from(nil).to(@custom_status)
     end
   end
 end

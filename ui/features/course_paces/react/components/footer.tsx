@@ -52,8 +52,6 @@ import {RemovePaceWarningModal} from './remove_pace_warning_modal'
 
 const I18n = useI18nScope('course_paces_footer')
 
-const {Item: FlexItem} = Flex as any
-
 interface StoreProps {
   readonly autoSaving: boolean
   readonly pacePublishing: boolean
@@ -86,7 +84,7 @@ interface PassedProps {
 
 type ComponentProps = StoreProps & DispatchProps & PassedProps
 
-export const Footer: React.FC<ComponentProps> = ({
+export const Footer = ({
   autoSaving,
   pacePublishing,
   blackoutDatesSyncing,
@@ -107,7 +105,7 @@ export const Footer: React.FC<ComponentProps> = ({
   isUnpublishedNewPace,
   paceName,
   blueprintLocked,
-}) => {
+}: ComponentProps) => {
   const [isRemovePaceModalOpen, setRemovePaceModalOpen] = useState(false)
   const useRedesign = window.ENV.FEATURES.course_paces_redesign
   const userIsMasquerading = window.ENV.IS_MASQUERADING
@@ -227,10 +225,10 @@ export const Footer: React.FC<ComponentProps> = ({
           contextType={studentPace ? 'Enrollment' : 'Section'}
           paceName={paceName}
         />
-        <FlexItem>
+        <Flex.Item>
           {showRemovePaceButton && (
             <Tooltip
-              renderTip={removeDisabled && removeTip}
+              renderTip={removeDisabled ? removeTip : ''}
               on={removeDisabled && !useRedesign ? ['hover', 'focus'] : []}
             >
               {showCondensedView ? (
@@ -250,11 +248,11 @@ export const Footer: React.FC<ComponentProps> = ({
               )}
             </Tooltip>
           )}
-        </FlexItem>
-        <FlexItem>
+        </Flex.Item>
+        <Flex.Item>
           {!showCondensedView && renderChangesIndicator()}
           <Tooltip
-            renderTip={cancelDisabled && cancelTip}
+            renderTip={cancelDisabled ? cancelTip : ''}
             on={cancelDisabled && !useRedesign ? ['hover', 'focus'] : []}
           >
             <Button
@@ -267,7 +265,7 @@ export const Footer: React.FC<ComponentProps> = ({
             </Button>
           </Tooltip>
           <Tooltip
-            renderTip={pubDisabled && pubTip}
+            renderTip={pubDisabled ? pubTip : ''}
             on={pubDisabled && !useRedesign ? ['hover', 'focus'] : []}
           >
             <Button
@@ -279,7 +277,7 @@ export const Footer: React.FC<ComponentProps> = ({
               {publishLabel}
             </Button>
           </Tooltip>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     </View>
   )

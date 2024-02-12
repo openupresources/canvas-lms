@@ -32,12 +32,12 @@ describe "conversations new" do
     cat = @course.group_categories.create(name: "the groups")
     @group = cat.groups.create(name: "the group", context: @course)
     @group.users = [@s1, @s2]
-    @t2 =  user_factory(name: "second teacher", active_user: true)
+    @t2 = user_factory(name: "second teacher", active_user: true)
     @course.enroll_teacher(@t2)
   end
 
   describe "message sending" do
-    context "when react_inbox feature flag is off", ignore_js_errors: true do
+    context "when react_inbox feature flag is off", :ignore_js_errors do
       before do
         Account.default.set_feature_flag! :react_inbox, "off"
       end
@@ -68,7 +68,7 @@ describe "conversations new" do
 
       it "allows admins with read_roster permission to send a message without picking a context", priority: "1" do
         user = account_admin_user
-        user_logged_in({ user: user })
+        user_logged_in({ user: })
         conversations
         compose to: [@s1], subject: "context-free", body: "hallo!"
         c = @s1.conversations.last.conversation
@@ -79,7 +79,7 @@ describe "conversations new" do
       it "does not allow admins without read_roster permission to send a message without picking a context", priority: "1" do
         user = account_admin_user
         RoleOverride.manage_role_override(Account.default, admin_role, "read_roster", override: false, locked: false)
-        user_logged_in({ user: user })
+        user_logged_in({ user: })
         conversations
         f("#compose-btn").click
         wait_for_animations
@@ -206,6 +206,8 @@ describe "conversations new" do
 
               get "/conversations"
               move_to_click(".icon-compose")
+              # Groups belonging to concluded courses should not be shown
+              expect(f("#compose-message-course")).not_to contain_jqcss("option:contains('#{@course.groups.first.name}')")
               expect(f("#compose-message-course")).not_to contain_jqcss("option:contains('#{@course.name}')")
             end
           end
@@ -320,7 +322,7 @@ describe "conversations new" do
       end
     end
 
-    context "when react_inbox feature flag is on", ignore_js_errors: true do
+    context "when react_inbox feature flag is on", :ignore_js_errors do
       before do
         Account.default.enable_feature! :react_inbox
       end
@@ -346,17 +348,11 @@ describe "conversations new" do
             get "/conversations"
             f("button[data-testid='compose']").click
             f("input[placeholder='Select Course']").click
-            fj("li:contains('#{@course.name}')").click
-            ff("input[aria-label='Address Book']")[1].click
-            wait_for_ajaximations
-            fj("li:contains('Teachers')").click
-            wait_for_ajaximations
-            fj("li:contains('#{@teacher.name}')").click
-            f("textarea[data-testid='message-body']").send_keys "Message to Teacher in soft concluded course"
-            fj("button:contains('Send')").click
-            wait_for_ajaximations
 
-            expect(fj("div:contains('Course concluded, unable to send messages')")).to be_present
+            # Groups that are a part of a concluded course should not be visible
+            expect(@group.context).to eq(@course)
+            expect(f("body")).to_not contain_jqcss("span:contains('#{@group.name}')")
+            expect(f("body")).to_not contain_jqcss("li:contains('#{@course.name}')")
           end
 
           it "does not allow a teacher to create a new conversation when course is soft concluded" do
@@ -366,7 +362,7 @@ describe "conversations new" do
             f("button[data-testid='compose']").click
             f("input[placeholder='Select Course']").click
             fj("li:contains('#{@course.name}')").click
-            ff("input[aria-label='Address Book']")[1].click
+            ff("input[aria-label='Search']")[1].click
             wait_for_ajaximations
             fj("li:contains('Students')").click
             wait_for_ajaximations
@@ -385,17 +381,7 @@ describe "conversations new" do
             get "/conversations"
             f("button[data-testid='compose']").click
             f("input[placeholder='Select Course']").click
-            fj("li:contains('#{@course.name}')").click
-            ff("input[aria-label='Address Book']")[1].click
-            wait_for_ajaximations
-            fj("li:contains('Students')").click
-            wait_for_ajaximations
-            fj("li:contains('#{@s1.name}')").click
-            f("textarea[data-testid='message-body']").send_keys "Message to Teacher in soft concluded course"
-            fj("button:contains('Send')").click
-            wait_for_ajaximations
-
-            expect(fj("div:contains('Course concluded, unable to send messages')")).to be_present
+            expect(f("body")).to_not contain_jqcss("li:contains('#{@course.name}')")
           end
         end
       end
@@ -429,9 +415,29 @@ describe "conversations new" do
             get "/conversations"
             open_react_compose_modal_addressbook
 
-            # back, all in course, Teachers, Students, Student Groups
-            expect(ff("div[data-testid='address-book-item']").count).to eq(5)
+            # all in course, Teachers, Students, Student Groups
+            expect(ff("div[data-testid='address-book-item']").count).to eq(4)
             expect(fj("div[data-testid='address-book-item']:contains('All in #{@course.name}')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@course.users.count}')")).to be_present
+          end
+
+          it "opens the addressbook when clicking the address-book icon", priority: "1" do
+            get "/conversations"
+
+            # Open compose modal
+            f("button[data-testid='compose']").click
+
+            # select the only course option
+            f("input[placeholder='Select Course']").click
+            f("li[role='none']").click
+
+            # Open address book using the ICON
+            force_click("button[data-testid='address-button']")
+
+            # all in course, Teachers, Students, Student Groups
+            expect(ff("div[data-testid='address-book-item']").count).to eq(4)
+            expect(fj("div[data-testid='address-book-item']:contains('All in #{@course.name}')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@course.users.count}')")).to be_present
           end
 
           it "correctly shows Teachers option", priority: "1" do
@@ -443,6 +449,7 @@ describe "conversations new" do
             # back, all in Teachers, @Teacher name, @t2 name
             expect(ff("div[data-testid='address-book-item']").count).to eq(4)
             expect(fj("div[data-testid='address-book-item']:contains('All in Teachers')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@course.teachers.count}')")).to be_present
           end
 
           it "correctly shows Observers option" do
@@ -476,6 +483,7 @@ describe "conversations new" do
             # back, all in Students, @s1 name, @s2 name, @s3 name
             expect(ff("div[data-testid='address-book-item']").count).to eq(5)
             expect(fj("div[data-testid='address-book-item']:contains('All in Students')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@course.students.count}')")).to be_present
           end
 
           # There is no option to send a message to all groups
@@ -502,6 +510,7 @@ describe "conversations new" do
             # Back, all in the group, @s1, @s2
             expect(ff("div[data-testid='address-book-item']").count).to eq(4)
             expect(fj("div[data-testid='address-book-item']:contains('All in #{@group.name}')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@group.users.count}')")).to be_present
           end
         end
 
@@ -512,21 +521,22 @@ describe "conversations new" do
           end
 
           it "does not show student the all in course option by default", priority: "1" do
-            # back, Teachers, Students, Student Groups
+            # Teachers, Students, Student Groups
             open_react_compose_modal_addressbook
-            expect(ff("div[data-testid='address-book-item']").count).to eq(4)
-            expect(fj("div[data-testid='address-book-item']:contains('Back')")).to be_displayed
+            expect(ff("div[data-testid='address-book-item']").count).to eq(3)
+            expect(f("body")).not_to contain_jqcss("div[data-testid='address-book-item']:contains('Back')")
             expect(fj("div[data-testid='address-book-item']:contains('Teachers')")).to be_displayed
             expect(fj("div[data-testid='address-book-item']:contains('Students')")).to be_displayed
             expect(fj("div[data-testid='address-book-item']:contains('Student Groups')")).to be_displayed
           end
 
           it "correctly shows student the all in course option if send_messages_all is set to true", priority: "1" do
-            # back, all in course, Teachers, Students, Student Groups
+            # all in course, Teachers, Students, Student Groups
             @course.account.role_overrides.create!(permission: :send_messages_all, role: student_role, enabled: true)
             open_react_compose_modal_addressbook
-            expect(ff("div[data-testid='address-book-item']").count).to eq(5)
+            expect(ff("div[data-testid='address-book-item']").count).to eq(4)
             expect(fj("div[data-testid='address-book-item']:contains('All in #{@course.name}')")).to be_present
+            expect(fj("div[data-testid='address-book-item']:contains('People: #{@course.users.count}')")).to be_present
           end
         end
       end
@@ -538,7 +548,7 @@ describe "conversations new" do
           f("button[data-testid='compose']").click
           f("input[placeholder='Select Course']").click
           fj("li:contains('#{@course.name}')").click
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
         end
 
         it "correctly sends message to the entire course", priority: "1" do
@@ -566,7 +576,7 @@ describe "conversations new" do
           expect(@t2.conversations.last.conversation.conversation_participants.collect(&:user_id).sort).to eq([@teacher, @t2].collect(&:id).sort)
         end
 
-        it "correctly wipes address book after cancelling compose", priority: "1" do
+        it "correctly wipes Search after cancelling compose", priority: "1" do
           fj("div[data-testid='address-book-item']:contains('Teachers')").click
           wait_for_ajaximations
 
@@ -615,11 +625,11 @@ describe "conversations new" do
         admin_logged_in
         get "/conversations"
         f("button[data-testid='compose']").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         wait_for_ajaximations
-        fj("li:contains('Students')").click
+        fj("li:contains('Users')").click
         fj("li:contains('#{@s1.name}')").click
-        ff("input[aria-label='Address Book']")[1].click
+        ff("input[aria-label='Search']")[1].click
         wait_for_ajaximations
         fj("li:contains('#{@s2.name}')").click
         f("textarea[data-testid='message-body']").send_keys "sent to both of you"
@@ -627,6 +637,20 @@ describe "conversations new" do
         wait_for_ajaximations
         expect(@s1.conversations.last.conversation.conversation_participants.collect(&:user_id).sort).to eq [@s1.id, @s2.id, @admin.id]
         expect(@s1.conversations.last.conversation.context).to eq @admin.account
+      end
+
+      it "sets compose course when course filter is set" do
+        get "/conversations"
+
+        f("[data-testid = 'course-select']").click
+        wait_for_ajaximations
+        fj("li > span:contains('#{@course.name}')").click
+        f("button[data-testid='compose']").click
+
+        expect(f("input[data-testid = 'course-select']").property("value")).to eq(@course.name)
+
+        ff("input[aria-label='Search']")[1].click
+        expect(fj("li:contains('All in #{@course.name}')")).to be_displayed
       end
 
       context "individual message sending" do
@@ -643,7 +667,7 @@ describe "conversations new" do
           wait_for_ajaximations
           fj("li:contains('#{account_level_group.name}')").click
           force_click("input[data-testid='individual-message-checkbox']")
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           fj("li:contains('second student')").click
           f("textarea[data-testid='message-body']").send_keys "sent to everyone in the account level group"
           fj("button:contains('Send')").click
@@ -659,7 +683,7 @@ describe "conversations new" do
           f("button[data-testid='compose']").click
           f("input[placeholder='Select Course']").click
           fj("li:contains('#{@course.name}')").click
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           expect(f("input[data-testid='individual-message-checkbox']")).not_to be_disabled
           fj("div[data-testid='address-book-item']:contains('Students')").click
           wait_for_ajaximations
@@ -688,7 +712,7 @@ describe "conversations new" do
           f("button[data-testid='compose']").click
           f("input[placeholder='Select Course']").click
           fj("li:contains('#{@course.name}')").click
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           expect(f("input[data-testid='individual-message-checkbox']")).not_to be_disabled
           fj("div[data-testid='address-book-item']:contains('Students')").click
           wait_for_ajaximations
@@ -724,7 +748,7 @@ describe "conversations new" do
         end
 
         it "includes correct observers when clicked" do
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           fj("div[data-testid='address-book-item']:contains('All in #{@course.name}')").click
           f("button[data-testid='include-observer-button']").click
           wait_for_ajaximations
@@ -734,7 +758,7 @@ describe "conversations new" do
         end
 
         it "does not include duplicate observers when clicked" do
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           fj("div[data-testid='address-book-item']:contains('All in #{@course.name}')").click
           f("button[data-testid='include-observer-button']").click
           wait_for_ajaximations
@@ -749,7 +773,7 @@ describe "conversations new" do
         end
 
         it "renders an alert when no observers are added" do
-          ff("input[aria-label='Address Book']")[1].click
+          ff("input[aria-label='Search']")[1].click
           fj("div[data-testid='address-book-item']:contains('Students')").click
           wait_for_ajaximations
           fj("div[data-testid='address-book-item']:contains('#{@s2.name}')").click
@@ -762,7 +786,7 @@ describe "conversations new" do
       end
 
       context "sent scope" do
-        it "defaults to reply to recipients", ignore_js_errors: true do
+        it "defaults to reply to recipients", :ignore_js_errors do
           conversation(@teacher, @s1, @s2, body: "hi there", workflow_state: "unread")
           user_session(@teacher)
           get "/conversations#filter=type=sent"
@@ -807,6 +831,6 @@ describe "conversations new" do
     f("li[role='none']").click
 
     # Open address book
-    ff("input[aria-label='Address Book']")[1].click
+    ff("input[aria-label='Search']")[1].click
   end
 end

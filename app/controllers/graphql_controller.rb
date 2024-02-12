@@ -27,6 +27,8 @@ class GraphQLController < ApplicationController
 
   before_action :require_user, if: :require_auth?
   before_action :require_inst_access_token_auth, only: :subgraph_execute, unless: :sdl_query?
+  # This makes sure that the liveEvents context is set up for graphql requests
+  before_action :get_context
 
   # This action is for use only with the federated API Gateway. See
   # `app/graphql/README.md` for details.
@@ -38,6 +40,7 @@ class GraphQLController < ApplicationController
   def execute
     result = execute_on(CanvasSchema)
     prep_page_view_for_submit
+    prep_page_view_for_create_discussion_entry
     render json: result
   end
 
@@ -54,8 +57,8 @@ class GraphQLController < ApplicationController
     context = {
       current_user: @current_user,
       real_current_user: @real_current_user,
-      session: session,
-      request: request,
+      session:,
+      request:,
       domain_root_account: @domain_root_account,
       access_token: @access_token,
       in_app: in_app?,
@@ -69,9 +72,8 @@ class GraphQLController < ApplicationController
       ]
     }
 
-    overall_timeout = Setting.get("graphql_overall_timeout", "60").to_i.seconds
-    Timeout.timeout(overall_timeout) do
-      schema.execute(query, variables: variables, context: context)
+    Timeout.timeout(1.minute) do
+      schema.execute(query, variables:, context:)
     end
   end
 
@@ -111,5 +113,13 @@ class GraphQLController < ApplicationController
     assignment = ::Assignment.active.find(params[:variables][:assignmentLid])
     get_context
     log_asset_access(assignment, "assignments", nil, "participate")
+  end
+
+  def prep_page_view_for_create_discussion_entry
+    return unless params[:operationName] == "CreateDiscussionEntry"
+
+    topic = DiscussionTopic.find(params[:variables][:discussionTopicId])
+    get_context
+    log_asset_access(topic, "topics", "topics", "participate")
   end
 end

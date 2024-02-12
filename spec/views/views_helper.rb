@@ -36,18 +36,14 @@ RSpec.shared_context "lti_layout_spec_helper" do
   before do
     allow(ActionController).to receive(:flash).with(any_args).and_return(true)
     allow(User).to receive(:default_avatar_fallback).and_return("http://localhost/avatar.png")
-    allow(ctrl).to receive(:session).and_return({})
+    allow(ctrl).to receive_messages(session: {}, request:, response:, _response: response)
     allow(ctrl).to receive(:named_context_url).with(any_args).and_return("https://example.com/accounts/1")
-    allow(ctrl).to receive(:request).and_return(request)
-    allow(ctrl).to receive(:response).and_return(response)
-    allow(ctrl).to receive(:_response).and_return(response)
 
     ctrl.instance_variable_set(:@response, response)
     ctrl.instance_variable_set(:@_response, response)
     ctrl.instance_variable_set(:@context, tool.context)
 
-    allow(tag).to receive(:new_tab).and_return(true)
-    allow(tag).to receive(:quiz_lti).and_return true
+    allow(tag).to receive_messages(new_tab: true, quiz_lti: true)
     allow(tool).to receive(:login_or_launch_url).with(any_args).and_return("https://example.com")
     allow(tool).to receive(:use_1_3?).and_return(true)
     allow(ContextExternalTool).to receive(:find_external_tool).with(any_args).and_return(tool)
@@ -82,7 +78,7 @@ module LtiLayoutSpecHelper
   def self.create_tool(tool_id = "A brand new tool")
     dev_key = DeveloperKey.create
     course = Course.create
-    ContextExternalTool.create(developer_key: dev_key, context: course, tool_id: tool_id)
+    ContextExternalTool.create(developer_key: dev_key, context: course, tool_id:)
   end
 
   def self.create_request

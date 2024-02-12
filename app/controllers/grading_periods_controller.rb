@@ -139,7 +139,7 @@ class GradingPeriodsController < ApplicationController
 
     if authorized_action(grading_period(inherit: false), @current_user, :update)
       respond_to do |format|
-        DueDateCacher.with_executing_user(@current_user) do
+        SubmissionLifecycleManager.with_executing_user(@current_user) do
           if grading_period(inherit: false).update(grading_period_params)
             format.json { render json: serialize_json_api(grading_period(inherit: false)) }
           else
@@ -158,7 +158,7 @@ class GradingPeriodsController < ApplicationController
   # successful.
   def destroy
     if authorized_action(grading_period(inherit: false), @current_user, :delete)
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         grading_period(inherit: false).destroy
       end
 
@@ -204,8 +204,8 @@ class GradingPeriodsController < ApplicationController
   #
   def batch_update
     if authorized_action(@context, @current_user, :manage_grades)
-      DueDateCacher.with_executing_user(@current_user) do
-        method("#{@context.class.to_s.downcase}_batch_update").call
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
+        method(:"#{@context.class.to_s.downcase}_batch_update").call
       end
     end
   end
@@ -214,7 +214,7 @@ class GradingPeriodsController < ApplicationController
 
   def grading_period(inherit: true)
     @grading_period ||= begin
-      grading_period = GradingPeriod.for(@context, inherit: inherit).find_by(id: params[:id])
+      grading_period = GradingPeriod.for(@context, inherit:).find_by(id: params[:id])
       raise ActionController::RoutingError, "Not Found" if grading_period.blank?
 
       grading_period
@@ -235,7 +235,7 @@ class GradingPeriodsController < ApplicationController
       respond_to do |format|
         if errors.present?
           format.json do
-            render json: { errors: errors }, status: :unprocessable_entity
+            render json: { errors: }, status: :unprocessable_entity
           end
         else
           periods.each(&:save!)
@@ -264,7 +264,7 @@ class GradingPeriodsController < ApplicationController
       respond_to do |format|
         if errors.present?
           format.json do
-            render json: { errors: errors }, status: :unprocessable_entity
+            render json: { errors: }, status: :unprocessable_entity
           end
         else
           periods.each(&:save!)
@@ -359,7 +359,7 @@ class GradingPeriodsController < ApplicationController
                                      each_serializer: GradingPeriodSerializer,
                                      controller: self,
                                      root: :grading_periods,
-                                     meta: meta,
+                                     meta:,
                                      scope: @current_user,
                                      include_root: false
                                    }).as_json
@@ -368,6 +368,6 @@ class GradingPeriodsController < ApplicationController
   def index_permissions
     can_create_grading_periods = @context.is_a?(Account) &&
                                  @context.root_account? && @context.grants_right?(@current_user, :manage)
-    { can_create_grading_periods: can_create_grading_periods }.as_json
+    { can_create_grading_periods: }.as_json
   end
 end

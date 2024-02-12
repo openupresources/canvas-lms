@@ -47,10 +47,11 @@ class Quizzes::Quiz < ActiveRecord::Base
   has_many :quiz_regrades, class_name: "Quizzes::QuizRegrade"
   has_many :quiz_student_visibilities
   belongs_to :context, polymorphic: [:course]
-  belongs_to :assignment
+  belongs_to :assignment, inverse_of: :quiz, class_name: "AbstractAssignment"
   belongs_to :assignment_group
   belongs_to :root_account, class_name: "Account"
   has_many :ignores, as: :asset
+  has_one :master_content_tag, class_name: "MasterCourses::MasterContentTag", inverse_of: :quiz
 
   validates :description, length: { maximum: maximum_long_text_length, allow_blank: true }
   validates :title, length: { maximum: maximum_string_length, allow_nil: true }
@@ -84,8 +85,6 @@ class Quizzes::Quiz < ActiveRecord::Base
 
   simply_versioned
 
-  has_many :context_module_tags, -> { where("content_tags.tag_type='context_module' AND content_tags.workflow_state<>'deleted'") }, as: :content, inverse_of: :content, class_name: "ContentTag"
-
   # This callback is listed here in order for the :link_assignment_overrides
   # method to be called after the simply_versioned callbacks. We want the
   # overrides to reflect the most recent version of the quiz.
@@ -100,11 +99,26 @@ class Quizzes::Quiz < ActiveRecord::Base
   include MasterCourses::Restrictor
   restrict_columns :content, [:title, :description]
   restrict_columns :settings, %i[
-    quiz_type assignment_group_id shuffle_answers time_limit disable_timer_autosubmission
-    anonymous_submissions scoring_policy allowed_attempts hide_results
-    one_time_results show_correct_answers show_correct_answers_last_attempt
-    show_correct_answers_at hide_correct_answers_at one_question_at_a_time
-    cant_go_back access_code ip_filter require_lockdown_browser require_lockdown_browser_for_results
+    quiz_type
+    assignment_group_id
+    shuffle_answers
+    time_limit
+    disable_timer_autosubmission
+    anonymous_submissions
+    scoring_policy
+    allowed_attempts
+    hide_results
+    one_time_results
+    show_correct_answers
+    show_correct_answers_last_attempt
+    show_correct_answers_at
+    hide_correct_answers_at
+    one_question_at_a_time
+    cant_go_back
+    access_code
+    ip_filter
+    require_lockdown_browser
+    require_lockdown_browser_for_results
   ]
   restrict_assignment_columns
   restrict_columns :state, [:workflow_state]
@@ -155,10 +169,18 @@ class Quizzes::Quiz < ActiveRecord::Base
     @stored_questions = nil
 
     %i[
-      shuffle_answers disable_timer_autosubmission could_be_locked anonymous_submissions
-      require_lockdown_browser require_lockdown_browser_for_results
-      one_question_at_a_time cant_go_back require_lockdown_browser_monitor
-      only_visible_to_overrides one_time_results show_correct_answers_last_attempt
+      shuffle_answers
+      disable_timer_autosubmission
+      could_be_locked
+      anonymous_submissions
+      require_lockdown_browser
+      require_lockdown_browser_for_results
+      one_question_at_a_time
+      cant_go_back
+      require_lockdown_browser_monitor
+      only_visible_to_overrides
+      one_time_results
+      show_correct_answers_last_attempt
     ].each { |attr| self[attr] = false if self[attr].nil? }
     self[:show_correct_answers] = true if self[:show_correct_answers].nil?
   end
@@ -201,7 +223,7 @@ class Quizzes::Quiz < ActiveRecord::Base
     end
 
     override_students.each do |collection|
-      collection.update_all(assignment_id: assignment_id, quiz_id: id)
+      collection.update_all(assignment_id:, quiz_id: id)
     end
   end
 
@@ -211,7 +233,7 @@ class Quizzes::Quiz < ActiveRecord::Base
 
     if !assignment_id && (graded? || (force && survey?)) && (force || !%i[assignment clone migration].include?(@saved_by))
       assignment = self.assignment
-      assignment ||= context.assignments.build(title: title, due_at: due_at, submission_types: "online_quiz")
+      assignment ||= context.assignments.build(title:, due_at:, submission_types: "online_quiz")
       assignment.assignment_group_id = self.assignment_group_id
       assignment.only_visible_to_overrides = only_visible_to_overrides
       assignment.saved_by = :quiz
@@ -629,9 +651,9 @@ class Quizzes::Quiz < ActiveRecord::Base
           # get ALL question types possible from the bank
           AssessmentQuestion
             .where(assessment_question_bank_id: datum["assessment_question_bank_id"])
-            .pluck(:question_data).map { |data| data["question_type"] }
+            .pluck(:question_data).pluck("question_type")
         else
-          datum["questions"].map { |q| q["question_type"] }
+          datum["questions"].pluck("question_type")
         end
       else
         datum["question_type"]
@@ -667,7 +689,7 @@ class Quizzes::Quiz < ActiveRecord::Base
                  end
 
       builder = Quizzes::QuizQuestionBuilder.new({
-                                                   shuffle_answers: shuffle_answers
+                                                   shuffle_answers:
                                                  })
 
       builder.shuffle_quiz_data!(data_set)
@@ -722,7 +744,7 @@ class Quizzes::Quiz < ActiveRecord::Base
 
     transaction do
       builder = Quizzes::QuizQuestionBuilder.new({
-                                                   shuffle_answers: shuffle_answers
+                                                   shuffle_answers:
                                                  })
 
       submission = Quizzes::SubmissionManager.new(self).find_or_create_submission(user, preview)
@@ -995,7 +1017,7 @@ class Quizzes::Quiz < ActiveRecord::Base
     quiz_statistics.build(
       report_type: "student_analysis",
       includes_all_versions: include_all_versions,
-      includes_sis_ids: includes_sis_ids
+      includes_sis_ids:
     ).report.generate
   end
 
@@ -1010,7 +1032,7 @@ class Quizzes::Quiz < ActiveRecord::Base
     options[:includes_sis_ids] = false if report_type == "item_analysis"
 
     quiz_stats_opts = {
-      report_type: report_type,
+      report_type:,
       includes_all_versions: !!options[:includes_all_versions],
       includes_sis_ids: !!options[:includes_sis_ids],
       anonymous: anonymous_submissions?
@@ -1185,7 +1207,11 @@ class Quizzes::Quiz < ActiveRecord::Base
       .group("quizzes.id")
       .where('quizzes.due_at BETWEEN ? AND ?
           OR assignment_overrides.due_at_overridden AND
-          assignment_overrides.due_at BETWEEN ? AND ?', start, ending, start, ending)
+          assignment_overrides.due_at BETWEEN ? AND ?',
+             start,
+             ending,
+             start,
+             ending)
   }
 
   scope :ungraded_with_user_due_date, lambda { |user|
@@ -1233,7 +1259,8 @@ class Quizzes::Quiz < ActiveRecord::Base
     where("(SELECT COUNT(id) FROM #{Quizzes::QuizSubmission.quoted_table_name}
             WHERE quiz_id = quizzes.id
             AND workflow_state = 'complete'
-            AND user_id = ?) = 0", user_id)
+            AND user_id = ?) = 0",
+          user_id)
       .limit(limit)
       .order("quizzes.due_at")
       .preload(:context)
@@ -1245,10 +1272,10 @@ class Quizzes::Quiz < ActiveRecord::Base
   }
 
   scope :not_ignored_by, lambda { |user, purpose|
-    where("NOT EXISTS (?)",
-          Ignore.where(asset_type: "Quizzes::Quiz",
-                       user_id: user,
-                       purpose: purpose).where("asset_id=quizzes.id"))
+    where.not(Ignore.where(asset_type: "Quizzes::Quiz",
+                           user_id: user,
+                           purpose:).where("asset_id=quizzes.id")
+                       .arel.exists)
   }
 
   def peer_reviews_due_at
@@ -1256,11 +1283,11 @@ class Quizzes::Quiz < ActiveRecord::Base
   end
 
   def submission_action_string
-    t :submission_action_take_quiz, "Take %{title}", title: title
+    t :submission_action_take_quiz, "Take %{title}", title:
   end
 
   def teachers
-    context.teacher_enrollments.map(&:user)
+    context.teacher_enrollments.current.map(&:user)
   end
 
   def self.lockdown_browser_plugin_enabled?
@@ -1362,7 +1389,7 @@ class Quizzes::Quiz < ActiveRecord::Base
 
     quiz_ids_with_subs = Quizzes::QuizSubmission
                          .from(constant_table)
-                         .where("EXISTS (?)", filter)
+                         .where(filter.arel.exists)
                          .pluck("s.quiz_id")
 
     quizzes.each do |quiz|
@@ -1377,7 +1404,7 @@ class Quizzes::Quiz < ActiveRecord::Base
   # marks a quiz as having unpublished changes
   def self.mark_quiz_edited(id)
     now = Time.now.utc
-    where(id: id).update_all(last_edited_at: now, updated_at: now)
+    where(id:).update_all(last_edited_at: now, updated_at: now)
   end
 
   def mark_edited!
@@ -1414,7 +1441,7 @@ class Quizzes::Quiz < ActiveRecord::Base
     unless unpublished_changes?
       options = {
         quiz: self,
-        version_number: version_number
+        version_number:
       }
       if current_quiz_question_regrades.present?
         Quizzes::QuizRegrader::Regrader.delay(strand: "quiz:#{global_id}:regrading")
@@ -1501,7 +1528,7 @@ class Quizzes::Quiz < ActiveRecord::Base
         filters << {
           name: key,
           account: account.name,
-          filter: filter
+          filter:
         }
       end
     end

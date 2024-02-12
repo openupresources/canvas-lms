@@ -34,7 +34,7 @@ module RollupScoreAggregatorHelper
   private
 
   def present_scores
-    score_sets.pluck(:score).reject(&:nil?)
+    score_sets.pluck(:score).compact
   end
 
   def latest_result
@@ -48,7 +48,7 @@ module RollupScoreAggregatorHelper
   end
 
   def scaled_score_from_result(result)
-    if %w[decaying_average latest average].include?(@calculation_method)
+    if %w[decaying_average latest average standard_decaying_average weighted_average].include?(@calculation_method)
       result_aggregates = get_aggregates(result)
       alignment_aggregate_score(result_aggregates)
     else
@@ -59,7 +59,7 @@ module RollupScoreAggregatorHelper
   def retrieve_scores(results)
     results.map do |result|
       score = quiz_score?(result) ? scaled_score_from_result(result) : result_score(result)
-      { score: score, result: result }
+      { score:, result: }
     end
   end
 
@@ -88,7 +88,7 @@ module RollupScoreAggregatorHelper
   def alignment_aggregate_score(result_aggregates)
     return if result_aggregates[:total] == 0
 
-    possible = @points_possible > 0 ? @points_possible : @mastery_points
+    possible = (@points_possible > 0) ? @points_possible : @mastery_points
     (result_aggregates[:weighted] / result_aggregates[:total]) * possible
   end
 
@@ -111,7 +111,7 @@ module RollupScoreAggregatorHelper
   def score_sets
     @score_sets || begin
       case @calculation_method
-      when "decaying_average"
+      when "decaying_average", "standard_decaying_average", "weighted_average"
         @score_sets = retrieve_scores(@aggregate ? @outcome_results : sorted_results)
       when "n_mastery", "highest", "average"
         @score_sets = retrieve_scores(@outcome_results)

@@ -22,7 +22,7 @@ require_relative "../graphql_spec_helper"
 
 describe Types::RubricRatingType do
   let_once(:course) { course_factory(active_all: true) }
-  let_once(:student) { student_in_course(course: course, active_all: true).user }
+  let_once(:student) { student_in_course(course:, active_all: true).user }
   let(:rubric) { rubric_for_course }
   let(:rubric_type) { GraphQLTypeTester.new(rubric, current_user: student) }
 
@@ -30,6 +30,12 @@ describe Types::RubricRatingType do
     expect(
       rubric_type.resolve("criteria { ratings { _id } }")
     ).to eq(rubric.criteria.map { |c| c[:ratings].pluck(:id).map(&:to_s) })
+  end
+
+  it "rubric id" do
+    expect(
+      rubric_type.resolve("criteria { ratings { rubricId } }").first.uniq.first
+    ).to eq(rubric.id.to_s)
   end
 
   describe "works for the field" do

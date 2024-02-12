@@ -132,27 +132,27 @@ describe "accounts/settings" do
 
         assign(:announcements, [account_notification(account: @account)].paginate)
         render
-        expect(response).to have_text(text)
+        expect(response.body).to include(text)
       end
     end
 
     describe "Root Account Announcements" do
       let(:account) { Account.create!(name: "reading_rainbow") }
 
-      include_examples "account notifications", "This is a message from reading_rainbow"
+      include_examples "account notifications", "This is a message from <b>reading_rainbow</b>"
     end
 
     describe "Site Admin Announcements" do
       let(:account) { Account.site_admin }
 
-      include_examples "account notifications", "This is a message from Canvas Administration"
+      include_examples "account notifications", "This is a message from <b>Canvas Administration</b>"
     end
   end
 
   describe "Admin setting allow_gradebook_show_first_last_names" do
     context "site admin user" do
       let_once(:account) { Account.site_admin }
-      let_once(:admin) { account_admin_user(account: account) }
+      let_once(:admin) { account_admin_user(account:) }
 
       before do
         view_context(account, admin)
@@ -178,9 +178,32 @@ describe "accounts/settings" do
       end
     end
 
+    describe "allow_observers_in_appointment_groups setting" do
+      before do
+        account = Account.default
+        admin = account_admin_user
+        view_context(account, admin)
+        assign(:account, account)
+        assign(:announcements, AccountNotification.none.paginate)
+      end
+
+      let(:setting_label) { "Allow observers to sign-up for appointments when enabled by the teacher" }
+
+      it "renders the setting when the observer_appointment_groups feature is enabled" do
+        render
+        expect(rendered).to include(setting_label)
+      end
+
+      it "does not render the setting when the observer_appointment_groups feature is disabled" do
+        Account.site_admin.disable_feature!(:observer_appointment_groups)
+        render
+        expect(rendered).not_to include(setting_label)
+      end
+    end
+
     context "account admin user" do
       let_once(:account) { Account.default }
-      let_once(:admin) { account_admin_user(account: account) }
+      let_once(:admin) { account_admin_user(account:) }
 
       before do
         view_context(account, admin)
@@ -195,20 +218,20 @@ describe "accounts/settings" do
         Account.site_admin.enable_feature!(:gradebook_show_first_last_names)
         render
 
-        expect(response).to have_tag("input#account_settings_allow_gradebook_show_first_last_names")
+        expect(response).to have_tag("input#account_settings_allow_gradebook_show_first_last_names_value")
       end
 
       it "does not show the setting by default" do
         render
 
-        expect(response).to_not have_tag("input#account_settings_allow_gradebook_show_first_last_names")
+        expect(response).to_not have_tag("input#account_settings_allow_gradebook_show_first_last_names_value")
       end
 
       it "does not show the setting when the gradebook_show_first_last_names feature is disabled" do
         Account.site_admin.disable_feature!(:gradebook_show_first_last_names)
         render
 
-        expect(response).to_not have_tag("input#account_settings_allow_gradebook_show_first_last_names")
+        expect(response).to_not have_tag("input#account_settings_allow_gradebook_show_first_last_names_value")
       end
     end
   end
@@ -459,7 +482,7 @@ describe "accounts/settings" do
       role = custom_account_role("CustomAdmin", account: Account.site_admin)
       account_admin_user_with_role_changes(
         account: Account.site_admin,
-        role: role,
+        role:,
         role_changes: { manage_account_memberships: true }
       )
       view_context(Account.default, @user)
@@ -539,8 +562,8 @@ describe "accounts/settings" do
 
     def expect_threshold_to_be(value)
       expect(response).to have_tag(
-        "select#account_settings_smart_alerts_threshold" \
-        "  option[value=\"#{value}\"][selected]"
+        "select#account_settings_smart_alerts_threshold  " \
+        "option[value=\"#{value}\"][selected]"
       )
     end
 
@@ -582,7 +605,7 @@ describe "accounts/settings" do
 
   context "privacy" do
     let(:account) { account_model }
-    let(:account_admin) { account_admin_user(account: account) }
+    let(:account_admin) { account_admin_user(account:) }
     let(:dom) { Nokogiri::HTML5(response) }
     let(:enable_fullstory) { dom.at_css("#account_settings_enable_fullstory") }
     let(:site_admin) { site_admin_user }
@@ -638,7 +661,7 @@ describe "accounts/settings" do
 
   context "course templates" do
     let_once(:account) { Account.default }
-    let_once(:admin) { account_admin_user(account: account) }
+    let_once(:admin) { account_admin_user(account:) }
 
     before do
       account.enable_feature!(:course_templates)
@@ -656,7 +679,7 @@ describe "accounts/settings" do
       render
       doc = Nokogiri::HTML5(response.body)
       select = doc.at_css("#account_course_template_id")
-      expect(select.css("option").map { |o| o["value"] }).to eq [""]
+      expect(select.css("option").pluck("value")).to eq [""]
     end
 
     it "shows no template and inherit for sub accounts" do
@@ -668,7 +691,22 @@ describe "accounts/settings" do
       render
       doc = Nokogiri::HTML5(response.body)
       select = doc.at_css("#account_course_template_id")
-      expect(select.css("option").map { |o| o["value"] }).to eq ["", "0"]
+      expect(select.css("option").pluck("value")).to eq ["", "0"]
+    end
+
+    it "does not show dummy course for sub accounts" do
+      account.courses.create!(id: 0, workflow_state: "deleted", name: "Unnamed Course")
+      a2 = account.sub_accounts.create!
+      a2.update(course_template_id: 0)
+      view_context(a2, admin)
+      assign(:context, a2)
+      assign(:account, a2)
+
+      render
+      doc = Nokogiri::HTML5(response.body)
+      options = doc.css("#account_course_template_id option[selected]")
+      expect(options.map(&:text)).to_not include("Unnamed Course")
+      expect(options.count).to eq 1
     end
 
     it "disables if you don't have permission" do
@@ -678,8 +716,8 @@ describe "accounts/settings" do
       render
       doc = Nokogiri::HTML5(response.body)
       select = doc.at_css("#account_course_template_id")
-      expect(select.css("option").map { |o| o["value"] }).to eq ["", c.id.to_s]
-      expect(select.css("option").map { |o| o["disabled"] }).to eq [nil, "disabled"]
+      expect(select.css("option").pluck("value")).to eq ["", c.id.to_s]
+      expect(select.css("option").pluck("disabled")).to eq [nil, "disabled"]
     end
 
     it "disables if you don't have permission in a sub-account" do
@@ -695,8 +733,8 @@ describe "accounts/settings" do
       render
       doc = Nokogiri::HTML5(response.body)
       select = doc.at_css("#account_course_template_id")
-      expect(select.css("option").map { |o| o["value"] }).to eq ["", "0", c.id.to_s]
-      expect(select.css("option").map { |o| o["disabled"] }).to eq %w[disabled disabled disabled]
+      expect(select.css("option").pluck("value")).to eq ["", "0", c.id.to_s]
+      expect(select.css("option").pluck("disabled")).to eq %w[disabled disabled disabled]
     end
   end
 

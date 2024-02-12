@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/module-sequence-footer'
 import MarkAsDone from '@canvas/util/jquery/markAsDone'
 import ToolLaunchResizer from '@canvas/lti/jquery/tool_launch_resizer'
@@ -24,7 +25,15 @@ import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
 
 ready(() => {
-  const $toolForm = $('#tool_form')
+  const formSubmissionDelay = window.ENV.INTEROP_8200_DELAY_FORM_SUBMIT
+
+  let toolFormId = '#tool_form'
+  let toolIframeId = '#tool_content'
+  if (typeof ENV.LTI_TOOL_FORM_ID === 'string') {
+    toolFormId = `#tool_form_${ENV.LTI_TOOL_FORM_ID}`
+    toolIframeId = `#tool_content_${ENV.LTI_TOOL_FORM_ID}`
+  }
+  const $toolForm = $(toolFormId)
 
   const launchToolManually = function () {
     const $button = $toolForm.find('button')
@@ -39,9 +48,19 @@ ready(() => {
       $button.attr('disabled', true).text($button.data('expired_message'))
     }, 60 * 2.5 * 1000)
 
-    $toolForm.submit(function () {
-      $(this).find('.load_tab,.tab_loaded').toggle()
-    })
+    if (formSubmissionDelay) {
+      setTimeout(
+        () =>
+          $toolForm.submit(function () {
+            $(this).find('.load_tab,.tab_loaded').toggle()
+          }),
+        formSubmissionDelay
+      )
+    } else {
+      $toolForm.submit(function () {
+        $(this).find('.load_tab,.tab_loaded').toggle()
+      })
+    }
   }
 
   const launchToolInNewTab = function () {
@@ -56,23 +75,22 @@ ready(() => {
       break
     case 'self':
       $toolForm.removeAttr('target')
-      try {
+      if (formSubmissionDelay) {
+        setTimeout(() => $toolForm.submit(), formSubmissionDelay)
+      } else {
         $toolForm.submit()
-        // eslint-disable-next-line no-empty
-      } catch (e) {}
+      }
       break
     default:
       // Firefox throws an error when submitting insecure content
-      try {
+      if (formSubmissionDelay) {
+        setTimeout(() => $toolForm.submit(), formSubmissionDelay)
+      } else {
         $toolForm.submit()
-        // eslint-disable-next-line no-empty
-      } catch (e) {}
+      }
 
-      $('#tool_content').bind('load', () => {
-        if (
-          document.location.protocol !== 'https:' ||
-          $('#tool_form')[0].action.indexOf('https:') > -1
-        ) {
+      $(toolIframeId).bind('load', () => {
+        if (document.location.protocol !== 'https:' || $toolForm[0].action.indexOf('https:') > -1) {
           $('#insecure_content_msg').hide()
           $toolForm.hide()
         }

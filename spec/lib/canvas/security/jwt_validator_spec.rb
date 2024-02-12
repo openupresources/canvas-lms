@@ -25,11 +25,11 @@ module Canvas::Security
 
     let(:validator) do
       described_class.new(
-        jwt: jwt,
-        expected_aud: expected_aud,
-        require_iss: require_iss,
-        skip_jti_check: skip_jti_check,
-        max_iat_age: max_iat_age
+        jwt:,
+        expected_aud:,
+        require_iss:,
+        skip_jti_check:,
+        max_iat_age:
       )
     end
     let(:aud) { Rails.application.routes.url_helpers.oauth2_token_url }
@@ -119,20 +119,20 @@ module Canvas::Security
     end
 
     context "jti check" do
-      it "is false when validated twice", skip_before: true do
+      it "is false when validated twice", :skip_before do
         enable_cache do
           validator.validate
-          expect(validator.validate).to eq false
+          expect(validator.validate).to be false
         end
       end
 
       context "when skip_jti_check is on" do
         let(:skip_jti_check) { true }
 
-        it "is true when when validated twice", skip_before: true do
+        it "is true when when validated twice", :skip_before do
           enable_cache do
             validator.validate
-            expect(validator.validate).to eq true
+            expect(validator.validate).to be true
           end
         end
       end
@@ -140,7 +140,7 @@ module Canvas::Security
 
     context "with missing assertion" do
       Canvas::Security::JwtValidator::REQUIRED_ASSERTIONS.each do |assertion|
-        it "returns an error message when #{assertion} missing", skip_before: true do
+        it "returns an error message when #{assertion} missing", :skip_before do
           jwt.delete assertion
           validator.validate
           expect(subject).not_to be_empty
@@ -150,7 +150,7 @@ module Canvas::Security
       context "with require_iss set to true" do
         let(:require_iss) { true }
 
-        it "returns an error message when iss is missing", skip_before: true do
+        it "returns an error message when iss is missing", :skip_before do
           jwt.delete "iss"
           validator.validate
           expect(subject).not_to be_empty
@@ -158,7 +158,7 @@ module Canvas::Security
       end
 
       context "with require_iss set to false" do
-        it "returns no error message when iss is missing", skip_before: true do
+        it "returns no error message when iss is missing", :skip_before do
           validator.validate
           expect(subject).to be_empty
         end

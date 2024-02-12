@@ -56,13 +56,13 @@ class LoginController < ApplicationController
     # deprecated redirect; they should already know the correct type
     params[:authentication_provider] ||= params[:id]
 
-    if @domain_root_account.auth_discovery_url && !params[:authentication_provider]
-      auth_discovery_url = @domain_root_account.auth_discovery_url
+    if @domain_root_account.auth_discovery_url(request) && !params[:authentication_provider]
+      auth_discovery_url = @domain_root_account.auth_discovery_url(request)
       if flash[:delegated_message]
         auth_discovery_url << (URI.parse(auth_discovery_url).query ? "&" : "?")
         auth_discovery_url << "message=#{URI::DEFAULT_PARSER.escape(flash[:delegated_message])}"
       end
-      return redirect_to auth_discovery_url
+      return redirect_to auth_discovery_url, @domain_root_account.auth_discovery_url_options(request)
     end
 
     if params[:authentication_provider]
@@ -115,8 +115,9 @@ class LoginController < ApplicationController
   def logout_landing
     # logged in; ask them to log out
     return render :logout_confirm if @current_user
+
     # not logged in at all; send them to login
-    return redirect_to login_url unless flash[:logged_out]
+    redirect_to login_url unless flash[:logged_out]
     # just barely logged out. render a landing page asking them to log in again.
     # render :logout_landing
   end
@@ -134,6 +135,7 @@ class LoginController < ApplicationController
       return render json: { error: I18n.t("Invalid redirect URL") }, status: :bad_request
     end
     return render_unauthorized_action unless return_to.absolute?
+    return render_unauthorized_action unless return_to.scheme == request.scheme
 
     host = return_to.host
     return render_unauthorized_action unless host.casecmp?(request.host)

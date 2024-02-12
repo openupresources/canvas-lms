@@ -37,6 +37,20 @@ describe CC::AssignmentResources do
       expect(subject.at("resource_link_lookup_uuid")).to be_blank
     end
 
+    context "with annotatable document assignments" do
+      it "will export assignments with hidden attachments" do
+        assignment.update!(
+          annotatable_attachment: attachment_model(
+            course: assignment.context,
+            filename: "some_attachment",
+            file_state: "hidden"
+          ),
+          submission_types: "online_text_entry,student_annotation"
+        )
+        expect(subject.at("annotatable_attachment_migration_id")).to be_truthy
+      end
+    end
+
     context "with an associated LTI 1.3 tool" do
       let(:assignment) do
         course.assignments.new(
@@ -53,7 +67,7 @@ describe CC::AssignmentResources do
       let(:tool) { external_tool_model(context: course, opts: { use_1_3: true }) }
 
       before do
-        tool.update!(developer_key: developer_key)
+        tool.update!(developer_key:)
         assignment.external_tool_tag = tag
         assignment.save!
         assignment.primary_resource_link.update!(custom: custom_params)

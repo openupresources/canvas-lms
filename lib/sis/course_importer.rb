@@ -69,7 +69,7 @@ module SIS
         raise ImportError, "Improper status \"#{status}\" for course #{course_id}" unless /\A(active|deleted|completed|unpublished|published)/i.match?(status)
         raise ImportError, "Invalid course_format \"#{course_format}\" for course #{course_id}" unless course_format.blank? || course_format =~ /\A(online|on_campus|blended|not_set)/i
 
-        valid_grade_passback_settings = (Setting.get("valid_grade_passback_settings", "nightly_sync,disabled").split(",") << "not_set")
+        valid_grade_passback_settings = %w[nightly_sync disabled not_set]
         raise ImportError, "Invalid grade_passback_setting \"#{grade_passback_setting}\" for course #{course_id}" unless grade_passback_setting.blank? || valid_grade_passback_settings.include?(grade_passback_setting.downcase.strip)
         return if @batch.skip_deletes? && status =~ /deleted/i
 
@@ -81,6 +81,7 @@ module SIS
           else
             state_changes << :updated
           end
+          course.saved_by = :sis_import
           course_enrollment_term_id_stuck = course.stuck_sis_fields.include?(:enrollment_term_id)
           if !course_enrollment_term_id_stuck && term_id
             term = @root_account.enrollment_terms.active.where(sis_source_id: term_id).take
@@ -96,9 +97,14 @@ module SIS
           end
 
           course_account_stuck = course.stuck_sis_fields.include?(:account_id)
-          if !course_account_stuck && account
+          if !course_account_stuck && account&.active?
             course.account = account
           end
+
+          if course.account&.deleted?
+            raise ImportError, "Cannot restore course #{course_id} because the associated account #{course.account.sis_source_id} is deleted"
+          end
+
           course.account ||= @root_account
 
           update_account_associations = course.account_id_changed? || course.root_account_id_changed?
@@ -134,7 +140,7 @@ module SIS
             end
           end
 
-          course_dates_stuck = !(course.stuck_sis_fields & [:start_at, :conclude_at]).empty?
+          course_dates_stuck = !!course.stuck_sis_fields.intersect?([:start_at, :conclude_at])
           unless course_dates_stuck
             if start_date == "<delete>" && end_date == "<delete>"
               course.restrict_enrollments_to_course_dates = false
@@ -185,10 +191,10 @@ module SIS
             end
           end
 
-          update_enrollments = !course.new_record? && !(course.changes.keys & %w[workflow_state name course_code]).empty?
+          update_enrollments = !course.new_record? && !!course.changes.keys.intersect?(%w[workflow_state name course_code])
 
           # republish course paces if necessary
-          if !course.new_record? && course.account.feature_enabled?(:course_paces) && (course.changes.keys & %w[start_at conclude_at restrict_enrollments_to_course_dates]).present?
+          if !course.new_record? && course.account.feature_enabled?(:course_paces) && course.changes.keys.intersect?(%w[start_at conclude_at restrict_enrollments_to_course_dates])
             course.course_paces.find_each(&:create_publish_progress)
           end
 
@@ -219,7 +225,7 @@ module SIS
               templated_course.name = course.name if !templated_course.stuck_sis_fields.include?(:name) && !course_name_stuck
               templated_course.course_code = course.course_code if !templated_course.stuck_sis_fields.include?(:course_code) && !course_course_code_stuck
               templated_course.enrollment_term = course.enrollment_term if !templated_course.stuck_sis_fields.include?(:enrollment_term_id) && !course_enrollment_term_id_stuck
-              if (templated_course.stuck_sis_fields & %i[start_at conclude_at restrict_enrollments_to_course_dates]).empty? && !course_dates_stuck
+              if !templated_course.stuck_sis_fields.intersect?(%i[start_at conclude_at restrict_enrollments_to_course_dates]) && !course_dates_stuck
                 templated_course.start_at = course.start_at
                 templated_course.conclude_at = course.conclude_at
                 templated_course.restrict_enrollments_to_course_dates = course.restrict_enrollments_to_course_dates

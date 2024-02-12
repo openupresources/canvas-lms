@@ -20,7 +20,6 @@ import {AnonymousUser} from './AnonymousUser'
 import {Discussion} from './Discussion'
 import {Course} from './Course'
 import {DiscussionEntry} from './DiscussionEntry'
-import {DiscussionEntryDraft} from './DiscussionEntryDraft'
 import gql from 'graphql-tag'
 import {PageInfo} from './PageInfo'
 import {User} from './User'
@@ -83,14 +82,6 @@ export const DISCUSSION_QUERY = gql`
             ...PageInfo
           }
         }
-        discussionEntryDraftsConnection {
-          nodes {
-            ...DiscussionEntryDraft
-          }
-          pageInfo {
-            ...PageInfo
-          }
-        }
         entriesTotalPages(
           perPage: $perPage
           rootEntries: $rootEntries
@@ -114,7 +105,6 @@ export const DISCUSSION_QUERY = gql`
   ${AnonymousUser.fragment}
   ${Discussion.fragment}
   ${DiscussionEntry.fragment}
-  ${DiscussionEntryDraft.fragment}
   ${PageInfo.fragment}
   ${GroupSet.fragment}
   ${Group.fragment}
@@ -218,6 +208,38 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
   ${AnonymousUser.fragment}
   ${DiscussionEntry.fragment}
   ${PageInfo.fragment}
+`
+
+export const DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY = gql`
+  query GetDiscussionEntryAllRootEntriesQuery(
+    $discussionEntryID: ID!
+    $courseID: String
+    $rolePillTypes: [String!] = ["TaEnrollment", "TeacherEnrollment", "DesignerEnrollment"]
+  ) {
+    legacyNode(_id: $discussionEntryID, type: DiscussionEntry) {
+      ... on DiscussionEntry {
+        id
+        _id
+        allRootEntries {
+          ...DiscussionEntry
+          editor(courseId: $courseID, roleTypes: $rolePillTypes) {
+            ...User
+            courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
+          }
+          author(courseId: $courseID, roleTypes: $rolePillTypes) {
+            ...User
+            courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
+          }
+          anonymousAuthor {
+            ...AnonymousUser
+          }
+        }
+      }
+    }
+  }
+  ${User.fragment}
+  ${AnonymousUser.fragment}
+  ${DiscussionEntry.fragment}
 `
 
 export const COURSE_USER_QUERY = gql`

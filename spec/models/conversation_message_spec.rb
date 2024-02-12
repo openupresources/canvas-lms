@@ -63,22 +63,22 @@ describe ConversationMessage do
 
     it "creates appropriate notifications on new message", priority: "1" do
       message = add_message
-      expect(message.messages_sent).to be_include("Conversation Message")
-      expect(message.messages_sent).not_to be_include("Added To Conversation")
+      expect(message.messages_sent).to include("Conversation Message")
+      expect(message.messages_sent).not_to include("Added To Conversation")
     end
 
     it "creates appropriate notifications on added participants" do
       event = add_last_student
-      expect(event.messages_sent).not_to be_include("Conversation Message")
-      expect(event.messages_sent).to be_include("Added To Conversation")
+      expect(event.messages_sent).not_to include("Conversation Message")
+      expect(event.messages_sent).to include("Added To Conversation")
     end
 
     it "does not notify the author" do
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to be_include(@teacher.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to include(@teacher.id)
 
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to be_include(@teacher.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to include(@teacher.id)
     end
 
     it "does not notify unsubscribed participants" do
@@ -87,12 +87,12 @@ describe ConversationMessage do
       student_view.save
 
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to be_include(@first_student.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to include(@first_student.id)
     end
 
     it "notifies subscribed participants on new message" do
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).to be_include(@first_student.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).to include(@first_student.id)
     end
 
     it "limits notifications to message recipients, still excluding the author" do
@@ -107,12 +107,12 @@ describe ConversationMessage do
 
     it "notifies new participants" do
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).to be_include(@last_student.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).to include(@last_student.id)
     end
 
     it "does not notify existing participants on added participant" do
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to be_include(@first_student.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to include(@first_student.id)
     end
 
     it "adds a new message when a user replies to a notification" do
@@ -120,7 +120,8 @@ describe ConversationMessage do
       message = conversation_message.messages_sent["Conversation Message"].first
 
       expect(message.context).to eq conversation_message
-      message.context.reply_from(user: message.user, purpose: "general",
+      message.context.reply_from(user: message.user,
+                                 purpose: "general",
                                  subject: message.subject,
                                  text: "Reply to notification")
       # The initial message, the one the sent the notification,
@@ -131,17 +132,43 @@ describe ConversationMessage do
   end
 
   context "generate_user_note" do
-    it "adds a user note under nominal circumstances" do
-      Account.default.update_attribute :enable_user_notes, true
-      course_with_teacher(active_all: true)
-      student = student_in_course(active_all: true).user
-      conversation = @teacher.initiate_conversation([student])
-      conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
-      expect(student.user_notes.size).to be(1)
-      note = student.user_notes.first
-      expect(note.creator).to eql(@teacher)
-      expect(note.title).to eql("Private message")
-      expect(note.note).to eql("reprimanded!")
+    context "when the deprecate_faculty_journal flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "adds a user note under nominal circumstances" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student.user_notes.size).to be(1)
+        note = student.user_notes.first
+        expect(note.creator).to eql(@teacher)
+        expect(note.title).to eql("Private message")
+        expect(note.note).to eql("reprimanded!")
+      end
+
+      it "allows user notes on more than one recipient" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student1 = student_in_course(active_all: true).user
+        student2 = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student1, student2])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student1.user_notes.size).to be(1)
+        expect(student2.user_notes.size).to be(1)
+      end
+    end
+
+    context "when the deprecate_faculty_journal flag is enabled" do
+      it "does not add a user note under nominal circumstances" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student.user_notes.size).to be(0)
+      end
     end
 
     it "fails if notes are disabled on the account" do
@@ -151,17 +178,6 @@ describe ConversationMessage do
       conversation = @teacher.initiate_conversation([student])
       conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
       expect(student.user_notes.size).to be(0)
-    end
-
-    it "allows user notes on more than one recipient" do
-      Account.default.update_attribute :enable_user_notes, true
-      course_with_teacher(active_all: true)
-      student1 = student_in_course(active_all: true).user
-      student2 = student_in_course(active_all: true).user
-      conversation = @teacher.initiate_conversation([student1, student2])
-      conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
-      expect(student1.user_notes.size).to be(1)
-      expect(student2.user_notes.size).to be(1)
     end
   end
 
@@ -189,7 +205,7 @@ describe ConversationMessage do
       @submission = @assignment.submit_homework(@user, body: "some message")
       @submission.add_comment(author: @user, comment: "hello")
 
-      expect(StreamItem.all.select { |i| i.asset_string.include?("conversation_") }).to be_empty
+      expect(StreamItem.select { |i| i.asset_string.include?("conversation_") }).to be_empty
     end
 
     it "does not create additional stream_items for additional messages in the same conversation" do
@@ -240,30 +256,34 @@ describe ConversationMessage do
       end
     end
 
-    it "user_note uses the recipients shard" do
-      conversation = nil
-      acc = nil
-      @shard1.activate do
-        acc = Account.default
-        acc.enable_user_notes = true
-        acc.save!
-        course_with_teacher(active_all: true)
-      end
-      a = @teacher.shard.activate do
-        attachment_model(context: @teacher, folder: @teacher.conversation_attachments_folder)
-      end
-      m = nil
-      @shard2.activate do
-        student_in_course(active_all: true)
-        m = @teacher.initiate_conversation([@student]).add_message("test", attachment_ids: [a.id])
-        conversation = m.conversation
-      end
-      @shard1.activate do
-        allow(Account).to receive(:default) { acc }
-        conversation_participant = conversation.conversation_participants.where(user_id: @teacher.id).first
-        conversation_participant.add_message("reprimanded!", generate_user_note: true, root_account_id: acc)
-        conversation_participant.reload
-        expect(@student.user_notes.last.root_account_id).to eq(Shard.relative_id_for(acc.id, acc.shard, @student.shard))
+    context "when the deprecate_faculty_journal flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "user_note uses the recipients shard" do
+        conversation = nil
+        acc = nil
+        @shard1.activate do
+          acc = Account.default
+          acc.enable_user_notes = true
+          acc.save!
+          course_with_teacher(active_all: true)
+        end
+        a = @teacher.shard.activate do
+          attachment_model(context: @teacher, folder: @teacher.conversation_attachments_folder)
+        end
+        m = nil
+        @shard2.activate do
+          student_in_course(active_all: true)
+          m = @teacher.initiate_conversation([@student]).add_message("test", attachment_ids: [a.id])
+          conversation = m.conversation
+        end
+        @shard1.activate do
+          allow(Account).to receive(:default) { acc }
+          conversation_participant = conversation.conversation_participants.where(user_id: @teacher.id).first
+          conversation_participant.add_message("reprimanded!", generate_user_note: true, root_account_id: acc)
+          conversation_participant.reload
+          expect(@student.user_notes.last.root_account_id).to eq(Shard.relative_id_for(acc.id, acc.shard, @student.shard))
+        end
       end
     end
 
@@ -472,8 +492,10 @@ describe ConversationMessage do
         my_section.save!
         @course.save!
 
-        @course.enroll_student(@user, allow_multiple_enrollments: true,
-                                      enrollment_state: "active", section: my_section)
+        @course.enroll_student(@user,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
 
         email_reply = @last_message.reply_from({
                                                  purpose: "general",
@@ -495,11 +517,15 @@ describe ConversationMessage do
 
         my_section = @course.course_sections.create!(name: "test section")
 
-        @course.enroll_student(@student, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: my_section)
+        @course.enroll_student(@student,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
 
-        @course.enroll_teacher(@teacher, allow_multiple_enrollments: true,
-                                         enrollment_state: "active", section: my_section)
+        @course.enroll_teacher(@teacher,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
 
         # test the OR case by concluding the section
         my_section.start_at = 5.days.ago

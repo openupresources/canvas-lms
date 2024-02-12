@@ -33,7 +33,7 @@ describe WikiPage do
     expect(p.messages_sent).not_to be_empty
     expect(p.messages_sent["Updated Wiki Page"]).not_to be_nil
     expect(p.messages_sent["Updated Wiki Page"]).not_to be_empty
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to be_include(@user)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to include(@user)
   end
 
   it "sends page updated notifications to students if active" do
@@ -45,7 +45,7 @@ describe WikiPage do
     p.notify_of_update = true
     p.save!
     p.update(body: "Awgawg")
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to be_include(@student)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to include(@student)
   end
 
   it "does not send page updated notifications to students if not active" do
@@ -58,7 +58,7 @@ describe WikiPage do
     p.notify_of_update = true
     p.save!
     p.update(body: "Awgawg")
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to_not be_include(@student)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to_not include(@student)
   end
 
   describe "duplicate manages titles properly" do
@@ -112,7 +112,7 @@ describe WikiPage do
     course_with_teacher(active_all: true)
 
     new_front_page = @course.wiki_pages.create!(title: "asdf")
-    expect(new_front_page.set_as_front_page!).to eq true
+    expect(new_front_page.set_as_front_page!).to be true
 
     @course.wiki.reload
     expect(@course.wiki.front_page).to eq new_front_page
@@ -155,15 +155,16 @@ describe WikiPage do
     expect(page.url).to eq "ae-very-sspecial-namae-1-slash-4"
   end
 
-  it "makes the title/url unique" do
+  it "makes the url unique" do
     course_with_teacher(active_all: true)
     @course.wiki_pages.create(title: "Asdf")
     p2 = @course.wiki_pages.create(title: "Asdf")
-    expect(p2.title).to eql("Asdf-2")
+    expect(p2.title).to eql("Asdf")
     expect(p2.url).to eql("asdf-2")
   end
 
-  it "makes the title unique and truncate to proper length" do
+  it "makes the title unique and truncate to proper length when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
     course_with_teacher(active_all: true)
     p1 = @course.wiki_pages.create!(title: "a" * WikiPage::TITLE_LENGTH)
     p2 = @course.wiki_pages.create!(title: p1.title)
@@ -174,13 +175,34 @@ describe WikiPage do
     expect(p3.title.end_with?("-3")).to be_truthy
   end
 
-  it "won't allow you to create a duplicate title that ends in -<number>" do
+  it "won't allow you to create a duplicate title that ends in -<number> when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
     course_with_teacher(active_all: true)
     @course.wiki_pages.create!(title: "MAT-1104")
     expect { @course.wiki_pages.create!(title: "MAT-1104") }.to raise_error(ActiveRecord::RecordInvalid)
   end
 
-  it "lets you reuse the title/url of a deleted page" do
+  it "allows users to reuse titles if permanent_page_links is enabled" do
+    Account.site_admin.enable_feature! :permanent_page_links
+    course_factory(active_all: true)
+    title = "Doppelgänger"
+    p1 = @course.wiki_pages.create!(title:)
+    p2 = @course.wiki_pages.create!(title:)
+    expect(p1.title).to eq(title)
+    expect(p2.title).to eq(title)
+  end
+
+  it "creates a unique url if title is taken by an existing lookup" do
+    course_factory(active_all: true)
+    p1 = @course.wiki_pages.create!(title: "bananas")
+    p1.wiki_page_lookups.create!(slug: "apples")
+    p2 = @course.wiki_pages.create!(title: "apples")
+    expect(p2.title).to eq("apples")
+    expect(p2.url).to eq("apples-2")
+  end
+
+  it "lets you reuse the title/url of a deleted page when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
     course_with_teacher(active_all: true)
     p1 = @course.wiki_pages.create(title: "Asdf")
     p1.workflow_state = "deleted"
@@ -202,6 +224,30 @@ describe WikiPage do
     expect(p1.url).to eql("asdf-2")
   end
 
+  it "lets you reuse the title but not the url of a deleted page when PPL is on" do
+    Account.site_admin.enable_feature!(:permanent_page_links)
+
+    course_with_teacher(active_all: true)
+    p1 = @course.wiki_pages.create(title: "Asdf")
+    p1.workflow_state = "deleted"
+    p1.save
+
+    # doesn't delete the lookups
+    expect(p1.current_lookup).to_not be_nil
+
+    # therefore we can't reuse the url
+    p2 = @course.wiki_pages.create(title: "Asdf")
+    p2.reload
+    expect(p2.title).to eql("Asdf")
+    expect(p2.url).to eql("asdf-2")
+
+    # p1's url does not mutate upon reinstating
+    p1.workflow_state = "active"
+    expect(p1.save).to be_truthy
+    expect(p1.title).to eql("Asdf")
+    expect(p1.url).to eql("asdf")
+  end
+
   it "sets root_account_id on create" do
     course_with_teacher(active_all: true)
     wp = @course.wiki_pages.create!(title: "Asdf")
@@ -218,21 +264,21 @@ describe WikiPage do
 
     it "does not allow students to read" do
       student_in_course(course: @course, active_all: true)
-      expect(@page.can_read_page?(@student)).to eq false
+      expect(@page.can_read_page?(@student)).to be false
     end
 
     it "allows teachers to read" do
-      expect(@page.can_read_page?(@teacher)).to eq true
+      expect(@page.can_read_page?(@teacher)).to be true
     end
 
     context "allows account admins to read" do
       %i[manage_wiki_create manage_wiki_update manage_wiki_delete].each do |perm|
         it "with #{perm} rights" do
           account = @course.root_account
-          role = custom_account_role("CustomAccountUser", account: account)
+          role = custom_account_role("CustomAccountUser", account:)
           RoleOverride.manage_role_override(account, role, perm, override: true)
-          admin = account_admin_user(account: account, role: role, active_all: true)
-          expect(@page.can_read_page?(admin)).to eq true
+          admin = account_admin_user(account:, role:, active_all: true)
+          expect(@page.can_read_page?(admin)).to be true
         end
       end
     end
@@ -417,7 +463,7 @@ describe WikiPage do
       let(:page) do
         course.wiki_pages.create(
           title: "A Page",
-          editing_roles: editing_roles,
+          editing_roles:,
           workflow_state: "published"
         )
       end
@@ -426,7 +472,7 @@ describe WikiPage do
         let(:editing_roles) { "teachers" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
         end
       end
 
@@ -434,7 +480,7 @@ describe WikiPage do
         let(:editing_roles) { "teachers,students" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
         end
       end
 
@@ -442,7 +488,7 @@ describe WikiPage do
         let(:editing_roles) { "teachers,students,public" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
         end
       end
     end
@@ -469,7 +515,7 @@ describe WikiPage do
       context "when the current user is a teacher in the group's course" do
         let(:current_user) { teacher }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "when the current user is a concluded teacher" do
@@ -477,7 +523,7 @@ describe WikiPage do
 
         let(:current_user) { teacher }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
       end
     end
   end
@@ -954,15 +1000,15 @@ describe WikiPage do
         ---
         id: 787500
         wiki_id: 15160
-        title: \"\\U0001F4D8\\U0001F4D5Ss10.20 | Social Studies: Warm Up - Las Cruces, New Mexico\"
-        body: \"<p style=\\\"text-align: center;\\\"><a id=\"media_comment_m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P\" class=\"instructure_inline_media_comment audio_comment\" data-media_comment_type=\"audio\" data-alt=\"\" href=\"/media_objects/m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P\"/></p>\\r\
-        <p style=\\\"text-align: center;\\\"> </p>\\r\
+        title: "\\U0001F4D8\\U0001F4D5Ss10.20 | Social Studies: Warm Up - Las Cruces, New Mexico"
+        body: "<p style=\\"text-align: center;\\"><a id="media_comment_m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P" class="instructure_inline_media_comment audio_comment" data-media_comment_type="audio" data-alt="" href="/media_objects/m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P"/></p>\\r\
+        <p style=\\"text-align: center;\\"> </p>\\r\
         <p
-          style=\\\"text-align: center;\\\"><span style=\\\"font-size: 18pt;\\\">Geography is the
+          style=\\"text-align: center;\\"><span style=\\"font-size: 18pt;\\">Geography is the
           study of Earth and its land, water, air and people. We are concentrating on learning
           about the physical features, climate and natural resources that affect an area and
           its people.</span></p>\\r\
-          center;\\\"> </p>\"
+          center;\\"> </p>"
         user_id:#{" "}
         created_at: !ruby/object:ActiveSupport::TimeWithZone
           utc: &1 2020-11-05 20:24:57.390301492 Z
@@ -994,26 +1040,118 @@ describe WikiPage do
         id: 19903
         wiki_id: 513
         title: Jason otitis media treatment
-        body: \"<ul>\\r\\n
-                        <li\n  class=\\\"distractors\\\"><a class=\\\"radio_link\\\" href=\\\"#\\\">Yes</a></li>\\r\\n
-                        <li class=\\\"distractors\\\"><a\n  class=\\\"radio_link answer\\\" href=\\\"#\\\">No</a></li>\\r\\n
+        body: "<ul>\\r\\n
+                        <li\n  class=\\"distractors\\"><a class=\\"radio_link\\" href=\\"#\\">Yes</a></li>\\r\\n
+                        <li class=\\"distractors\\"><a\n  class=\\"radio_link answer\\" href=\\"#\\">No</a></li>\\r\\n
                       </ul>\\r\\n</div>\\r\\n
-                      <div class=\\\"col-md-4\\\">
-                        <img\n  src=\\\"/courses/348/files/102814/preview\\\" alt=\\\"Antibiotics\\\" width=\\\"100%\\\"\n  height=\\\"auto\\\" data-api-endpoint=\\\"https://dev.iheed.org/api/v1/courses/328/files/41094\\\"\n  data-api-returntype=\\\"File\\\">
+                      <div class=\\"col-md-4\\">
+                        <img\n  src=\\"/courses/348/files/102814/preview\\" alt=\\"Antibiotics\\" width=\\"100%\\"\n  height=\\"auto\\" data-api-endpoint=\\"https://dev.iheed.org/api/v1/courses/328/files/41094\\"\n  data-api-returntype=\\"File\\">
                       </div>\\r\\n
                     </div>\\r\\n
-                    <div class=\\\"feedback\\\">\\r\\n
+                    <div class=\\"feedback\\">\\r\\n
                       <p>Jason\n  does not need antibiotics at this time. He is not systemically unwell, he has no\n  high-risk complications and there is no discharge from his ear.</p>\\r\\n
                     </div>\\r\\n
-                    <div\n  class=\\\"feedback correct\\\">\\r\\n<p>Correct.</p>\\r\\n</div>\\r\\n
-                    <div class=\\\"feedback\n  incorrect\\\">\\r\\n<p>Incorrect.</p>\\r\\n</div>\\r\\n
+                    <div\n  class=\\"feedback correct\\">\\r\\n<p>Correct.</p>\\r\\n</div>\\r\\n
+                    <div class=\\"feedback\n  incorrect\\">\\r\\n<p>Incorrect.</p>\\r\\n</div>\\r\\n
                   </div>\\r\\n
-                </div>\\r\\n<div class=\\\"content-box\\\">\\r\\n<div\n  class=\\\"grid-row spacer center-xs\\\">\\r\\n
-                <div class=\\\"col-md-4 text-left\\\">\\r\\n<p\n  class=\\\"text-info\\\">Listen to the audio to hear the advice you give Laura about\n  what to do next.</p>\\r\\n</div>\\r\\n<div class=\\\"col-md-4\\\">
-                <a id=\"media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\" class=\"instructure_inline_media_comment audio_comment\" href=\"/media_objects/m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\"/>\"
+                </div>\\r\\n<div class=\\"content-box\\">\\r\\n<div\n  class=\\"grid-row spacer center-xs\\">\\r\\n
+                <div class=\\"col-md-4 text-left\\">\\r\\n<p\n  class=\\"text-info\\">Listen to the audio to hear the advice you give Laura about\n  what to do next.</p>\\r\\n</div>\\r\\n<div class=\\"col-md-4\\">
+                <a id="media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx" class="instructure_inline_media_comment audio_comment" href="/media_objects/m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx"/>"
       YAML
       good_yaml = WikiPage.reinterpret_version_yaml(bad_yaml)
       expect(good_yaml).to include("<a id=\\\"media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\\\"")
+    end
+  end
+
+  describe "url" do
+    before :once do
+      course_factory(active_all: true)
+      @page = @course.wiki_pages.create!(title: "original-name")
+      @lookup = @page.wiki_page_lookups.create!(slug: "new-name")
+      @page.current_lookup = @lookup
+      @page.save!
+    end
+
+    context "when permanent_page_links flag is disabled" do
+      before :once do
+        Account.site_admin.disable_feature!(:permanent_page_links)
+      end
+
+      it "returns the page's url attribute" do
+        expect(@page.url).to eq("original-name")
+      end
+    end
+
+    context "when permanent_page_links flag is enabled" do
+      before :once do
+        Account.site_admin.enable_feature!(:permanent_page_links)
+      end
+
+      it "returns the page's current lookup's slug" do
+        expect(@page.url).to eq("new-name")
+      end
+
+      it "returns the page's url attribute if current lookup is nil" do
+        @page.current_lookup = nil
+        @page.save!
+        expect(@page.url).to eq("original-name")
+      end
+    end
+  end
+
+  describe "#generate_embeddings" do
+    before do
+      skip "not available" unless ActiveRecord::Base.connection.table_exists?("wiki_page_embeddings")
+
+      expect(OpenAi).to receive(:smart_search_available?).at_least(:once).and_return(true)
+      allow(OpenAi).to receive(:generate_embedding).and_return([[1] * 1536])
+    end
+
+    before :once do
+      course_factory
+    end
+
+    it "generates an embedding when creating a page" do
+      wiki_page_model(title: "test", body: "foo")
+      run_jobs
+      expect(@page.reload.wiki_page_embeddings.count).to eq 1
+    end
+
+    it "replaces an embedding if it already exists" do
+      wiki_page_model(title: "test", body: "foo")
+      run_jobs
+      @page.update body: "bar"
+      run_jobs
+      expect(@page.reload.wiki_page_embeddings.count).to eq 1
+    end
+
+    it "strips HTML from the body before indexing" do
+      wiki_page_model(title: "test", body: "<ul><li>foo</li></ul>")
+      expect(OpenAi).to receive(:generate_embedding).with("* foo")
+      run_jobs
+    end
+
+    it "deletes embeddings when a page is deleted (and regenerates them when undeleted)" do
+      wiki_page_model(title: "test", body: "foo")
+      run_jobs
+      @page.destroy
+      expect(@page.reload.wiki_page_embeddings.count).to eq 0
+
+      @page.restore
+      run_jobs
+      expect(@page.reload.wiki_page_embeddings.count).to eq 1
+    end
+
+    it "generates multiple embeddings for a page with long content" do
+      wiki_page_model(title: "test", body: "foo" * 2000)
+      run_jobs
+      expect(@page.reload.wiki_page_embeddings.count).to eq 2
+    end
+
+    it "generates multiple embeddings and doesn't split words" do
+      wiki_page_model(title: "test", body: "supercalifragilisticexpialidocious " * 228)
+      run_jobs
+      expect(@page.reload.wiki_page_embeddings.count).to eq 3
     end
   end
 end

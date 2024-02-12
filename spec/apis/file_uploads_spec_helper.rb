@@ -27,8 +27,7 @@ shared_examples_for "file uploads api" do
   # an array of [k,v] params so that the order of the params can be
   # defined
   def send_multipart(url, post_params = {}, http_headers = {}, method = :post)
-    mp = Multipart::Post.new
-    query, headers = mp.prepare_query(post_params)
+    query, headers = LegacyMultipart::Post.prepare_query(post_params)
 
     # A bug in the testing adapter in Rails 3-2-stable doesn't corretly handle
     # translating this header to the Rack/CGI compatible version:
@@ -52,10 +51,10 @@ shared_examples_for "file uploads api" do
       "filename" => attachment.filename,
       "upload_status" => "success",
       "size" => attachment.size,
-      "unlock_at" => attachment.unlock_at ? attachment.unlock_at.as_json : nil,
+      "unlock_at" => attachment.unlock_at&.as_json,
       "locked" => !!attachment.locked,
       "hidden" => !!attachment.hidden,
-      "lock_at" => attachment.lock_at ? attachment.lock_at.as_json : nil,
+      "lock_at" => attachment.lock_at&.as_json,
       "locked_for_user" => false,
       "hidden_for_user" => false,
       "created_at" => attachment.created_at.as_json,
@@ -68,7 +67,7 @@ shared_examples_for "file uploads api" do
     }
 
     if options[:include]&.include?("enhanced_preview_url") && (attachment.context.is_a?(Course) || attachment.context.is_a?(User) || attachment.context.is_a?(Group))
-      json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0, verifier: attachment.uuid)
+      json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0)
     end
 
     if attachment.supports_visibility?
@@ -139,7 +138,7 @@ shared_examples_for "file uploads api" do
     }
 
     if attachment.context.is_a?(User) || attachment.context.is_a?(Course) || attachment.context.is_a?(Group)
-      expected_json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0, verifier: attachment.uuid)
+      expected_json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0)
     end
 
     if attachment.supports_visibility?
@@ -265,7 +264,7 @@ shared_examples_for "file uploads api" do
     local_storage!
     # step 1, preflight
     expect(CanvasHttp).to receive(:get).with(url).and_yield(FakeHttpResponse.new(404))
-    json = preflight({ name: filename, size: 20, url: url })
+    json = preflight({ name: filename, size: 20, url: })
     progress_url = json["progress"]["url"]
     progress_id = json["progress"]["id"]
     attachment = Attachment.order(:id).last
@@ -286,7 +285,7 @@ shared_examples_for "file uploads api" do
     local_storage!
     # step 1, preflight
     expect(CanvasHttp).to receive(:get).with(url).and_raise(Timeout::Error)
-    json = preflight({ name: filename, size: 20, url: url })
+    json = preflight({ name: filename, size: 20, url: })
     progress_url = json["progress"]["url"]
     progress_id = json["progress"]["id"]
     attachment = Attachment.order(:id).last
@@ -307,7 +306,7 @@ shared_examples_for "file uploads api" do
     local_storage!
     # step 1, preflight
     expect(CanvasHttp).to receive(:get).with(url).and_raise(CanvasHttp::TooManyRedirectsError)
-    json = preflight({ name: filename, size: 20, url: url })
+    json = preflight({ name: filename, size: 20, url: })
     progress_url = json["progress"]["url"]
     progress_id = json["progress"]["id"]
     attachment = Attachment.order(:id).last
@@ -345,7 +344,7 @@ shared_examples_for "file uploads api with folders" do
 
   it "allows specifying a parent folder by id" do
     root = Folder.root_folders(context).first
-    sub = root.sub_folders.create!(name: "folder1", context: context)
+    sub = root.sub_folders.create!(name: "folder1", context:)
     preflight({ name: "with_path.txt", parent_folder_id: sub.id.to_param })
     attachment = Attachment.order(:id).last
     expect(attachment.folder_id).to eq sub.id
@@ -353,7 +352,7 @@ shared_examples_for "file uploads api with folders" do
 
   it "rejects for deleted parent folder id" do
     root = Folder.root_folders(context).first
-    sub = root.sub_folders.create!(name: "folder1", context: context, workflow_state: "deleted")
+    sub = root.sub_folders.create!(name: "folder1", context:, workflow_state: "deleted")
     json = preflight({ name: "test1.txt", parent_folder_id: sub.id.to_param }, expected_status: 404)
     expect(json["message"]).to eq "The specified resource does not exist."
   end
@@ -375,7 +374,7 @@ shared_examples_for "file uploads api with folders" do
   it "overwrites duplicate files by default" do
     local_storage!
     @folder = Folder.assert_path("test", context)
-    a1 = Attachment.create!(folder: @folder, context: context, filename: "test.txt", uploaded_data: StringIO.new("first"))
+    a1 = Attachment.create!(folder: @folder, context:, filename: "test.txt", uploaded_data: StringIO.new("first"))
     json = preflight({ name: "test.txt", folder: "test" })
 
     tmpfile = Tempfile.new(["test", ".txt"])
@@ -396,7 +395,7 @@ shared_examples_for "file uploads api with folders" do
   it "overwrites duplicate files by default for URL uploads" do
     local_storage!
     @folder = Folder.assert_path("test", context)
-    a1 = Attachment.create!(folder: @folder, context: context, filename: "test.txt", uploaded_data: StringIO.new("first"))
+    a1 = Attachment.create!(folder: @folder, context:, filename: "test.txt", uploaded_data: StringIO.new("first"))
     preflight({ name: "test.txt", folder: "test", url: "http://www.example.com/test" })
     attachment = Attachment.order(:id).last
     expect(CanvasHttp).to receive(:get).with("http://www.example.com/test").and_yield(FakeHttpResponse.new(200, "second"))
@@ -412,7 +411,7 @@ shared_examples_for "file uploads api with folders" do
   it "allows renaming instead of overwriting duplicate files (local storage)" do
     local_storage!
     @folder = Folder.assert_path("test", context)
-    a1 = Attachment.create!(folder: @folder, context: context, filename: "test.txt", uploaded_data: StringIO.new("first"))
+    a1 = Attachment.create!(folder: @folder, context:, filename: "test.txt", uploaded_data: StringIO.new("first"))
     json = preflight({ name: "test.txt", folder: "test", on_duplicate: "rename" })
 
     tmpfile = Tempfile.new(["test", ".txt"])
@@ -433,7 +432,7 @@ shared_examples_for "file uploads api with folders" do
   it "allows renaming instead of overwriting duplicate files for URL uploads" do
     local_storage!
     @folder = Folder.assert_path("test", context)
-    a1 = Attachment.create!(folder: @folder, context: context, filename: "test.txt", uploaded_data: StringIO.new("first"))
+    a1 = Attachment.create!(folder: @folder, context:, filename: "test.txt", uploaded_data: StringIO.new("first"))
     preflight({ name: "test.txt", folder: "test", on_duplicate: "rename", url: "http://www.example.com/test" })
     attachment = Attachment.order(:id).last
     expect(CanvasHttp).to receive(:get).with("http://www.example.com/test").and_yield(FakeHttpResponse.new(200, "second"))
@@ -448,7 +447,7 @@ shared_examples_for "file uploads api with folders" do
 
   it "allows renaming instead of overwriting duplicate files (s3 storage)" do
     @folder = Folder.assert_path("test", context)
-    a1 = Attachment.create!(folder: @folder, context: context, filename: "test.txt", uploaded_data: StringIO.new("first"))
+    a1 = Attachment.create!(folder: @folder, context:, filename: "test.txt", uploaded_data: StringIO.new("first"))
     s3_storage!
     json = preflight({ name: "test.txt", folder: "test", on_duplicate: "rename" })
 
@@ -527,7 +526,8 @@ shared_examples_for "file uploads api with quotas" do
     attachment.content_type = "text/plain"
     attachment.size = 6.megabytes
     attachment.save!
-    json = api_call(:get, "/api/v1/files/#{attachment.id}/create_success",
+    json = api_call(:get,
+                    "/api/v1/files/#{attachment.id}/create_success",
                     { id: attachment.id.to_s, controller: "files", action: "api_create_success", format: "json" },
                     { uuid: attachment.uuid },
                     {},

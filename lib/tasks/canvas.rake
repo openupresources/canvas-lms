@@ -7,9 +7,9 @@ $canvas_tasks_loaded ||= false
 unless $canvas_tasks_loaded
   $canvas_tasks_loaded = true
 
-  def log_time(name, &block)
+  def log_time(name, &)
     puts "--> Starting: '#{name}'"
-    time = Benchmark.realtime(&block)
+    time = Benchmark.realtime(&)
     puts "--> Finished: '#{name}' in #{time.round(2)}s"
     time
   end
@@ -39,9 +39,9 @@ unless $canvas_tasks_loaded
       write_brand_configs = ENV["COMPILE_ASSETS_BRAND_CONFIGS"] != "0"
       build_prod_js = ENV["RAILS_ENV"] == "production" || ENV["USE_OPTIMIZED_JS"] == "true" || ENV["USE_OPTIMIZED_JS"] == "True"
       # build dev bundles even in prod mode so you can debug with ?optimized_js=0
-      # query string (except for on jenkins where we set JS_BUILD_NO_UGLIFY anyway
+      # query string (except for on jenkins where we set SKIP_SOURCEMAPS anyway
       # so there's no need for an unminified fallback)
-      build_dev_js = ENV["JS_BUILD_NO_FALLBACK"] != "1" && (!build_prod_js || ENV["JS_BUILD_NO_UGLIFY"] != "1")
+      build_dev_js = ENV["JS_BUILD_NO_FALLBACK"] != "1" && (!build_prod_js || ENV["SKIP_SOURCEMAPS"] != "1")
 
       batches = Rake::TaskGraph.draw do
         task "brand_configs:write" => ["js:gulp_rev"] if write_brand_configs
@@ -107,8 +107,10 @@ unless $canvas_tasks_loaded
       missing_args = %i[auth_token url org project version].select { |k| args[k].blank? }
       raise "Arguments missing: #{missing_args}" unless missing_args.empty?
 
+      sentry_cli_path = (ENV["SENTRY_CLI_GLOBAL"] == "1") ? "sentry-cli" : "yarn run sentry-cli"
+
       puts "--> Uploading source maps to Sentry at #{args.url}"
-      system "SENTRY_AUTH_TOKEN=#{args.auth_token} SENTRY_URL=#{args.url} SENTRY_ORG=#{args.org} yarn run sentry-cli " \
+      system "SENTRY_AUTH_TOKEN=#{args.auth_token} SENTRY_URL=#{args.url} SENTRY_ORG=#{args.org} #{sentry_cli_path} " \
              "releases --project #{args.project} files #{args.version} upload-sourcemaps public/dist/ --ignore-file " \
              ".sentryignore --url-prefix '~/dist/'"
     end
@@ -196,10 +198,11 @@ unless $canvas_tasks_loaded
       task reset: [:environment, :load_config] do
         raise "Run with RAILS_ENV=test" unless Rails.env.test?
 
-        config = ActiveRecord::Base.configurations["test"]
-        queue = config["queue"]
+        config = ActiveRecord::Base.configurations.find_db_config("test")
+        queue = config.configuration_hash[:queue]
         ActiveRecord::Tasks::DatabaseTasks.drop(queue) if queue rescue nil
         ActiveRecord::Tasks::DatabaseTasks.drop(config) rescue nil
+        ActiveRecord::Base.connection_handler.clear_all_connections!
         Shard.default(reload: true) # make sure we know that sharding isn't set up yet
         CanvasCassandra::DatabaseBuilder.config_names.each do |cass_config|
           db = CanvasCassandra::DatabaseBuilder.from_config(cass_config)
@@ -209,27 +212,11 @@ unless $canvas_tasks_loaded
         end
         ActiveRecord::Tasks::DatabaseTasks.create(queue) if queue
         ActiveRecord::Tasks::DatabaseTasks.create(config)
-        ::ActiveRecord::Base.connection.schema_cache.clear!
-        ::ActiveRecord::Base.descendants.each(&:reset_column_information)
+        ActiveRecord::Base.connection.schema_cache.clear!
+        ActiveRecord::Base.descendants.each(&:reset_column_information)
         Rake::Task["db:migrate"].invoke
       end
     end
-  end
-
-  Switchman::Rake.filter_database_servers do |servers, block|
-    ENV["REGION"]&.split(",")&.each do |region|
-      method = :select!
-      if region[0] == "-"
-        method = :reject!
-        region = region[1..]
-      end
-      if region == "self"
-        servers.send(method, &:in_current_region?)
-      else
-        servers.send(method) { |server| server.in_region?(region) }
-      end
-    end
-    block.call(servers)
   end
 
   %w[db:pending_migrations db:skipped_migrations db:migrate:predeploy db:migrate:tagged].each do |task_name|

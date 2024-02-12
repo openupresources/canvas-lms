@@ -27,24 +27,23 @@
 // xsslint safeString.property question_text
 import regradeTemplate from '../jst/regrade.handlebars'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
+import {find, forEach, keys, difference} from 'lodash'
 import $ from 'jquery'
 import calcCmd from './calcCmd'
-import htmlEscape from 'html-escape'
+import htmlEscape, {raw} from '@instructure/html-escape'
 import numberHelper from '@canvas/i18n/numberHelper'
 import ready from '@instructure/ready'
-import pluralize from 'str-pluralize'
+import pluralize from '@canvas/util/stringPluralize'
 import Handlebars from '@canvas/handlebars-helpers'
 import DueDateOverrideView from '@canvas/due-dates'
 import Quiz from '@canvas/quizzes/backbone/models/Quiz'
 import DueDateList from '@canvas/due-dates/backbone/models/DueDateList'
 import QuizRegradeView from '../backbone/views/QuizRegradeView'
 import SectionList from '@canvas/sections/backbone/collections/SectionCollection'
-import MissingDateDialog from '@canvas/due-dates/backbone/views/MissingDateDialogView.coffee'
+import MissingDateDialog from '@canvas/due-dates/backbone/views/MissingDateDialogView'
 import MultipleChoiceToggle from './MultipleChoiceToggle'
 import EditorToggle from '@canvas/editor-toggle'
 import * as TextHelper from '@canvas/util/TextHelper'
-import INST from 'browser-sniffer' // safari sniffing for VO workarounds
 import QuizFormulaSolution from '../quiz_formula_solution'
 import addAriaDescription from './quiz_labels'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
@@ -53,12 +52,12 @@ import deparam from 'deparam'
 import SisValidationHelper from '@canvas/sis/SisValidationHelper'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* time_field, datetime_field */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors, errorBox */
+import '@canvas/datetime/jquery' /* time_field, datetime_field */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors, errorBox */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags, /\$\.underscore/ */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* .dim, confirmDelete, showIf */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData'
@@ -67,6 +66,8 @@ import 'jquery-scroll-to-visible/jquery.scrollTo'
 import 'jqueryui/sortable'
 import 'jqueryui/tabs'
 import AssignmentExternalTools from '@canvas/assignments/react/AssignmentExternalTools'
+import {underscoreString} from '@canvas/convert-case'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('quizzes_public')
 
@@ -747,10 +748,10 @@ export const quiz = (window.quiz = {
     $question.find('.blank_id_select').empty()
     if (question.question_type === 'missing_word_question') {
       var $text = $question.find('.question_text')
-      $text.html("<span class='text_before_answers'>" + $.raw(question.question_text) + '</span> ')
+      $text.html("<span class='text_before_answers'>" + raw(question.question_text) + '</span> ')
       $text.append($select)
       $text.append(
-        " <span class='text_after_answers'>" + $.raw(question.text_after_answers) + '</span>'
+        " <span class='text_after_answers'>" + raw(question.text_after_answers) + '</span>'
       )
     } else if (
       question.question_type === 'multiple_dropdowns_question' ||
@@ -2202,9 +2203,9 @@ ready(function () {
         name: quiz_title,
       })
 
-      if (_.keys(overrideErrs).length > 0) {
+      if (keys(overrideErrs).length > 0) {
         valid = false
-        _.each(overrideErrs, err => {
+        forEach(overrideErrs, err => {
           err.showError(err.element, err.message)
         })
       }
@@ -2923,7 +2924,7 @@ ready(function () {
       'true_false_question',
       'multiple_answers_question',
     ]
-    return _.find(regradeTypes, className => $el.hasClass(className))
+    return find(regradeTypes, className => $el.hasClass(className))
   }
 
   function disableRegrade(holder) {
@@ -2969,7 +2970,7 @@ ready(function () {
       const oldAnswers = REGRADE_DATA[questionID]
       const newAnswers = correctAnswerIDs($el)
 
-      return oldAnswers.length == newAnswers.length && !_.difference(oldAnswers, newAnswers).length
+      return oldAnswers.length == newAnswers.length && !difference(oldAnswers, newAnswers).length
     }
   }
 
@@ -3279,7 +3280,7 @@ ready(function () {
     }
 
     const newParams = {}
-    _.each(params, (val, key) => {
+    forEach(params, (val, key) => {
       newParams[key.replace('quiz_group[', 'quiz_groups[][')] = val
     })
 
@@ -3409,7 +3410,7 @@ ready(function () {
       const $bank = $findQuestionDialog.find('.bank.selected_side_tab')
       const bank = $bank.data('bank_data')
       let url = $findQuestionDialog.find('.question_bank_questions_url').attr('href')
-      url = $.replaceTags(url, 'question_bank_id', bank.id)
+      url = replaceTags(url, 'question_bank_id', bank.id)
       const page = ($findQuestionDialog.find('.page_link').data('page') || 0) + 1
       url += '&page=' + page
       $.ajaxJSON(
@@ -3942,7 +3943,7 @@ ready(function () {
           questionData.id
         quiz.updateDisplayQuestion($displayQuestion, questionData, true)
         // Trigger a custom 'saved' event for catching and responding to change
-        // after save process completed. Used in quizzes_bundle.coffee
+        // after save process completed. Used in quizzes_bundle.js
         $displayQuestion.trigger('saved')
         $('#unpublished_changes_message').slideDown()
         if (question && questionData && questionData.id) {
@@ -4075,6 +4076,13 @@ ready(function () {
   $('.quiz_group_form').formSubmit({
     object_name: 'quiz_group',
 
+    formatApiData(data) {
+      const newData = {}
+      forEach(data, (val, key) => {
+        newData[key.replace('quiz_group[', 'quiz_groups[][')] = val
+      })
+      return newData
+    },
     // rewrite the data so that it fits the jsonapi format
     processData(data) {
       const quizGroupQuestionPoints = numberHelper.parse(data['quiz_group[question_points]'])
@@ -4086,11 +4094,7 @@ ready(function () {
       } else {
         data['quiz_group[question_points]'] = quizGroupQuestionPoints
       }
-      const newData = {}
-      _.each(data, (val, key) => {
-        newData[key.replace('quiz_group[', 'quiz_groups[][')] = val
-      })
-      return newData
+      return data
     },
     beforeSubmit(formData) {
       const $form = $(this)
@@ -4123,7 +4127,7 @@ ready(function () {
       } else if ($bank.data('bank_data')) {
         const bank = $bank.data('bank_data')
         bank.bank_id = bank.id
-        bank.context_type_string = pluralize($.underscore(bank.context_type))
+        bank.context_type_string = pluralize(underscoreString(bank.context_type))
         $group.data('bank_question_count', bank.assessment_question_count)
         $group
           .next('.assessment_question_bank')
@@ -4256,7 +4260,7 @@ ready(function () {
       } else {
         moveWrapper.hide()
       }
-      moveSelect.html($.raw(options.join('')))
+      moveSelect.html(raw(options.join('')))
 
       // trigger building 'place' menu
       moveSelect.change(this.buildPlaceMenu.bind(this))
@@ -4287,7 +4291,7 @@ ready(function () {
           htmlEscape(I18n.t('at_the_bottom', '-- at the bottom --')) +
           '</option>'
       )
-      this.$form.find('#move_select_question').html($.raw(options.join('')))
+      this.$form.find('#move_select_question').html(raw(options.join('')))
     },
 
     itemsInGroup(group) {
@@ -4491,7 +4495,7 @@ ready(function () {
         }
         ui.placeholder.append(
           "<div class='question_placeholder' style='height: " +
-            $.raw(ui.helper.height() - 10) +
+            raw(ui.helper.height() - 10) +
             "px;'>&nbsp;</div>"
         )
       }
@@ -4716,7 +4720,7 @@ ready(function () {
     $('#calc_helper_method_description').text(calcCmd.functionDescription(method))
     const html =
       '<pre>' +
-      $.raw($.map(calcCmd.functionExamples(method), htmlEscape).join('</pre><pre>')) +
+      raw($.map(calcCmd.functionExamples(method), htmlEscape).join('</pre><pre>')) +
       '</pre>'
     $('#calc_helper_method_examples').html(html)
   })

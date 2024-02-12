@@ -19,7 +19,7 @@
 
 require_relative "../common"
 require_relative "../helpers/announcements_common"
-require_relative "./pages/announcement_new_edit_page"
+require_relative "pages/announcement_new_edit_page"
 
 describe "announcements" do
   include_context "in-process server selenium tests"
@@ -34,6 +34,20 @@ describe "announcements" do
     before do
       user_session(@teacher)
       stub_rcs_config
+    end
+
+    it "shows the unpublished course warning when course is unpublished" do
+      @course.workflow_state = "unpublished"
+      @course.save!
+      AnnouncementNewEdit.visit_new(@course)
+      expect(fj("div:contains('Notifications will not be sent retroactively for announcements created before publishing your course or before the course start date. You may consider using the Delay Posting option and set to publish on a future date.')")).to be_present
+    end
+
+    # ignore RCE error since it has nothing to do with the test
+    it "shows the no notifications on edit info alert when editing an announcement", :ignore_js_errors do
+      @announcement = @course.announcements.create!(user: @teacher, message: "hello my favorite section!")
+      get "/courses/#{@course.id}/discussion_topics/#{@announcement.id}/edit"
+      expect(fj("div:contains('Users do not receive updated notifications when editing an announcement. If you wish to have users notified of this update via their notification settings, you will need to create a new announcement.')")).to be_present
     end
 
     it "allows saving of section announcement", priority: "1" do
@@ -133,7 +147,7 @@ describe "announcements" do
       end
 
       it "adds an attachment to a graded topic", priority: "1" do
-        what_to_create == DiscussionTopic ? @course.discussion_topics.create!(title: "graded attachment topic", user: @user) : announcement_model(title: "graded attachment topic", user: @user)
+        (what_to_create == DiscussionTopic) ? @course.discussion_topics.create!(title: "graded attachment topic", user: @user) : announcement_model(title: "graded attachment topic", user: @user)
         if what_to_create == DiscussionTopic
           what_to_create.last.update(assignment: @course.assignments.create!(name: "graded topic assignment"))
         end
@@ -146,7 +160,7 @@ describe "announcements" do
 
       it "edits a topic", priority: "1" do
         edit_name = "edited discussion name"
-        topic = what_to_create == DiscussionTopic ? @course.discussion_topics.create!(title: @topic_title, user: @user) : announcement_model(title: @topic_title, user: @user)
+        topic = (what_to_create == DiscussionTopic) ? @course.discussion_topics.create!(title: @topic_title, user: @user) : announcement_model(title: @topic_title, user: @user)
         get "#{url}/#{topic.id}"
         expect_new_page_load { f(".edit-btn").click }
 
@@ -169,12 +183,13 @@ describe "announcements" do
       expect(ann.title).to eq("First Announcement")
       # the delayed post at should be far enough in the future to make this
       # not flaky
-      expect(ann.delayed_post_at > Time.zone.now).to eq true
+      expect(ann.delayed_post_at > Time.zone.now).to be true
       expect(ann.attachment).to be_locked
     end
 
     it "displayed delayed post note on page of delayed announcement" do
-      a = @course.announcements.create!(title: "Announcement", message: "foobers",
+      a = @course.announcements.create!(title: "Announcement",
+                                        message: "foobers",
                                         delayed_post_at: 1.week.from_now)
       get AnnouncementNewEdit.full_individual_announcement_url(@course, a)
       expect(f(".discussion-fyi")).to include_text(
@@ -204,6 +219,16 @@ describe "announcements" do
 
       topic.reload
       expect(topic.delayed_post_at).to be_nil
+    end
+
+    it "changes the save button to publish when delayed_post_at is removed", :ignore_js_errors, priority: "1" do
+      topic = @course.announcements.create!(title: @topic_title, user: @user, delayed_post_at: 10.days.from_now, message: "message")
+
+      get "/courses/#{@course.id}/discussion_topics/#{topic.id}/edit"
+      expect(f(".submit_button").text).to eq("Save")
+
+      f('input[type=checkbox][name="delay_posting"]').click
+      expect(f(".submit_button").text).to eq("Publish")
     end
 
     it "lets a teacher add a new entry to its own announcement", priority: "1" do
@@ -251,7 +276,7 @@ describe "announcements" do
       f("#require_initial_post").click
       expect_new_page_load { submit_form(".form-actions") }
       announcement = Announcement.where(title: "title").first
-      expect(announcement.require_initial_post).to eq(true)
+      expect(announcement.require_initial_post).to be(true)
     end
 
     context "in a homeroom course" do

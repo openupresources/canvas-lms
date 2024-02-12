@@ -44,7 +44,7 @@ describe "Web conferences" do
     close_extra_windows
   end
 
-  context "when bbb_modal_update is ON", ignore_js_errors: true do
+  context "when bbb_modal_update is ON", :ignore_js_errors do
     before :once do
       Account.site_admin.enable_feature! :bbb_modal_update
     end
@@ -146,7 +146,7 @@ describe "Web conferences" do
     end
   end
 
-  context "when bbb_modal_update is OFF", ignore_js_errors: true do
+  context "when bbb_modal_update is OFF", :ignore_js_errors do
     before :once do
       Account.site_admin.disable_feature! :bbb_modal_update
     end
@@ -278,7 +278,7 @@ describe "Web conferences" do
           get conferences_index_page
           stub_request(:get, /wimba\.instructure\.com/)
           cog_menu_item = f(".al-trigger")
-          delete_conference(cog_menu_item: cog_menu_item, cancel: true)
+          delete_conference(cog_menu_item:, cancel: true)
           check_element_has_focus(cog_menu_item)
         end
 
@@ -286,7 +286,7 @@ describe "Web conferences" do
           get conferences_index_page
           stub_request(:get, /wimba\.instructure\.com/)
           cog_menu_item = f(".al-trigger")
-          edit_conference(cog_menu_item: cog_menu_item, cancel: false)
+          edit_conference(cog_menu_item:, cancel: false)
 
           duration_edit_field = f("#web_conference_duration")
 

@@ -84,7 +84,7 @@ RSpec.describe Mutations::CreateSubmission do
     result = CanvasSchema.execute(
       mutation_str(**opts),
       context: {
-        current_user: current_user,
+        current_user:,
         request: ActionDispatch::TestRequest.create
       }
     )
@@ -171,6 +171,7 @@ RSpec.describe Mutations::CreateSubmission do
   end
 
   context "when the submission_type is an online_upload" do
+    specs_require_sharding
     it "returns an error if there are no attachments" do
       @assignment.update!(submission_types: "online_upload")
       result = run_mutation(submission_type: "online_upload")
@@ -213,6 +214,26 @@ RSpec.describe Mutations::CreateSubmission do
       ).to be true
     end
 
+    it "allows cross-shard users to upload a group assignment" do
+      group_model
+      @assignment.update!(submission_types: "online_upload", group_category: @course.group_categories.create)
+      @cross_shard_student = @shard2.activate { user_factory(name: "Shard2 User") }
+      GroupMembership.create(user_id: @cross_shard_student.id, group_id: @group.id, workflow_state: "accepted")
+      @attachment3 = attachment_with_context(@group)
+      @course.enroll_user(@cross_shard_student, "StudentEnrollment", enrollment_state: "active")
+      result = run_mutation({ submission_type: "online_upload", file_ids: [@attachment3.id], assignment_id: @assignment.id }, @cross_shard_student)
+      expect(result.dig(:data, :createSubmission, :submission, :_id)).to eq Submission.last.id.to_s
+    end
+
+    it "allows cross-shard users to upload non-group assignments" do
+      @assignment.update!(submission_types: "online_upload")
+      @cross_shard_student = @shard2.activate { user_factory(name: "Shard2 User") }
+      @attachment3 = attachment_with_context(@cross_shard_student)
+      @course.enroll_user(@cross_shard_student, "StudentEnrollment", enrollment_state: "active")
+      result = run_mutation({ submission_type: "online_upload", file_ids: [@attachment3.id], assignment_id: @assignment.id }, @cross_shard_student)
+      expect(result.dig(:data, :createSubmission, :submission, :_id)).to eq Submission.last.id.to_s
+    end
+
     it "logs as a proxy submission if student_id if provided" do
       teacher_role =
         Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
@@ -235,6 +256,34 @@ RSpec.describe Mutations::CreateSubmission do
 
       submission = Submission.find(result.dig(:data, :createSubmission, :submission, :_id))
 
+      expect(submission.proxy_submitter).to eq @teacher
+    end
+
+    it "allows proxy submissions for cross-shard users" do
+      teacher_role =
+        Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
+      RoleOverride.create!(
+        permission: "proxy_assignment_submission",
+        enabled: true,
+        role: teacher_role,
+        account: @course.root_account
+      )
+      @cross_shard_student = @shard2.activate { user_factory(name: "Shard2 User") }
+      @attachment3 = attachment_with_context(@cross_shard_student)
+      @attachment3.save_shadow_record(target_shard: @shard2)
+      @course.enroll_user(@cross_shard_student, "StudentEnrollment", enrollment_state: "active")
+      @assignment.update!(submission_types: "online_upload")
+      result =
+        run_mutation(
+          {
+            submission_type: "online_upload",
+            student_id: @cross_shard_student.id,
+            file_ids: [@attachment3.id]
+          },
+          @teacher
+        )
+      submission = Submission.find(result.dig(:data, :createSubmission, :submission, :_id))
+      expect(submission.shard).not_to eq @cross_shard_student.shard
       expect(submission.proxy_submitter).to eq @teacher
     end
 

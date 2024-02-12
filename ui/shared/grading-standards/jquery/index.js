@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import round from 'round'
+import round from '@canvas/round'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import numberHelper from '@canvas/i18n/numberHelper'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
+import '@canvas/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* ifExists, .dim, undim, confirmDelete */
 import '@canvas/rails-flash-notifications'
@@ -117,13 +117,13 @@ $(document).ready(() => {
     function removed() {
       $('#edit_assignment_form .grading_standard_id').val('')
       $('#assignment_grading_type').val('points').change()
-      $('#course_grading_standard_enabled').attr('checked', false).change()
+      $('#course_course_grading_standard_enabled').attr('checked', false).change()
       $('#course_form .grading_scheme_set').text(I18n.t('grading_scheme_not_set', 'Not Set'))
       $standard.addClass('editing')
       $standard
         .find('.update_grading_standard_url')
         .attr('href', $('#update_grading_standard_url').attr('href'))
-      const data = $.parseJSON($('#default_grading_standard_data').val())
+      const data = JSON.parse($('#default_grading_standard_data').val())
       const standard = {title: '', id: null, data}
       $standard
         .fillTemplateData({
@@ -181,7 +181,7 @@ $(document).ready(() => {
       $brief.find('.collapse_data_link,.expand_data_link').toggle()
       $brief.find('.details').slideToggle()
     })
-  $('.grading_standard_select').live('click', function (event) {
+  $(document).on('click', '.grading_standard_select', function (event) {
     event.preventDefault()
     const id = $(this).getTemplateData({textValues: ['id']}).id
     $('.grading_standard .grading_standards_select .grading_standard_select').removeClass(

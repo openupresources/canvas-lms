@@ -59,12 +59,12 @@ module Importers
         objects&.each do |obj_hash|
           obj_hash = obj_hash.with_indifferent_access
           a_hash = obj_hash["assignment"]
-          if a_hash && migration.import_object?(key, obj_hash["migration_id"]) &&
-             (group_mig_id = a_hash["assignment_group_migration_id"])
-            # auto import the assignment group even if it's not actually in the top-level assignments list
-            # and just nested inside the topic or quiz
-            migration.migration_settings[:migration_ids_to_import][:copy]["assignment_groups"][group_mig_id] = true
-          end
+          next unless a_hash && migration.import_object?(key, obj_hash["migration_id"]) &&
+                      (group_mig_id = a_hash["assignment_group_migration_id"])
+
+          # auto import the assignment group even if it's not actually in the top-level assignments list
+          # and just nested inside the topic or quiz
+          migration.migration_settings[:migration_ids_to_import][:copy]["assignment_groups"][group_mig_id] = true
         end
       end
     end
@@ -109,7 +109,7 @@ module Importers
     end
 
     def self.match_assignment_group_by_name(context, migration, name)
-      ag = context.assignment_groups.where(name: name, migration_id: nil).first
+      ag = context.assignment_groups.where(name:, migration_id: nil).first
       if ag && migration.for_master_course_import?
         # prevent overwriting assignment group settings in a pre-existing group that was matched by name
         downstream_changes = []
