@@ -1,3 +1,5 @@
+require 'canvas/cdn/s3_uploader'
+
 # frozen_string_literal: true
 
 #
